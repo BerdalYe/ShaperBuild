@@ -1,7 +1,9 @@
 // Floating panel that shows a tool's inputs and options.
 import { h, clear } from './dom.js';
 import { icon } from './icons.js';
-import { parseLength, parseAngle, parseNumber, formatLength, trimNumber, UNITS } from '../core/units.js';
+import { parseLength, parseAngle, parseNumber, parseProblem, formatLength, trimNumber, UNITS } from '../core/units.js';
+import { linkedText } from '../core/variables.js';
+import { nudgeControls } from './numfield.js';
 import { t, localNumber } from '../core/i18n.js';
 
 export class ToolPanel {
@@ -19,6 +21,9 @@ export class ToolPanel {
   show(spec) {
     this.spec = spec;
     this.values = {};
+    // Typed text that uses a variable, by field key (kept in the history).
+    this.exprs = {};
+    this.exprValues = {};
     for (const f of spec.fields || []) if ('key' in f && 'value' in f) this.values[f.key] = f.value;
     this.render();
     this.el.hidden = false;
@@ -26,6 +31,7 @@ export class ToolPanel {
 
   hide() {
     this.spec = null;
+    this.exprs = {};
     this.el.hidden = true;
     clear(this.el);
   }
@@ -71,8 +77,10 @@ export class ToolPanel {
     this.values[key] = value;
     const f = this.spec?.fields.find((x) => x.key === key);
     if (f) f.value = value;
+    // A value set another way (dragging an arrow) drops the link.
+    if (this.exprs?.[key] && Math.abs(value - this.exprValues[key]) > 1e-9) delete this.exprs[key];
     const inp = this.inputs.get(key);
-    if (inp && document.activeElement !== inp) inp.value = this.format(f, value);
+    if (inp && document.activeElement !== inp) inp.value = this.exprs?.[key] || this.format(f, value);
   }
 
   format(f, v) {
@@ -145,7 +153,7 @@ export class ToolPanel {
       case 'angle':
       case 'count':
       case 'number': {
-        const inp = h('input.num-input', { type: 'text', spellcheck: false, value: this.format(f, f.value) });
+        const inp = h('input.num-input', { type: 'text', spellcheck: false, value: this.exprs[f.key] || this.format(f, f.value) });
         inp.dataset.key = f.key;
         this.inputs.set(f.key, inp);
         let timer = 0;
@@ -153,8 +161,15 @@ export class ToolPanel {
           const v = this.parse(f, inp.value);
           const ok = Number.isFinite(v) && (f.min === undefined || v >= f.min) && (f.max === undefined || v <= f.max) && (f.type !== 'count' || Number.isInteger(v));
           inp.classList.toggle('bad', !ok && inp.value.trim() !== '');
-          if (ok && v !== f.value) change(v);
-          if (final && ok) inp.value = this.format(f, v);
+          inp.title = ok || !inp.value.trim() ? '' : t(parseProblem(inp.value, f.type, this.units) || '');
+          if (!ok) return;
+          const linked = linkedText(inp.value, this.app.variables);
+          if (linked) {
+            this.exprs[f.key] = linked;
+            this.exprValues[f.key] = v;
+          } else delete this.exprs[f.key];
+          if (v !== f.value) change(v);
+          if (final) inp.value = linked || this.format(f, v);
         };
         inp.addEventListener('input', () => {
           clearTimeout(timer);
@@ -172,22 +187,30 @@ export class ToolPanel {
             s.onCancel?.();
           } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
             e.preventDefault();
-            const cur = this.parse(f, inp.value);
-            if (!Number.isFinite(cur)) return;
             const step = (f.type === 'length' ? UNITS[this.units].factor : 1) * (e.shiftKey ? 10 : e.altKey ? 0.1 : 1) * (f.step || 1);
-            let v = cur + (e.key === 'ArrowUp' ? step : -step);
-            if (f.min !== undefined) v = Math.max(f.min, v);
-            if (f.max !== undefined) v = Math.min(f.max, v);
-            inp.value = this.format(f, v);
-            change(v);
+            nudge(e.key === 'ArrowUp' ? step : -step);
           }
         });
         inp.addEventListener('blur', () => commit(true));
         inp.addEventListener('focus', () => inp.select());
         const unit = f.type === 'length' ? this.units : f.type === 'angle' ? '°' : '';
-        const wrap = h('div.ctrl', { style: { position: 'relative' } }, inp);
-        if (unit) wrap.append(h('span', { text: unit, style: { position: 'absolute', right: '8px', top: '5px', color: 'var(--muted)', fontSize: '12px', pointerEvents: 'none' } }));
-        return h('div.tp-field', h('label', { text: f.label, title: f.hint }), wrap);
+        const box = h('div.nf-box', { style: { position: 'relative' } }, inp);
+        if (unit) box.append(h('span', { text: unit, style: { position: 'absolute', right: '8px', top: '5px', color: 'var(--muted)', fontSize: '12px', pointerEvents: 'none' } }));
+        const label = h('label', { text: f.label, title: f.hint });
+        const base = (f.type === 'length' ? UNITS[this.units].factor : 1) * (f.step || 1);
+        const nudge = (delta) => {
+          const cur = Number.isFinite(f.value) ? f.value : this.parse(f, inp.value);
+          if (!Number.isFinite(cur)) return;
+          let v = f.type === 'count' ? Math.round(cur + Math.sign(delta) * Math.max(1, Math.round(Math.abs(delta)))) : +(cur + delta).toFixed(9);
+          if (f.min !== undefined) v = Math.max(f.min, v);
+          if (f.max !== undefined) v = Math.min(f.max, v);
+          delete this.exprs[f.key];
+          inp.value = this.format(f, v);
+          inp.classList.remove('bad');
+          if (v !== f.value) change(v);
+        };
+        const wrap = h('div.ctrl.nf', box, nudgeControls(label, base, nudge));
+        return h('div.tp-field', label, wrap);
       }
       case 'choice': {
         const chips = h('div.chips');

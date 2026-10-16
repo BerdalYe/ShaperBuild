@@ -66,6 +66,8 @@ const P = {
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   more: '<circle cx="5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="19" cy="12" r="1.4" fill="currentColor"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  variable: '<path d="M9.5 20c-1.6 0-2-1-1.7-2.6L10 6.6C10.4 4.6 11.2 4 12.6 4"/><path d="M6.5 10h6"/><path d="M14 11l5 7M19 11l-5 7"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
   folder: '<path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
   file: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>',
   duplicate: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"/>',

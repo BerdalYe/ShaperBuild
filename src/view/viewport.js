@@ -171,6 +171,10 @@ export class Viewport extends Emitter {
     this.updateSceneRadius();
     this.grid.mesh.visible = this.showGrid && !this.visualization;
     this.grid.update(this.rig, this.height, this.unitFactor);
+    if (this.grid.step !== this.gridStepShown) {
+      this.gridStepShown = this.grid.step;
+      this.emit('gridstep', this.grid.step);
+    }
     this.overlay.updateScreenSizes();
     for (const m of this.ctx.lineMaterials) m.resolution.copy(this.resolution);
     this.renderer.render(this.scene, this.camera);
@@ -355,6 +359,32 @@ export class Viewport extends Emitter {
     return hit ? hit.point : null;
   }
 
+  // Every body face along the ray under (x, y), nearest first — also the
+  // ones hidden behind others (Select through).
+  hitsUnder(x, y) {
+    const { raycaster } = this.ray(x, y);
+    const views = [...this.bodyViews.entries()].filter(([, v]) => v.group.visible);
+    const hits = raycaster.intersectObjects(
+      views.map(([, v]) => v.mesh),
+      false,
+    );
+    const planes = this.ctx.clippingPlanes;
+    const out = [];
+    const seen = new Set();
+    for (const hit of hits) {
+      if (!planes.every((pl) => pl.distanceToPoint(hit.point) >= -1e-6)) continue;
+      const entry = views.find(([, v]) => v.mesh === hit.object);
+      if (!entry) continue;
+      const [bodyId, view] = entry;
+      const face = view.faceOfTriangle(hit.faceIndex);
+      const key = `${bodyId}:${face}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(face === null ? { kind: 'body', bodyId, point: hit.point.toArray() } : { kind: 'face', bodyId, index: face, point: hit.point.toArray() });
+    }
+    return out;
+  }
+
   // ---- picking -----------------------------------------------------------
 
   // kinds: array of pick kinds to consider. Returns a descriptor or null.
@@ -438,6 +468,7 @@ export class Viewport extends Emitter {
     });
     c.addEventListener('pointermove', (e) => {
       const { x, y } = this.local(e);
+      this.pointer = { x, y };
       if (nav) {
         const dx = x - nav.x;
         const dy = y - nav.y;

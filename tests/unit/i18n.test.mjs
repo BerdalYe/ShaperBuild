@@ -6,7 +6,8 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import { extract } from '../../tools/i18n-extract.mjs';
 import { NB } from '../../src/i18n/nb.js';
-import { t, tn, setLanguage, localNumber, readNumberText } from '../../src/core/i18n.js';
+import { t, tn, setLanguage, localNumber } from '../../src/core/i18n.js';
+import { parseLength } from '../../src/core/units.js';
 
 const require = createRequire(import.meta.url);
 const placeholders = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
@@ -41,8 +42,8 @@ test('t() translates labels, counts and messages built at run time', () => {
     // Unknown text (names people typed) is shown as it is.
     assert.equal(t('My bracket v2'), 'My bracket v2');
     assert.equal(localNumber('12.5 mm'), '12,5 mm');
-    assert.equal(readNumberText('12,5'), '12.5');
-    assert.equal(readNumberText('max(1,2)'), 'max(1,2)');
+    assert.equal(parseLength('12,5'), 12.5);
+    assert.equal(parseLength('max(1,2)'), 2);
   } finally {
     setLanguage('en');
   }

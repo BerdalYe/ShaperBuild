@@ -1,6 +1,8 @@
 // Settings, shortcuts, help, about and the export menu.
-import { h, modKey } from './dom.js';
-import { modal, showMenu } from './overlays.js';
+import { h, modKey, isMac } from './dom.js';
+import { modal, showMenu, toast } from './overlays.js';
+import { COMMANDS, PRESETS, comboOf, showCombo } from '../core/keymap.js';
+import { TOOL_SECTIONS } from '../tools/registry.js';
 import { UNITS } from '../core/units.js';
 import { t, LANGUAGES, language } from '../core/i18n.js';
 
@@ -91,11 +93,9 @@ export class Dialogs {
       h('div', { style: { height: '8px' } }),
       row(
         'Select only',
-        select(s.selectFilter, [['all', 'Everything'], ['bodies', 'Bodies & faces'], ['faces', 'Faces'], ['edges', 'Edges & curves']], (v) => {
-          s.selectFilter = v;
-          save();
-        }),
+        select(s.selectFilter, [['all', 'Select all items'], ['bodies', 'Bodies only'], ['faces', 'Faces only'], ['edges', 'Edges only']], (v) => app.setSelectFilter(v)),
       ),
+      row('Keyboard shortcuts', h('div', h('button.btn', { text: t('{name} — change…', { name: t(PRESETS[app.keymap.preset].name) }), onClick: () => this.keymapEditor() }))),
       h('h4', { text: 'Display' }),
       check(s.showGrid, 'Show grid', (v) => {
         s.showGrid = v;
@@ -129,23 +129,145 @@ export class Dialogs {
     await modal({ title: 'Settings', body, buttons: [{ label: 'Done', primary: true }] });
   }
 
+  // Every action that can have a key: [id, label, group].
+  actions() {
+    const tools = TOOL_SECTIONS.flatMap((sec) => sec.tools.map((tool) => [`tool:${tool.id}`, tool.label, sec.title]));
+    return [...tools, ...COMMANDS];
+  }
+
   shortcuts() {
-    const groups = [
-      ['Sketch', [['Line', 'L'], ['Rectangle', 'R'], ['Circle', 'C'], ['Arc', 'A'], ['Polygon', 'P'], ['Spline', 'B'], ['Trim', 'T'], ['Dimension', 'D'], ['Type exact sizes while drawing', '0–9, Tab, Enter'], ['Skip snapping', 'hold Alt']]],
-      ['Model', [['Extrude / push-pull', 'E'], ['Revolve', 'Q'], ['Fillet', 'F'], ['Shell', 'H'], ['Union', 'U'], ['Move / rotate', 'M'], ['Measure', 'K'], ['Section view', 'X']]],
-      ['View', [['Orbit', 'Right-drag / Space+drag / arrows'], ['Pan', 'Middle-drag / Shift+right-drag / Shift+Space+drag'], ['Zoom', 'Scroll / pinch / + and −'], ['Zoom to fit (selection)', 'Z'], ['Look at face or sketch', 'N'], ['Iso / Front / Right / Top', '0 / 1 / 3 / 7'], ['Perspective / orthographic', 'O'], ['Grid', 'G'], ['Visualization', 'V'], ['X-ray', 'Shift+X'], ['Items panel', 'Tab'], ['Design history', 'Shift+H']]],
+    const app = this.app;
+    const mac = isMac();
+    const fixed = [
+      ['View', [['Orbit', 'Right-drag / Space+drag / arrows'], ['Pan', 'Middle-drag / Shift+right-drag / Shift+Space+drag'], ['Zoom', 'Scroll / pinch / + and −'], ['Look at the face under the pointer', 'tap Space']]],
       ['Edit', [['Undo / Redo', 'Ctrl+Z / Ctrl+Y'], ['Delete', 'Del'], ['Duplicate', 'Ctrl+D'], ['Select all bodies', 'Ctrl+A'], ['Clear selection / cancel', 'Esc'], ['Apply tool', 'Enter'], ['Select a whole body', 'Double-click']]],
+      ['Sketch', [['Type exact sizes while drawing', '0–9, Tab, Enter'], ['Skip snapping', 'hold Alt']]],
       ['File', [['New / Open / Save', 'Ctrl+N / Ctrl+O / Ctrl+S'], ['Import', 'Ctrl+I'], ['Export STL', 'Ctrl+E']]],
-      ['Help', [['Find a tool or command', 'Ctrl+K'], ['This list', '? or Ctrl+/']]],
     ];
     const body = h('div');
+    const preset = PRESETS[app.keymap.preset];
+    body.append(h('div.ks-preset', h('span', { text: t('Shortcut set: {name}', { name: t(preset.name) }) }), h('button.btn', { text: 'Change keys…', onClick: () => this.keymapEditor() })));
+    const groups = new Map();
+    for (const [id, label, group] of this.actions()) {
+      const key = app.keyFor(id);
+      if (!key) continue;
+      if (!groups.has(group)) groups.set(group, []);
+      groups.get(group).push([label, showCombo(key, mac)]);
+    }
+    for (const [title, rows] of fixed) if (!groups.has(title)) groups.set(title, []);
+    for (const [title, rows] of fixed) groups.get(title).push(...rows.map(([a, k]) => [a, k.replaceAll('Ctrl+', modKey())]));
     for (const [title, rows] of groups) {
+      if (!rows.length) continue;
       body.append(h('h4', { text: title }));
       const g = h('div.shortcut-grid');
-      for (const [a, k] of rows) g.append(h('span', { text: a }), h('kbd', { text: k.replaceAll('Ctrl+', modKey()) }));
+      for (const [a, k] of rows) g.append(h('span', { text: a }), h('kbd', { text: k }));
       body.append(g);
     }
-    return modal({ title: 'Keyboard shortcuts', body, width: 620 });
+    return modal({ title: 'Keyboard shortcuts', body, width: 640 });
+  }
+
+  // Change keys: pick a ready-made set, then press new keys for any action.
+  keymapEditor() {
+    const app = this.app;
+    const mac = isMac();
+    const settings = () => (app.settings.keymap ||= { preset: 'shaperbuild', keys: {} });
+    const save = () => {
+      app.saveSettings();
+      app.reloadKeymap();
+      render();
+    };
+    const body = h('div.ks-editor');
+    let filter = '';
+    let recording = null;
+    const render = () => {
+      body.replaceChildren();
+      const presetSel = h('select');
+      for (const [id, p] of Object.entries(PRESETS)) presetSel.append(h('option', { value: id, text: p.name, selected: id === app.keymap.preset }));
+      presetSel.addEventListener('change', () => {
+        settings().preset = presetSel.value;
+        settings().keys = {};
+        save();
+      });
+      const search = h('input.ks-search', { type: 'text', placeholder: 'Find an action', value: filter });
+      search.addEventListener('input', () => {
+        filter = search.value;
+        renderRows();
+      });
+      search.addEventListener('keydown', (e) => e.stopPropagation());
+      const reset = h('button.btn', { text: 'Reset all keys', onClick: () => ((settings().keys = {}), save()) });
+      const json = h('button.btn', { text: 'Edit as JSON', onClick: () => this.keymapJSON().then(render) });
+      body.append(h('div.ks-top', h('label', { text: 'Shortcut set' }), presetSel, reset, json), h('p.ks-hint', { text: 'Click a key to change it, then press the new keys. Backspace removes the key, Esc keeps it.' }), search);
+      const list = h('div.ks-list');
+      body.append(list);
+      const renderRows = () => {
+        list.replaceChildren();
+        const q = filter.trim().toLowerCase();
+        let group = null;
+        for (const [id, label, grp] of this.actions()) {
+          if (q && !`${label} ${t(label)} ${grp} ${t(grp)}`.toLowerCase().includes(q)) continue;
+          if (grp !== group) {
+            group = grp;
+            list.append(h('h4', { text: grp }));
+          }
+          const key = app.keyFor(id);
+          const changed = id in (settings().keys || {});
+          const btn = h(`button.ks-key${recording === id ? '.recording' : ''}${changed ? '.changed' : ''}`, { text: recording === id ? 'Press keys…' : key ? showCombo(key, mac) : '—' });
+          btn.addEventListener('click', () => {
+            recording = id;
+            renderRows();
+            const onKey = (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (e.key === 'Escape') return done(null);
+              if (e.key === 'Backspace' || e.key === 'Delete') return done('');
+              const combo = comboOf(e);
+              if (combo) done(combo);
+            };
+            const done = (combo) => {
+              window.removeEventListener('keydown', onKey, true);
+              recording = null;
+              if (combo === null) return renderRows();
+              const taken = combo && this.actions().find(([a]) => a !== id && app.keyFor(a) === combo);
+              settings().keys = { ...settings().keys, [id]: combo };
+              if (taken) toast(t('{key} was used by {action}; that action has no key now', { key: showCombo(combo, mac), action: t(taken[1]) }), { ms: 4000 });
+              save();
+            };
+            window.addEventListener('keydown', onKey, true);
+          });
+          list.append(h('div.ks-row', h('span', { text: label }), btn));
+        }
+      };
+      renderRows();
+    };
+    render();
+    return modal({ title: 'Change keyboard shortcuts', body, width: 600, buttons: [{ label: 'Done', primary: true }] });
+  }
+
+  // The keys as JSON ({ preset, keys }), to copy, share or edit by hand.
+  async keymapJSON() {
+    const app = this.app;
+    const area = h('textarea.ks-json', { rows: 16, spellcheck: false });
+    area.value = JSON.stringify(app.settings.keymap || { preset: 'shaperbuild', keys: {} }, null, 2);
+    area.addEventListener('keydown', (e) => e.stopPropagation());
+    const v = await modal({
+      title: 'Keyboard shortcuts as JSON',
+      body: h('div', h('p.ks-hint', { text: '"preset" is shaperbuild or shapr; "keys" changes single actions, like "tool:extrude": "E". An empty text removes a key.' }), area),
+      width: 560,
+      buttons: [{ label: 'Cancel', value: false }, { label: 'Apply', value: true, primary: true }],
+    });
+    if (!v) return;
+    try {
+      const data = JSON.parse(area.value);
+      if (typeof data !== 'object' || !data) throw new Error('Not an object');
+      const known = new Set(this.actions().map(([id]) => id));
+      const keys = {};
+      for (const [k, c] of Object.entries(data.keys || {})) if (known.has(k) && typeof c === 'string') keys[k] = c;
+      app.settings.keymap = { preset: PRESETS[data.preset] ? data.preset : 'shaperbuild', keys };
+      app.saveSettings();
+      app.reloadKeymap();
+    } catch (err) {
+      toast(t('That is not valid JSON: {error}', { error: err.message }), { type: 'error', ms: 5000 });
+    }
   }
 
   gettingStarted() {

@@ -36,6 +36,15 @@ export class BodyView {
     this.build();
   }
 
+  // Face index of triangle `t` of the shaded mesh (null for meshes).
+  faceOfTriangle(t) {
+    if (!this.faceVerts.length) return null;
+    const idx = this.geometry.index;
+    const v = idx ? idx.getX(t * 3) : t * 3;
+    for (let f = 0; f < this.faceVerts.length; f++) for (const [lo, n] of this.faceVerts[f] || []) if (v >= lo && v < lo + n) return f;
+    return null;
+  }
+
   describe(i) {
     const id = this.body.id;
     if (this.data.kind === 'mesh') return { kind: 'body', bodyId: id, mesh: true };

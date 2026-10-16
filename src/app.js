@@ -26,19 +26,30 @@ import { DrawingDialog } from './ui/drawingdialog.js';
 import { MaterialsPanel } from './ui/materials.js';
 import { toast, showMenu, hideTooltip } from './ui/overlays.js';
 import { icon } from './ui/icons.js';
-import { isTyping, modKey, escapeHtml, translateStatic } from './ui/dom.js';
+import { h, isTyping, modKey, escapeHtml, translateStatic } from './ui/dom.js';
 import { t, language, setLanguage } from './core/i18n.js';
 import { Welcome } from './ui/welcome.js';
-import { TOOL_KEYS } from './tools/registry.js';
-import { UNITS, formatLength, formatArea, formatVolume, formatAngle, niceStep } from './core/units.js';
+import { buildKeymap, comboOf } from './core/keymap.js';
+import { UNITS, formatLength, formatArea, formatVolume, formatAngle, niceStep, setVariables } from './core/units.js';
+import { variableValues } from './core/variables.js';
 import { planeFrame, to3D, to2D, samePlane } from './core/plane.js';
-import { keyPoints, closestOnEntity, dist } from './core/geom2d.js';
+import { keyPoints, closestOnEntity, dist, intersect } from './core/geom2d.js';
 
 const SETTINGS_KEY = 'shaperbuild.settings.v1';
+// What a click selects (status bar; Tab cycles in the Shapr3D-style keys).
+const SELECT_FILTERS = [
+  ['all', 'Select all items'],
+  ['bodies', 'Bodies only'],
+  ['faces', 'Faces only'],
+  ['edges', 'Edges only'],
+];
 const DEFAULT_SETTINGS = {
   theme: 'dark',
   units: 'mm',
   snap: true,
+  // What snapping uses (the menu next to the Snap button).
+  snapTo: { end: true, mid: true, center: true, intersection: true, vertex: true, grid: true, guides: true, curve: true, hints: true },
+  gridLock: null,
   additiveSelect: true,
   selectFilter: 'all',
   scrollMode: 'auto',
@@ -50,6 +61,8 @@ const DEFAULT_SETTINGS = {
   autoLookAt: false,
   autoUpdate: true,
   toolLabels: true,
+  // Keyboard shortcuts: a ready-made set plus the keys people changed.
+  keymap: { preset: 'shaperbuild', keys: {} },
 };
 
 export class App {
@@ -169,10 +182,20 @@ export class App {
   // ---- document sync -----------------------------------------------------
 
   onDocChange(ev) {
+    this.updateVariables();
     this.syncView();
     if (ev.kind === 'undo' || ev.kind === 'redo') toast(t(ev.kind === 'undo' ? 'Undo {label}' : 'Redo {label}', { label: t(ev.label || '') }).trim(), { ms: 1200 });
     this.updateTitle();
     this.scheduleGC();
+  }
+
+  // Number fields understand the design's variables.
+  updateVariables() {
+    const st = this.doc.state;
+    if (this.varsFor?.list === st.variables && this.varsFor.units === st.units) return;
+    this.varsFor = { list: st.variables, units: st.units };
+    this.variables = variableValues(st);
+    setVariables(this.variables);
   }
 
   syncView() {
@@ -543,6 +566,7 @@ export class App {
       return s ? Math.hypot(s[0] - e.x, s[1] - e.y) : Infinity;
     };
     if (!this.settings.snap || e.alt) return { p, snap: null };
+    const use = { ...DEFAULT_SETTINGS.snapTo, ...this.settings.snapTo };
     // Candidate points.
     const cands = [];
     const sketches = this.doc.sketches.filter((s) => s.visible !== false && (s.id === sketchId || samePlane(s.plane, plane)));
@@ -558,8 +582,21 @@ export class App {
       }
     }
     for (const q of extra) cands.push({ p: q, kind: 'end' });
+    // Where two lines meet or cross.
+    if (use.intersection) {
+      const lines = ents.filter(({ en }) => en.type === 'line').slice(0, 300);
+      const pt = ({ en, sf }, q) => (sf === f ? q : to2D(f, to3D(sf, q)));
+      for (let i = 0; i < lines.length; i++) {
+        const a0 = pt(lines[i], lines[i].en.a);
+        const a1 = pt(lines[i], lines[i].en.b);
+        for (let j = i + 1; j < lines.length; j++) {
+          for (const x of intersect({ type: 'line', a: a0, b: a1 }, { type: 'line', a: pt(lines[j], lines[j].en.a), b: pt(lines[j], lines[j].en.b) })) cands.push({ p: x, kind: 'intersection' });
+        }
+      }
+    }
     // Body vertices that lie on the plane.
     for (const view of vp.bodyViews.values()) {
+      if (!use.vertex) break;
       if (!view.group.visible || view.data.kind !== 'solid') continue;
       const v = view.data.vertices;
       for (let i = 0; i < v.length; i += 3) {
@@ -570,28 +607,30 @@ export class App {
     }
     const originOnPlane = Math.abs(f.o[0] * f.n[0] + f.o[1] * f.n[1] + f.o[2] * f.n[2]) < 1e-6;
     if (originOnPlane) cands.push({ p: to2D(f, [0, 0, 0]), kind: 'origin' });
-    const valid = cands.filter((c) => !exclude || dist(c.p, exclude) > 1e-9);
-    const LABELS = { end: 'Endpoint', mid: 'Midpoint', center: 'Center', quadrant: 'Quadrant', vertex: 'Vertex', origin: 'Origin', point: 'Point' };
+    const GROUP = { end: 'end', point: 'end', origin: 'end', mid: 'mid', center: 'center', quadrant: 'center', intersection: 'intersection', vertex: 'vertex' };
+    const valid = cands.filter((c) => (!exclude || dist(c.p, exclude) > 1e-9) && use[GROUP[c.kind] || 'end'] !== false);
+    const LABELS = { end: 'Endpoint', mid: 'Midpoint', center: 'Center', quadrant: 'Quadrant', vertex: 'Vertex', origin: 'Origin', point: 'Point', intersection: 'Intersection' };
+    const hint = (label) => (use.hints ? label : null);
     let best = null;
     for (const c of valid) {
       const d = screenDist(c.p);
       const r = c.kind === 'mid' || c.kind === 'quadrant' ? 8 : 11;
       if (d <= r && (!best || d < best.d)) best = { ...c, d };
     }
-    if (best) return { p: best.p, snap: { kind: best.kind, label: LABELS[best.kind] } };
+    if (best) return { p: best.p, snap: { kind: best.kind, label: hint(LABELS[best.kind]) } };
 
     const px = vp.rig.pixelSize(new THREE.Vector3(...to3D(f, p)), vp.height);
     const gs = this.gridStep(px * 14);
     // A grid point right under the cursor wins over alignments.
     const gridPoint = [Math.round(p[0] / gs) * gs, Math.round(p[1] / gs) * gs];
-    if (near(gridPoint, 4)) return { p: gridPoint, snap: { kind: 'grid' } };
+    if (use.grid && near(gridPoint, 4)) return { p: gridPoint, snap: { kind: 'grid' } };
 
     // Alignment with the previous point and other points (horizontal/vertical).
     let q = [...p];
     const guides = [];
     let label = null;
     const tol = px * 6;
-    const refs = from ? [{ p: from }, ...valid.slice(0, 400)] : valid.slice(0, 400);
+    const refs = !use.guides ? [] : from ? [{ p: from }, ...valid.slice(0, 400)] : valid.slice(0, 400);
     let snappedX = false;
     let snappedY = false;
     for (const r of refs) {
@@ -611,7 +650,7 @@ export class App {
     // Fix guide end points after both coordinates are known.
     for (const g of guides) g[1] = [...q];
     // On-curve snap.
-    if (!snappedX && !snappedY) {
+    if (!snappedX && !snappedY && use.curve) {
       let bc = null;
       for (const { en, sf } of ents) {
         if (en.type === 'point') continue;
@@ -621,17 +660,17 @@ export class App {
         const d = screenDist(cp);
         if (d < 7 && (!bc || d < bc.d)) bc = { p: cp, d };
       }
-      if (bc) return { p: bc.p, snap: { kind: 'on', label: 'On curve' } };
+      if (bc) return { p: bc.p, snap: { kind: 'on', label: hint('On curve') } };
     }
     // Grid, for any coordinate that did not align with something.
     const g = [snappedX ? q[0] : Math.round(p[0] / gs) * gs, snappedY ? q[1] : Math.round(p[1] / gs) * gs];
-    const onGrid = near(g, 8);
+    const onGrid = use.grid && near(g, 8);
     if (snappedX || snappedY) {
       if (onGrid) {
         q = g;
         for (const gd of guides) gd[1] = [...q];
       }
-      return { p: q, snap: { kind: 'align', label, guides } };
+      return { p: q, snap: { kind: 'align', label: hint(label), guides } };
     }
     if (onGrid) return { p: g, snap: { kind: 'grid' } };
     return { p, snap: null };
@@ -644,6 +683,7 @@ export class App {
 
   // Grid step in mm that matches the display unit.
   gridStep(mmStep) {
+    if (this.settings.gridLock > 0) return this.settings.gridLock;
     const u = UNITS[this.units];
     return niceStep(mmStep / u.factor) * u.factor;
   }
@@ -818,6 +858,8 @@ export class App {
     const list = sel.list;
     const bodies = [...new Set(list.map((it) => it.bodyId).filter(Boolean))];
     const ne = e.native;
+    // Faces hidden behind the one under the pointer can be picked too.
+    if (this.vp.hitsUnder(e.x, e.y).length > 1) items.push({ label: 'Select through…', icon: 'select', kbd: this.keyFor('select-through'), action: () => this.selectThrough({ x: e.x, y: e.y }) });
     if (list.length) {
       const suggestions = this.context.suggestions();
       for (const s of suggestions.slice(0, 6)) items.push({ label: s.label, icon: s.icon, action: s.action });
@@ -831,6 +873,7 @@ export class App {
         const info = this.faceInfo(faces[0].bodyId, faces[0].index);
         if (info?.type === 'plane') items.push({ label: 'Look at face', icon: 'lookAt', action: () => this.vp.lookAtPlane({ origin: info.center, normal: info.normal }) });
       }
+      if (bodies.length || list.some((it) => it.sketchId)) items.push({ label: 'Show in Items', icon: 'items', action: () => this.revealInItems() });
       items.push({ label: 'Delete', icon: 'trash', kbd: 'Del', danger: true, action: () => this.cmd.deleteSelection() });
     } else {
       items.push({ label: 'Zoom to fit', icon: 'fit', kbd: 'Z', action: () => this.vp.fit() });
@@ -872,6 +915,31 @@ export class App {
     const snapBtn = $('btn-snap');
     snapBtn.classList.toggle('on', this.settings.snap);
     snapBtn.addEventListener('click', () => this.toggleSnap());
+    snapBtn.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      this.snapMenu(snapBtn);
+    });
+    $('btn-snap-more').addEventListener('click', (e) => this.snapMenu(e.currentTarget));
+    // Grid size (changes with zoom); click to lock it at this size.
+    const gridBtn = $('btn-grid-size');
+    this.vp.grid.locked = this.settings.gridLock || null;
+    const showGrid = (step) => {
+      gridBtn.textContent = `${t('Grid')} ${formatLength(step, this.units)}${this.settings.gridLock ? ' 🔒' : ''}`;
+      gridBtn.classList.toggle('on', !!this.settings.gridLock);
+    };
+    this.vp.on('gridstep', showGrid);
+    showGrid(this.vp.grid.step);
+    gridBtn.addEventListener('click', () => {
+      this.settings.gridLock = this.settings.gridLock ? null : this.vp.grid.step;
+      this.vp.grid.locked = this.settings.gridLock;
+      this.saveSettings();
+      showGrid(this.vp.grid.step);
+      toast(this.settings.gridLock ? 'Grid size locked' : 'Grid size follows the zoom', { ms: 1200 });
+    });
+    const filterSel = $('filter-select');
+    for (const [k, label] of SELECT_FILTERS) filterSel.append(new Option(t(label), k));
+    filterSel.value = this.settings.selectFilter;
+    filterSel.addEventListener('change', () => this.setSelectFilter(filterSel.value));
 
     this.viewControls = new ViewControls($('view-controls'), this);
     this.toolHint = new ToolHint($('tool-hint'), this);
@@ -955,6 +1023,34 @@ export class App {
     toast(this.settings.snap ? 'Snapping on' : 'Snapping off (hold Alt to skip snapping)', { ms: 1200 });
   }
 
+  // What snapping uses: ticks that keep the menu open.
+  snapMenu(anchor) {
+    const r = anchor.getBoundingClientRect();
+    const use = (this.settings.snapTo = { ...DEFAULT_SETTINGS.snapTo, ...this.settings.snapTo });
+    const row = (key, label) => {
+      const cb = h('input', { type: 'checkbox', checked: use[key] !== false });
+      cb.addEventListener('change', () => {
+        use[key] = cb.checked;
+        this.saveSettings();
+      });
+      return { custom: h('label.menu-check', cb, h('span', { text: label })) };
+    };
+    const menu = showMenu(r.left, r.top, [
+      { custom: h('div.menu-title', { text: 'Snap to' }) },
+      row('end', 'Endpoints'),
+      row('mid', 'Midpoints'),
+      row('center', 'Centers'),
+      row('intersection', 'Intersections'),
+      row('vertex', 'Body corners'),
+      row('curve', 'Points on curves'),
+      row('guides', 'Alignment guides'),
+      row('grid', 'Grid'),
+      '-',
+      row('hints', 'Show what it snaps to'),
+    ]);
+    menu.style.top = `${r.top - menu.getBoundingClientRect().height - 6}px`;
+  }
+
   toggleSection() {
     if (this.section.enabled && !(this.tools.activeId === 'section')) this.setSection({ enabled: false });
     else this.tools.activate('section');
@@ -992,13 +1088,34 @@ export class App {
 
   // ---- keyboard --------------------------------------------------------------
 
+  // The keys in use (Settings > Keyboard shortcuts can change them).
+  reloadKeymap() {
+    const k = this.settings.keymap || {};
+    this.keymap = buildKeymap(k.preset, k.keys);
+    this.toolsMenu?.render();
+  }
+
+  // The key for an action, like tool:extrude or view-top (for menus and tips).
+  keyFor(action) {
+    return this.keymap?.keys[action] || '';
+  }
+
   setupKeys() {
+    this.reloadKeymap();
     window.addEventListener('keydown', (e) => {
       if (!this.ready) return;
       if (document.querySelector('.modal-backdrop')) return;
       if (!this.home.el.hidden) return;
       const typing = isTyping();
       const mod = e.ctrlKey || e.metaKey;
+      const combo = comboOf(e);
+      const action = combo && this.keymap.byCombo.get(combo);
+      // Shortcuts with Ctrl that the chosen set gives to an action.
+      if (action && mod && !typing) {
+        e.preventDefault();
+        this.runAction(action);
+        return;
+      }
       // Menu shortcuts (the native menu only displays them).
       if (mod && !e.altKey) {
         const k = e.key.toLowerCase();
@@ -1025,12 +1142,14 @@ export class App {
         }
       }
       if (typing) return;
-      // Hold Space and drag to orbit (Shift+Space to pan).
+      // Hold Space and drag to orbit (Shift+Space to pan); a quick tap over
+      // a face looks straight at it.
       if (e.key === ' ' || e.code === 'Space') {
         e.preventDefault();
         if (!e.repeat) {
           document.activeElement?.blur?.();
           this.vp.setSpaceHeld(true);
+          this.spaceTap = { at: performance.now(), view: this.vp.rig.toJSON() };
         }
         return;
       }
@@ -1045,8 +1164,13 @@ export class App {
         e.preventDefault();
         return;
       }
+      if (action) {
+        e.preventDefault();
+        this.runAction(action);
+        return;
+      }
       if (mod) {
-        if (e.key.toLowerCase() === 'a') {
+        if (e.key.toLowerCase() === 'a' && !e.shiftKey) {
           e.preventDefault();
           this.cmd.selectAll();
         }
@@ -1070,48 +1194,105 @@ export class App {
       }
       if (k === '+' || k === '=') return this.vp.stepZoom(1 / 1.25);
       if (k === '-' || k === '_') return this.vp.stepZoom(1.25);
-      if (k === '?') return this.dialogs.shortcuts();
-      if (e.shiftKey && k.toLowerCase() === 'x') return this.toggleXray();
-      if (e.shiftKey && k.toLowerCase() === 'h') return this.showHistory();
       if (k === 'Delete' || k === 'Backspace') {
         e.preventDefault();
         this.cmd.deleteSelection();
         return;
       }
-      if (k === 'Tab') {
-        e.preventDefault();
-        this.toggleItems();
-        return;
-      }
-      const lower = k.toLowerCase();
-      const views = { 0: 'iso', 1: 'front', 2: 'back', 3: 'right', 4: 'left', 7: 'top', 8: 'bottom' };
-      if (k in views) return this.vp.setView(views[k]);
-      if (e.shiftKey) return;
-      switch (lower) {
-        case 'z':
-        case 'home':
-          return this.vp.fit(this.selectionBox());
-        case 'o':
-          return this.toggleOrtho();
-        case 'g':
-          return this.toggleGrid();
-        case 'v':
-          return this.setVisualization(!this.visual);
-        case 's':
-          return this.toggleSnap();
-        case 'n':
-          return this.lookAtSelection();
-        case 'x':
-          return this.toggleSection();
-        default:
-      }
-      if (TOOL_KEYS[lower] && !this.visual) this.tools.activate(TOOL_KEYS[lower]);
+      if (k === 'Tab') e.preventDefault();
+      if (k.toLowerCase() === 'home') return this.vp.fit(this.selectionBox());
     });
-    const release = () => this.vp.setSpaceHeld(false);
+    const release = () => {
+      this.vp.setSpaceHeld(false);
+      // A tap (no drag, short) over a face: look straight at it.
+      const tap = this.spaceTap;
+      this.spaceTap = null;
+      if (tap && performance.now() - tap.at < 250 && JSON.stringify(this.vp.rig.toJSON()) === JSON.stringify(tap.view)) this.lookAtPointer();
+    };
     window.addEventListener('keyup', (e) => {
       if (e.key === ' ' || e.code === 'Space') release();
     });
-    window.addEventListener('blur', release);
+    window.addEventListener('blur', () => {
+      this.spaceTap = null;
+      this.vp.setSpaceHeld(false);
+    });
+  }
+
+  runAction(action) {
+    hideTooltip();
+    if (action.startsWith('tool:')) {
+      if (!this.visual) this.tools.activate(action.slice(5));
+      return;
+    }
+    if (action.startsWith('view-') && action !== 'view-fit' && action !== 'view-normal') return this.vp.setView(action.slice(5));
+    if (action.startsWith('filter-')) {
+      if (action === 'filter-cycle') {
+        const ids = SELECT_FILTERS.map((f) => f[0]);
+        return this.setSelectFilter(ids[(ids.indexOf(this.settings.selectFilter) + 1) % ids.length]);
+      }
+      return this.setSelectFilter(action.slice(7));
+    }
+    if (action.startsWith('constrain-')) return this.constraints.shortcut(action.slice(10));
+    switch (action) {
+      case 'view-fit':
+        return this.vp.fit(this.selectionBox());
+      case 'toggle-snap':
+        return this.toggleSnap();
+      case 'select-through':
+        return this.selectThrough();
+      default:
+        return this.onMenu(action);
+    }
+  }
+
+  setSelectFilter(f) {
+    if (!SELECT_FILTERS.some(([k]) => k === f)) return;
+    this.settings.selectFilter = f;
+    this.saveSettings();
+    const sel = document.getElementById('filter-select');
+    if (sel) sel.value = f;
+    toast(SELECT_FILTERS.find(([k]) => k === f)[1], { ms: 1000 });
+  }
+
+  // Everything under the pointer, also behind other faces: pick one.
+  selectThrough(at = this.vp.pointer) {
+    if (!at) return;
+    const hits = this.vp.hitsUnder(at.x, at.y);
+    if (!hits.length) return toast('Nothing under the pointer', { ms: 1200 });
+    const r = this.vp.canvas.getBoundingClientRect();
+    const name = (id) => this.doc.body(id)?.name || '';
+    showMenu(
+      r.left + at.x,
+      r.top + at.y,
+      hits.slice(0, 16).map((hit, i) => {
+        const info = hit.kind === 'face' ? this.faceInfo(hit.bodyId, hit.index) : null;
+        const what = hit.kind === 'face' ? `${t('Face')}${info ? ` (${t(info.type)})` : ''}` : t('Mesh');
+        return {
+          label: `${i + 1}. ${name(hit.bodyId)} · ${what}`,
+          raw: true,
+          icon: hit.kind === 'face' ? 'solid' : 'mesh',
+          action: () => this.selection.set([hit.kind === 'face' ? { kind: 'face', bodyId: hit.bodyId, index: hit.index } : { kind: 'body', bodyId: hit.bodyId }]),
+        };
+      }),
+    );
+  }
+
+  // Open Items and scroll to the selected item.
+  revealInItems() {
+    if (document.getElementById('items').classList.contains('collapsed')) this.toggleItems();
+    this.items.query = '';
+    this.items.setTab('items');
+    this.items.render();
+    this.items.el.querySelector('.item.selected')?.scrollIntoView({ block: 'center' });
+  }
+
+  // Look straight at the face under the pointer.
+  lookAtPointer() {
+    const at = this.vp.pointer;
+    const hit = at && this.vp.hitsUnder(at.x, at.y)[0];
+    if (!hit || hit.kind !== 'face') return;
+    const info = this.faceInfo(hit.bodyId, hit.index);
+    if (info?.type === 'plane') this.vp.lookAtPlane({ origin: info.center, normal: info.normal });
   }
 
   selectionBox() {

@@ -39,10 +39,10 @@ const ANYSTR = /(['"])((?:\\.|(?!\1)[^\\\n])*?)\1/g;
 
 // Any other quoted text that reads like a sentence or a capitalised label.
 const QUOTED = /(['"`])((?:\\.|(?!\1)[^\\\n])*?)\1/g;
-const SKIP_LINE = /console\.(log|warn|error|debug)|^\s*import |require\(|querySelector|classList|addEventListener|getElementById|dataset|localStorage|postMessage|kernel\.call\(/;
-const CODE_LIKE = /var\(--|px\b|gradient\(|rgba?\(|^\w+\(|=>|^[a-z]+:|^[\w-]+ [\w-]+:|\.(png|svg|stl|step|3mf|ttf)\b|^[A-Z][a-z]+[A-Z]\w*$|;$|^M[\d.-]/;
+const SKIP_LINE = /def\('[a-z0-9 ]+', -?\d|console\.(log|warn|error|debug)|^\s*import |require\(|querySelector|classList|addEventListener|getElementById|dataset|localStorage|postMessage|kernel\.call\(/;
+const CODE_LIKE = /var\(--|px\b|gradient\(|rgba?\(|^\w+\(|=>|^[a-z]+:|^[\w-]+ [\w-]+:|\.(png|svg|stl|step|3mf|ttf)\b|^[A-Z][a-z]+[A-Z]\w*$|;$|^M[\d.-]|^(Ctrl|Shift|Alt)\+[\w+]+$/;
 // Text that stays as it is in every language.
-const KEEP = new Set(['English', 'Norsk (bokmål)', 'Menyer, verktøy og hjelp på norsk', 'Menus, tools and help in English', 'num-input dim-edit', 'Ctrl+', 'opacity .25s']);
+const KEEP = new Set(['English', 'Norsk (bokmål)', 'Menyer, verktøy og hjelp på norsk', 'Menus, tools and help in English', 'num-input dim-edit', 'Ctrl+', 'opacity .25s', 'Alt', 'Shift', 'Control', 'Meta', 'AltGraph', 'Up', 'Down', 'Not plain']);
 
 const unescape = (s) => s.replace(/\\'/g, "'").replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\\\/g, '\\');
 
@@ -91,6 +91,7 @@ export function extract() {
     }
     POSITIONAL.lastIndex = 0;
     while ((m = POSITIONAL.exec(src))) {
+      if (/^'[a-z0-9 ]+', -?\d/.test(m[1])) continue; // function names in expr.js
       for (const sm of m[1].matchAll(ANYSTR)) if (/^[A-Z]/.test(sm[2]) || / /.test(sm[2])) add(sm[2], f);
     }
   }

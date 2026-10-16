@@ -59,6 +59,8 @@ Finding your way around:
 
 **Editable history** – Every step is remembered: extrude, fillet, shell, sweep, emboss, move, scale, mirror, split, draft, pattern, shapes and more. Open **History**, click a step and type a new value (say, make the first extrude taller, move a part further, or shift a cut): every later step is redone on top of it, so fillets, holes and push/pulls follow. Changing a sketch (a dimension, a curve, even trimming or redrawing a line) updates the bodies made from it, and sketches drawn on a face move with that face. Mirror, Split and Draft planes taken from a face follow that face. Steps can be turned off or deleted; if a later step no longer fits (a fillet that has become too big), it is marked in red and skipped until you fix it.
 
+**Variables and formulas** – Any number field takes a formula: `20 + 5`, `1in + 2mm`, `1' 6"`, `width / 2`, `max(a, b)`, `sin(30)`… Add variables (lengths, angles or plain numbers) at the top of the History tab and use their names anywhere. Values typed with a variable stay linked: change the variable and every size made from it updates, including sketch dimensions (marked ƒ). Renaming a variable updates every formula. Number fields also have − / + buttons, and you can drag a field's name left or right to change it.
+
 **Transform** – Move/Rotate with a gizmo or exact values, Scale, Mirror, Linear and Circular patterns, Duplicate.
 
 **Shapes** – Box, Cylinder, Sphere, Cone and Torus, placed by clicking.
@@ -75,6 +77,13 @@ Finding your way around:
 
 The geometry engine is [OpenCascade](https://dev.opencascade.org/) (a real B-rep CAD kernel, through `replicad-opencascadejs`), with [Manifold](https://github.com/elalish/manifold) for mesh booleans.
 
+## Selecting
+
+- Click selects a face, edge, curve or region; double-click selects the whole body. The **filter** in the status bar limits clicks to bodies, faces or edges.
+- Drag a box over empty space: **left to right** selects what is fully inside, **right to left** (dashed green) selects everything the box touches.
+- Right-click → **Select through…** lists every face under the pointer, also the ones hidden behind others.
+- The menu next to **Snap** chooses what to snap to (endpoints, midpoints, centres, intersections, body corners, curves, guides, grid). Click the **grid size** in the status bar to lock it.
+
 ## Mouse and keys
 
 | | |
@@ -83,14 +92,17 @@ The geometry engine is [OpenCascade](https://dev.opencascade.org/) (a real B-rep
 | Pan | Middle-drag or Shift + right-drag · Shift + Space and drag · Shift + arrow keys |
 | Zoom | Scroll wheel or pinch · + and − |
 | Select | Click (adds to the selection) · double-click a face for its whole body · drag on empty space for a box |
-| Standard views | View cube, or keys 0 (iso), 1 (front), 3 (right), 7 (top) |
+| Standard views | View cube, keys 0 (iso), 1 (front), 3 (right), 7 (top), or Ctrl+1–7 (reset, front, back, top, bottom, right, left) |
+| Look at a face | Tap Space with the pointer over it |
 | Zoom to fit | Z |
 | Tools | L line · R rectangle · C circle · A arc · P polygon · B spline · T trim · D dimension · E extrude · Q revolve · F fillet · H shell · U union · M move · K measure · X section |
 | Undo / redo | Ctrl+Z / Ctrl+Y (⌘ on Mac) |
 | Find a tool | Ctrl+K (⌘K on Mac) |
 | Design history | Shift+H |
 
-Press **?** or use *Help → Keyboard Shortcuts* in the app to see everything. Laptop without a mouse? Use the Orbit and Pan buttons, or set *Settings → Scroll wheel / two-finger swipe* to orbit.
+| Constraints | Shift+A parallel · Shift+P perpendicular · Shift+V horizontal/vertical · Shift+E equal · Shift+T tangent · Shift+C concentric · Shift+N coincident · Shift+M midpoint · Shift+L lock |
+
+Press **?** or use *Help → Keyboard Shortcuts* in the app to see everything. **Settings → Keyboard shortcuts** switches to a Shapr3D-style set of keys (V revolve, W sweep, I spline, G polygon, X search, Tab selection filter…) and lets you change any key, or edit them all as JSON. See [DECISIONS.md](DECISIONS.md) for how conflicts are handled. Laptop without a mouse? Use the Orbit and Pan buttons, or set *Settings → Scroll wheel / two-finger swipe* to orbit.
 
 ## How it compares to Shapr3D
 

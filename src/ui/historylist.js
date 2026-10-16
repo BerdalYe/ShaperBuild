@@ -5,8 +5,10 @@ import { h } from './dom.js';
 import { icon } from './icons.js';
 import { showMenu } from './overlays.js';
 import { editableParams, withParams, stepSummary } from '../core/replay.js';
-import { formatLength, parseLength } from '../core/units.js';
-import { t, tn } from '../core/i18n.js';
+import { formatLength, parseLength, parseAngle, parseNumber, UNITS } from '../core/units.js';
+import { nudgeControls } from './numfield.js';
+import { linkedText } from '../core/variables.js';
+import { t, tn, localNumber } from '../core/i18n.js';
 
 const PRIMITIVE_ICONS = { box: 'box', cylinder: 'cylinder', sphere: 'sphere', cone: 'cone', torus: 'torus' };
 const BOOLEAN_ICONS = { union: 'union', subtract: 'subtract', intersect: 'intersect' };
@@ -162,12 +164,20 @@ export class HistoryList {
     const box = h('div.step-edit');
     if (f.error) box.append(h('div.step-error', { text: f.error }));
     const params = editableParams(f);
-    const commit = (key, value) => {
-      const cur = editableParams(app.history.features.find((x) => x.id === f.id) || f).find((p) => p.key === key);
-      if (!cur || cur.value === value) return;
-      this.run(() => app.history.replaceStep(f.id, withParams(f, { [key]: value }), { label: `Edit ${f.label}` }));
+    // `text`: what was typed, kept when it uses a variable.
+    const commit = (key, value, text = null) => {
+      const now = app.history.features.find((x) => x.id === f.id) || f;
+      const cur = editableParams(now).find((p) => p.key === key);
+      const linked = linkedText(text, app.variables);
+      if (!cur || (cur.value === value && (now.exprs?.[key] || null) === linked)) return;
+      const exprs = { ...(now.exprs || {}) };
+      if (linked) exprs[key] = linked;
+      else delete exprs[key];
+      const next = { ...withParams(now, { [key]: value }), exprs };
+      if (!Object.keys(exprs).length) delete next.exprs;
+      this.run(() => app.history.replaceStep(f.id, next, { label: `Edit ${f.label}` }));
     };
-    for (const p of params) box.append(this.field(p, commit));
+    for (const p of params) box.append(this.field(p, commit, f.exprs?.[p.key]));
     if (!params.length) {
       const why = f.op === 'base' ? 'This step adds bodies from a file or an older design. It has no values to change.' : f.op === 'delete' ? 'This step deletes bodies.' : 'This step has no values to change.';
       box.append(h('div.step-note', { text: why }));
@@ -188,7 +198,7 @@ export class HistoryList {
     return box;
   }
 
-  field(p, commit) {
+  field(p, commit, expr) {
     const app = this.app;
     const row = h('label.step-field', h('span.step-field-label', { text: p.label }));
     if (p.type === 'toggle') {
@@ -198,13 +208,18 @@ export class HistoryList {
       row.append(cb);
       return row;
     }
-    const show = (v) => (p.type === 'length' ? formatLength(v, app.units, { suffix: false }) : String(+(+v).toFixed(4)));
-    const inp = h('input.num-input', { type: 'text', spellcheck: false, value: show(p.value) });
+    const show = (v) => (p.type === 'length' ? formatLength(v, app.units, { suffix: false }) : localNumber(String(+(+v).toFixed(4))));
+    const inp = h('input.num-input', { type: 'text', spellcheck: false, value: expr || show(p.value) });
     inp.dataset.key = p.key;
+    if (expr) {
+      inp.classList.add('linked');
+      inp.title = `= ${show(p.value)}`;
+    }
     const parse = () => {
-      const t = inp.value.trim();
-      if (p.type === 'length') return parseLength(t, app.units);
-      const v = Number(t.replace(/°$/, ''));
+      const text = inp.value.trim();
+      if (p.type === 'length') return parseLength(text, app.units);
+      if (p.type === 'angle') return parseAngle(text);
+      const v = parseNumber(text);
       return p.type === 'count' ? Math.round(v) : v;
     };
     const valid = (v) => {
@@ -222,19 +237,28 @@ export class HistoryList {
         return;
       }
       inp.classList.remove('bad');
-      commit(p.key, v);
+      commit(p.key, v, inp.value);
     };
     inp.addEventListener('keydown', (e) => {
       e.stopPropagation();
       if (e.key === 'Enter') apply();
       if (e.key === 'Escape') {
-        inp.value = show(p.value);
+        inp.value = expr || show(p.value);
         inp.blur();
       }
     });
     inp.addEventListener('change', apply);
     const unit = p.type === 'length' ? app.units : p.type === 'angle' ? '°' : '';
-    row.append(inp, h('span.step-unit', { text: unit }));
+    const base = p.type === 'length' ? UNITS[app.units].factor : p.type === 'number' ? 0.1 : 1;
+    const nudge = (delta) => {
+      let v = p.type === 'count' ? Math.round(p.value + Math.sign(delta)) : +(p.value + delta).toFixed(9);
+      if (!valid(v)) return;
+      p.value = v;
+      inp.value = show(v);
+      inp.classList.remove('linked', 'bad');
+      commit(p.key, v);
+    };
+    row.append(inp, h('span.step-unit', { text: unit }), nudgeControls(row.querySelector('.step-field-label'), base, nudge));
     return row;
   }
 }

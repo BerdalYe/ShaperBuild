@@ -30,15 +30,21 @@ export class SelectTool extends Tool {
     this.removeBox();
   }
 
+  // With "Bodies only", a face stands for its whole body.
+  filtered(hit) {
+    if (hit?.kind === 'face' && this.app.settings.selectFilter === 'bodies') return { kind: 'body', bodyId: hit.bodyId, point: hit.point };
+    return hit;
+  }
+
   onPointerMove(e) {
     if (this.down) return this.dragMove(e);
-    const hit = e.pick(this.pickKinds);
+    const hit = this.filtered(e.pick(this.pickKinds));
     this.app.selection.setHover(hit && hit.kind !== 'handle' ? hit : null);
     this.app.vp.canvas.style.cursor = hit?.kind === 'handle' ? 'grab' : hit?.kind === 'spoint' ? 'move' : '';
   }
 
   onPointerDown(e) {
-    const hit = e.pick(this.pickKinds);
+    const hit = this.filtered(e.pick(this.pickKinds));
     this.down = { x: e.x, y: e.y, hit, e };
     this.drag = null;
   }
@@ -108,6 +114,14 @@ export class SelectTool extends Tool {
   }
 
   onKeyDown(e) {
+    // While dragging a box: B, F, E or A changes what it selects.
+    if (this.drag?.kind === 'box' && !e.ctrl && !e.alt) {
+      const f = { b: 'bodies', f: 'faces', e: 'edges', a: 'all' }[e.key.toLowerCase()];
+      if (f) {
+        this.app.setSelectFilter(f);
+        return true;
+      }
+    }
     if (e.key === 'Escape') {
       if (this.down) {
         this.down = null;
@@ -188,10 +202,11 @@ export class SelectTool extends Tool {
   updateBox(x0, y0, x1, y1) {
     if (!this.boxEl) {
       this.boxEl = document.createElement('div');
-      this.boxEl.style.cssText = 'position:absolute;border:1px solid var(--accent);background:rgba(61,139,255,.12);pointer-events:none;z-index:4;border-radius:2px';
       this.app.vp.container.append(this.boxEl);
     }
     Object.assign(this.boxEl.style, { left: `${Math.min(x0, x1)}px`, top: `${Math.min(y0, y1)}px`, width: `${Math.abs(x1 - x0)}px`, height: `${Math.abs(y1 - y0)}px` });
+    // Right to left selects everything the box touches (dashed outline).
+    this.boxEl.className = `select-box${x1 < x0 ? ' crossing' : ''}`;
   }
 
   removeBox() {
@@ -199,28 +214,51 @@ export class SelectTool extends Tool {
     this.boxEl = null;
   }
 
+  // Left to right: items fully inside the box. Right to left: everything
+  // the box touches. The selection filter decides what kinds count.
   finishBox(x0, y0, x1, y1, add) {
     this.removeBox();
     const app = this.app;
     const vp = app.vp;
+    const filter = app.settings.selectFilter;
+    const crossing = x1 < x0;
     const r = { l: Math.min(x0, x1), r: Math.max(x0, x1), t: Math.min(y0, y1), b: Math.max(y0, y1) };
     const inside = (p) => {
       const s = vp.worldToScreen(p);
       return s && s[0] >= r.l && s[0] <= r.r && s[1] >= r.t && s[1] <= r.b;
     };
+    const test = (pts) => (crossing ? pts.some(inside) : pts.length > 0 && pts.every(inside));
     const items = [];
+    // Points of a body's shaded mesh (or of one face), at most ~4000.
+    const meshPoints = (view, ranges) => {
+      const pos = view.geometry.attributes.position;
+      const spans = ranges || [[0, pos.count]];
+      const total = spans.reduce((n, [, c]) => n + c, 0);
+      const stride = Math.max(1, Math.floor(total / 4000));
+      const out = [];
+      for (const [lo, n] of spans) for (let i = lo; i < lo + n; i += stride) out.push([pos.getX(i), pos.getY(i), pos.getZ(i)]);
+      return out;
+    };
+    // The box lies on a body without touching its outline.
+    const centre = crossing ? vp.hitsUnder((r.l + r.r) / 2, (r.t + r.b) / 2) : [];
     for (const [id, view] of vp.bodyViews) {
       if (!view.group.visible) continue;
-      const bb = view.geometry.boundingBox;
-      const corners = [];
-      for (const x of [bb.min.x, bb.max.x]) for (const y of [bb.min.y, bb.max.y]) for (const z of [bb.min.z, bb.max.z]) corners.push([x, y, z]);
-      if (corners.every(inside)) items.push({ kind: 'body', bodyId: id });
+      if (filter === 'faces' && view.faceVerts.length) {
+        view.faceVerts.forEach((ranges, index) => {
+          if (ranges && (test(meshPoints(view, ranges)) || centre.some((c) => c.bodyId === id && c.index === index))) items.push({ kind: 'face', bodyId: id, index });
+        });
+        continue;
+      }
+      if (filter === 'edges') continue;
+      if (test(meshPoints(view)) || centre.some((c) => c.bodyId === id)) items.push({ kind: 'body', bodyId: id });
     }
-    for (const [sid, view] of vp.sketchViews) {
-      if (!view.group.visible) continue;
-      for (const en of view.sketch.entities) {
-        const pts = sampleEntity(en, 24).map((p) => [view.frame.o[0] + view.frame.x[0] * p[0] + view.frame.y[0] * p[1], view.frame.o[1] + view.frame.x[1] * p[0] + view.frame.y[1] * p[1], view.frame.o[2] + view.frame.x[2] * p[0] + view.frame.y[2] * p[1]]);
-        if (pts.every(inside)) items.push({ kind: 'curve', sketchId: sid, entityId: en.id });
+    if (filter !== 'faces' && filter !== 'bodies') {
+      for (const [sid, view] of vp.sketchViews) {
+        if (!view.group.visible) continue;
+        for (const en of view.sketch.entities) {
+          const pts = sampleEntity(en, 24).map((p) => [view.frame.o[0] + view.frame.x[0] * p[0] + view.frame.y[0] * p[1], view.frame.o[1] + view.frame.x[1] * p[0] + view.frame.y[1] * p[1], view.frame.o[2] + view.frame.x[2] * p[0] + view.frame.y[2] * p[1]]);
+          if (test(pts)) items.push({ kind: 'curve', sketchId: sid, entityId: en.id });
+        }
       }
     }
     if (add) items.forEach((it) => app.selection.has(it) || app.selection.add(it));

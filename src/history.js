@@ -2,13 +2,15 @@
 // bodies, and rebuilds the bodies when an earlier step or a sketch it uses
 // is changed. The document always holds the rebuilt result, so everything
 // else (viewport, export, undo) works on plain bodies.
-import { RECORDED, symbolize, runFeature, featureKey, chainKeys, placedPlane, effectiveEntities, mapSketchRefs } from './core/replay.js';
+import { RECORDED, symbolize, runFeature, featureKey, chainKeys, placedPlane, effectiveEntities, mapSketchRefs, editableParams } from './core/replay.js';
 import { faceSig } from './core/refs.js';
 import { toast } from './ui/overlays.js';
 import { t, tn } from './core/i18n.js';
 import { Emitter } from './core/events.js';
 
 const CACHE_LIMIT = 120;
+// Tool panel fields for step values with other names.
+const FIELD_OF = { 'move.t.0': 'x', 'move.t.1': 'y', 'move.t.2': 'z', 'move.r.0': 'rx', 'move.r.1': 'ry', 'move.r.2': 'rz', 'scale.factor': 'factor', 'planeRef.offset': 'offset' };
 
 export class HistoryEngine extends Emitter {
   constructor(app) {
@@ -97,12 +99,26 @@ export class HistoryEngine extends Emitter {
         k += c.n;
         return { method: c.method, args: c.args, out };
       });
-      d.history.push({ id, label, op: 'op', calls });
+      const step = { id, label, op: 'op', calls };
+      const exprs = this.typedLinks(step);
+      d.history.push(exprs ? { ...step, exprs } : step);
     } else {
       const shapeToBody = new Map(this.app.doc.bodies.map((b) => [b.shapeId, b.id]));
       const removed = (result.removed || []).map((s) => shapeToBody.get(s)).filter(Boolean);
       d.history.push({ id, label, op: 'base', bodies: result.bodies.map((r, i) => ({ b: outIds[i], s: r.id })), removed });
     }
+  }
+
+  // Values typed with a variable in the tool panel stay linked to it.
+  typedLinks(step) {
+    const typed = this.app.panel?.visible && this.app.panel.exprs;
+    if (!typed || !Object.keys(typed).length) return null;
+    const out = {};
+    for (const p of editableParams(step)) {
+      const text = typed[p.key] ?? typed[FIELD_OF[p.key]] ?? typed[p.key.split('.').pop()];
+      if (text) out[p.key] = text;
+    }
+    return Object.keys(out).length ? out : null;
   }
 
   recordDelete(d, bodyIds) {

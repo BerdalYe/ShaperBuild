@@ -1,6 +1,7 @@
 // The tools menu on the right side: labeled tools grouped by section, and a
 // search box that finds tools and commands by name or purpose.
-import { h, clear, modKey } from './dom.js';
+import { h, clear, modKey, isMac } from './dom.js';
+import { showCombo } from '../core/keymap.js';
 import { icon } from './icons.js';
 import { attachTooltip, hideTooltip } from './overlays.js';
 import { TOOL_SECTIONS } from '../tools/registry.js';
@@ -42,7 +43,10 @@ export class ToolsMenu {
       for (const tool of section.tools) {
         const b = h('button.tool-btn', { 'aria-label': tool.label }, h('span.tb-ic', { html: icon(tool.icon) }), h('span.tb-label', { text: tool.short || tool.label }));
         b.dataset.tool = tool.id;
-        attachTooltip(b, () => `<b>${t(tool.label)}</b>${tool.key ? `<span class="kbd">${tool.key}</span>` : ''}<span class="desc">${t(tool.desc || '')}</span>`);
+        attachTooltip(b, () => {
+          const key = this.app.keyFor(`tool:${tool.id}`);
+          return `<b>${t(tool.label)}</b>${key ? `<span class="kbd">${showCombo(key, isMac())}</span>` : ''}<span class="desc">${t(tool.desc || '')}</span>`;
+        });
         b.addEventListener('click', () => this.app.tools.activate(tool.id));
         grid.append(b);
         this.buttons.set(tool.id, b);
@@ -88,7 +92,7 @@ export class ToolsMenu {
     const tools = [];
     for (const s of TOOL_SECTIONS) {
       for (const tool of s.tools) {
-        tools.push({ label: tool.label, icon: tool.icon, kbd: tool.key, keywords: tool.keywords, desc: tool.desc, group: s.title, run: () => this.app.tools.activate(tool.id, { force: true }) });
+        tools.push({ label: tool.label, icon: tool.icon, kbd: showCombo(this.app.keyFor(`tool:${tool.id}`), isMac()), keywords: tool.keywords, desc: tool.desc, group: s.title, run: () => this.app.tools.activate(tool.id, { force: true }) });
       }
     }
     const cmds = appCommands(this.app).map((c) => ({ ...c, group: 'Command' }));

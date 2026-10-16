@@ -4,6 +4,8 @@ import { toast, confirmDialog } from './ui/overlays.js';
 import { t, tn } from './core/i18n.js';
 import { samePlane, GROUND } from './core/plane.js';
 import { solveSketch, measure, pruneConstraints, dropConstraintsFor, pointOf, CONSTRAINT_INFO } from './core/solver.js';
+import { nameProblem } from './core/expr.js';
+import { relink, renameEverywhere, usesOf, withUnit } from './core/variables.js';
 
 export class Commands {
   constructor(app) {
@@ -27,8 +29,70 @@ export class Commands {
   setUnits(units) {
     this.doc.apply('Units', (d) => {
       d.units = units;
+      relink(d);
     });
     this.app.panel.visible && this.app.tools.active?.render?.();
+  }
+
+  // ---- variables ---------------------------------------------------------
+
+  // Add a variable; returns its id, or null (with a message) if not valid.
+  addVariable({ name, kind = 'length', expr = '10' } = {}) {
+    const vars = this.doc.variables;
+    if (!name) {
+      const base = kind === 'angle' ? 'angle' : kind === 'number' ? 'number' : 'length';
+      let n = 1;
+      while (vars.some((v) => v.name === `${base}${n}`)) n++;
+      name = `${base}${n}`;
+    }
+    const problem = nameProblem(name) || (vars.some((v) => v.name === name) ? 'There is already a variable with that name' : null);
+    if (problem) {
+      toast(problem, { type: 'error' });
+      return null;
+    }
+    return this.doc.apply('Add variable', (d) => {
+      const id = d.nextId('variable');
+      d.variables.push({ id, name, kind, expr: withUnit(String(expr), kind, d.units) });
+      relink(d);
+      return id;
+    });
+  }
+
+  // Change a variable's name, kind or value; everything that uses it follows.
+  updateVariable(id, patch) {
+    const cur = this.doc.variables.find((v) => v.id === id);
+    if (!cur) return false;
+    const name = patch.name ?? cur.name;
+    if (name !== cur.name) {
+      const problem = nameProblem(name) || (this.doc.variables.some((v) => v.name === name) ? 'There is already a variable with that name' : null);
+      if (problem) {
+        toast(problem, { type: 'error' });
+        return false;
+      }
+    }
+    let problems = [];
+    this.doc.apply(name !== cur.name ? 'Rename variable' : 'Edit variable', (d) => {
+      if (name !== cur.name) renameEverywhere(d, cur.name, name);
+      d.variables = d.variables.map((v) => (v.id === id ? { ...v, ...patch, name, expr: withUnit(String(patch.expr ?? v.expr), patch.kind ?? v.kind, d.units) } : v));
+      problems = relink(d);
+    });
+    if (problems.length) toast(t('Some values could not use the new value: {list}', { list: [...new Set(problems)].map((p) => t(p)).join(', ') }), { type: 'error', ms: 5000 });
+    return true;
+  }
+
+  // Delete a variable unless something uses it.
+  removeVariable(id) {
+    const v = this.doc.variables.find((x) => x.id === id);
+    if (!v) return false;
+    const uses = usesOf(this.doc.state, v.name);
+    if (uses.length) {
+      toast(t('{name} is used by: {list}. Change those first.', { name: v.name, list: uses.map((u) => t(u)).join(', ') }), { type: 'error', ms: 6000 });
+      return false;
+    }
+    this.doc.apply('Delete variable', (d) => {
+      d.variables = d.variables.filter((x) => x.id !== id);
+    });
+    return true;
   }
 
   // ---- sketches ----------------------------------------------------------
@@ -128,7 +192,8 @@ export class Commands {
     return ok;
   }
 
-  setConstraintValue(sketchId, cid, value) {
+  // `expr`: the text it was typed as, kept when it uses a variable.
+  setConstraintValue(sketchId, cid, value, expr = null) {
     const sk = this.doc.sketch(sketchId);
     const c = sk?.constraints?.find((x) => x.id === cid);
     if (!c || !Number.isFinite(value)) return false;
@@ -136,7 +201,11 @@ export class Commands {
       toast('The value must be greater than zero', { type: 'error' });
       return false;
     }
-    const cons = sk.constraints.map((x) => (x.id === cid ? { ...x, value } : x));
+    const cons = sk.constraints.map((x) => {
+      if (x.id !== cid) return x;
+      const { expr: _old, ...rest } = x;
+      return expr ? { ...rest, value, expr } : { ...rest, value };
+    });
     return this.solveAndStore(sketchId, sk.entities, cons, `Set ${CONSTRAINT_INFO[c.type].label.toLowerCase()}`, { failMessage: 'That value is not possible with the other constraints' });
   }
 

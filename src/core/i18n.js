@@ -87,10 +87,3 @@ export function tn(n, one, many, vars) {
 export function localNumber(s) {
   return lang === 'nb' ? String(s).replace(/(\d)\.(\d)/g, '$1,$2') : String(s);
 }
-
-// Typed numbers: accept a decimal comma ("12,5") where it cannot be a
-// separator between function arguments.
-export function readNumberText(s) {
-  const text = String(s ?? '');
-  return text.includes('(') ? text : text.replace(/(\d),(\d)/g, '$1.$2');
-}

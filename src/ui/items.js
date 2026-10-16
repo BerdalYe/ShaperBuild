@@ -4,6 +4,7 @@ import { icon } from './icons.js';
 import { showMenu } from './overlays.js';
 import { BODY_COLORS } from '../view/theme.js';
 import { HistoryList } from './historylist.js';
+import { VariablesList } from './variables.js';
 import { t, tn } from '../core/i18n.js';
 
 export class ItemsPanel {
@@ -16,6 +17,7 @@ export class ItemsPanel {
     // 'items' (what is in the design) or 'history' (the steps that made it).
     this.tab = 'items';
     this.historyList = new HistoryList(this, app);
+    this.variablesList = new VariablesList(this, app);
     app.doc.on('change', () => this.render());
     app.selection.on('change', () => this.render());
     this.render();
@@ -57,6 +59,8 @@ export class ItemsPanel {
     const head = h('div.items-head', tabs, h('span.ih-actions', newFolder, showAll, hide));
     const scroll = h('div.items-scroll');
     if (this.tab === 'history') {
+      this.variablesList.render(scroll);
+      if (this.historyList.steps.length) scroll.append(h('div.items-group-head.steps-head', h('span.ig-chev', { html: icon('history') }), h('span', { text: 'Steps' }), h('span.count', { text: String(this.historyList.steps.length) })));
       this.historyList.render(scroll);
       const foot = h('div.items-foot', { text: this.historyList.footText() });
       this.el.append(head, scroll, foot);
