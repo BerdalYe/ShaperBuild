@@ -87,6 +87,7 @@ const P = {
   xray: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9" stroke-dasharray="2 2" opacity=".7"/><circle cx="12" cy="11" r="2.6" fill="currentColor" opacity=".45" stroke="none"/>',
   text: '<path d="M5 7V4.5h14V7M12 4.5v15M9 19.5h6"/>',
   planeRef: '<path d="M2.5 17l5-8.5h14l-5 8.5z"/><path d="M12 13V3.5M9.6 5.9L12 3.5l2.4 2.4"/>',
+  image: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="M4 17l5-5 4 4 2.5-2.5L20 18"/>',
   save: '<path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/>',
 };
 

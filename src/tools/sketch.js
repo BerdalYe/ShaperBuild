@@ -10,7 +10,7 @@ const DEG = Math.PI / 180;
 
 export class SketchTool extends Tool {
   get pickKinds() {
-    return ['spoint', 'curve', 'region', 'face', 'body', 'plane'];
+    return ['spoint', 'curve', 'region', 'face', 'body', 'plane', 'image'];
   }
 
   get options() {
@@ -75,8 +75,8 @@ export class SketchTool extends Tool {
         return { plane, sketchId: app.findSketchOnPlane(plane), hit };
       }
     }
-    if (hit && hit.kind === 'plane') {
-      const pl = app.doc.plane(hit.planeId);
+    if (hit && (hit.kind === 'plane' || hit.kind === 'image')) {
+      const pl = hit.kind === 'plane' ? app.doc.plane(hit.planeId) : app.doc.image(hit.imageId);
       if (pl) return { plane: pl.plane, sketchId: app.findSketchOnPlane(pl.plane), hit };
     }
     if (hit && hit.kind === 'body' && hit.normal && hit.point) {

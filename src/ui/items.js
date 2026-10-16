@@ -8,7 +8,7 @@ export class ItemsPanel {
   constructor(el, app) {
     this.el = el;
     this.app = app;
-    this.collapsed = { bodies: false, meshes: false, sketches: false, planes: false };
+    this.collapsed = { bodies: false, meshes: false, sketches: false, planes: false, images: false };
     this.renaming = null;
     this.query = '';
     app.doc.on('change', () => this.render());
@@ -21,7 +21,7 @@ export class ItemsPanel {
     const doc = app.doc;
     const searching = this.el.contains(document.activeElement) && document.activeElement?.classList.contains('items-filter');
     clear(this.el);
-    const anyHidden = [...doc.bodies, ...doc.sketches, ...doc.planes].some((x) => x.visible === false);
+    const anyHidden = [...doc.bodies, ...doc.sketches, ...doc.planes, ...doc.images].some((x) => x.visible === false);
     const showAll = h('button.ih-btn', { title: 'Show all items', html: icon('eye') });
     showAll.hidden = !anyHidden;
     showAll.addEventListener('click', () => app.cmd.showAll());
@@ -35,7 +35,8 @@ export class ItemsPanel {
     const meshes = doc.bodies.filter((b) => b.kind === 'mesh');
     const sketches = doc.sketches;
     const planes = doc.planes;
-    const total = doc.bodies.length + sketches.length + planes.length;
+    const images = doc.images;
+    const total = doc.bodies.length + sketches.length + planes.length + images.length;
 
     if (total > 6 || q) {
       const inp = h('input.items-filter', { type: 'text', placeholder: 'Find items', value: this.query, spellcheck: false });
@@ -61,7 +62,8 @@ export class ItemsPanel {
     scroll.append(this.group('bodies', 'Bodies', solids, 'body', () => solids.filter(match).map((b) => this.bodyRow(b))));
     if (meshes.length) scroll.append(this.group('meshes', 'Meshes', meshes, 'body', () => meshes.filter(match).map((b) => this.bodyRow(b))));
     scroll.append(this.group('sketches', 'Sketches', sketches, 'sketch', () => sketches.filter(match).map((s) => this.sketchRow(s))));
-    if (planes.length) scroll.append(this.group('planes', 'Planes', planes, 'plane', () => planes.filter(match).map((p) => this.planeRow(p))));
+    if (planes.length) scroll.append(this.group('planes', 'Planes', planes, 'plane', () => planes.filter(match).map((p) => this.refRow('plane', p))));
+    if (images.length) scroll.append(this.group('images', 'Images', images, 'image', () => images.filter(match).map((p) => this.refRow('image', p))));
     if (!total) {
       scroll.append(
         h('div.items-empty', {
@@ -71,7 +73,7 @@ export class ItemsPanel {
     }
     const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
     const foot = h('div.items-foot', {
-      text: total ? `${n(solids.length, 'body', 'bodies')} · ${meshes.length ? `${n(meshes.length, 'mesh', 'meshes')} · ` : ''}${n(sketches.length, 'sketch', 'sketches')}${planes.length ? ` · ${n(planes.length, 'plane', 'planes')}` : ''} — double-click a name to rename` : 'Tip: right-click an item for more options',
+      text: total ? `${n(solids.length, 'body', 'bodies')} · ${meshes.length ? `${n(meshes.length, 'mesh', 'meshes')} · ` : ''}${n(sketches.length, 'sketch', 'sketches')}${planes.length ? ` · ${n(planes.length, 'plane', 'planes')}` : ''}${images.length ? ` · ${n(images.length, 'image', 'images')}` : ''} — double-click a name to rename` : 'Tip: right-click an item for more options',
     });
     this.el.append(head, scroll, foot);
     scroll.querySelector('.item.selected')?.scrollIntoView({ block: 'nearest' });
@@ -196,24 +198,26 @@ export class ItemsPanel {
     return row;
   }
 
-  planeRow(p) {
+  // Row for a reference plane or image.
+  refRow(kind, p) {
     const app = this.app;
-    const item = { kind: 'plane', planeId: p.id };
+    const item = kind === 'plane' ? { kind, planeId: p.id } : { kind, imageId: p.id };
     const sel = app.selection.has(item);
     const row = h(`div.item${sel ? '.selected' : ''}${p.visible === false ? '.hidden-item' : ''}`);
-    const ic = h('span', { html: icon('planeRef') });
+    const ic = h('span', { html: icon(kind === 'plane' ? 'planeRef' : 'image') });
     ic.querySelector('svg').style.cssText = 'width:16px;height:16px;opacity:.75';
     const eye = h(`button.item-btn${p.visible === false ? '.on' : ''}`, { title: p.visible === false ? 'Show' : 'Hide', html: icon(p.visible === false ? 'eyeOff' : 'eye') });
     eye.addEventListener('click', (e) => {
       e.stopPropagation();
-      app.cmd.setVisible('plane', p.id, p.visible === false);
+      app.cmd.setVisible(kind, p.id, p.visible === false);
     });
     const more = h('button.item-btn', { title: 'More', html: icon('more') });
     const menu = (e) =>
       showMenu(e.clientX, e.clientY, [
         { label: 'Rename', icon: 'sketch', action: () => ((this.renaming = p.id), this.render()) },
         { label: 'Look at', icon: 'lookAt', action: () => app.vp.lookAtPlane(p.plane) },
-        { label: p.visible === false ? 'Show' : 'Hide', icon: p.visible === false ? 'eye' : 'eyeOff', action: () => app.cmd.setVisible('plane', p.id, p.visible === false) },
+        { label: 'Move…', icon: 'move', action: () => (app.selection.set([item]), app.tools.activate('move', { force: true })) },
+        { label: p.visible === false ? 'Show' : 'Hide', icon: p.visible === false ? 'eye' : 'eyeOff', action: () => app.cmd.setVisible(kind, p.id, p.visible === false) },
         '-',
         { label: 'Delete', icon: 'trash', danger: true, action: () => app.cmd.deleteItems([item]) },
       ]);
@@ -221,7 +225,7 @@ export class ItemsPanel {
       e.stopPropagation();
       menu(e);
     });
-    row.append(ic, this.nameEl(p, 'plane'), eye, more);
+    row.append(ic, this.nameEl(p, kind), eye, more);
     row.addEventListener('click', (e) => this.select(item, e));
     row.addEventListener('dblclick', () => {
       this.renaming = p.id;

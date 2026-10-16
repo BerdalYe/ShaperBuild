@@ -10,7 +10,8 @@ export function emptyState() {
     bodies: [],
     sketches: [],
     planes: [],
-    seq: { body: 0, sketch: 0, entity: 0, constraint: 0, plane: 0 },
+    images: [],
+    seq: { body: 0, sketch: 0, entity: 0, constraint: 0, plane: 0, image: 0 },
     units: 'mm',
   };
 }
@@ -28,13 +29,14 @@ export class Draft {
     this.bodies = state.bodies.slice();
     this.sketches = state.sketches.slice();
     this.planes = (state.planes || []).slice();
+    this.images = (state.images || []).slice();
     this.seq = { ...state.seq };
     this.units = state.units;
   }
 
   nextId(kind) {
     this.seq[kind] = (this.seq[kind] || 0) + 1;
-    const prefix = { body: 'b', sketch: 's', entity: 'e', constraint: 'k', plane: 'p' }[kind] || kind;
+    const prefix = { body: 'b', sketch: 's', entity: 'e', constraint: 'k', plane: 'p', image: 'i' }[kind] || kind;
     return `${prefix}${this.seq[kind]}`;
   }
 
@@ -105,6 +107,29 @@ export class Draft {
     this.planes = this.planes.filter((p) => p.id !== id);
   }
 
+  image(id) {
+    return this.images.find((p) => p.id === id);
+  }
+
+  // Reference image: { src (data URL), plane, width, height (mm), opacity }.
+  addImage(props) {
+    const id = this.nextId('image');
+    const im = { name: `Image ${this.seq.image}`, visible: true, opacity: 0.6, ...props, id };
+    this.images.push(im);
+    return im;
+  }
+
+  updateImage(id, patch) {
+    const i = this.images.findIndex((p) => p.id === id);
+    if (i < 0) return null;
+    this.images[i] = { ...this.images[i], ...patch };
+    return this.images[i];
+  }
+
+  removeImage(id) {
+    this.images = this.images.filter((p) => p.id !== id);
+  }
+
   // Give new entities ids.
   withIds(entities) {
     return entities.map((e) => (e.id ? e : { ...e, id: this.nextId('entity') }));
@@ -115,7 +140,7 @@ export class Draft {
   }
 
   toState() {
-    return { bodies: this.bodies, sketches: this.sketches, planes: this.planes, seq: this.seq, units: this.units };
+    return { bodies: this.bodies, sketches: this.sketches, planes: this.planes, images: this.images, seq: this.seq, units: this.units };
   }
 }
 
@@ -149,6 +174,14 @@ export class Document extends Emitter {
     return this.planes.find((p) => p.id === id);
   }
 
+  get images() {
+    return this.state.images || [];
+  }
+
+  image(id) {
+    return this.images.find((p) => p.id === id);
+  }
+
   sketch(id) {
     return this.state.sketches.find((s) => s.id === id);
   }
@@ -158,7 +191,7 @@ export class Document extends Emitter {
   }
 
   get isEmpty() {
-    return !this.state.bodies.length && !this.state.sketches.length && !(this.state.planes || []).length;
+    return !this.state.bodies.length && !this.state.sketches.length && !(this.state.planes || []).length && !(this.state.images || []).length;
   }
 
   // Apply a change; returns whatever the callback returns.

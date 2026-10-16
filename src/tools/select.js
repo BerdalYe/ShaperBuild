@@ -7,7 +7,7 @@ import { solveSketch, refsAt, entityPoints } from '../core/solver.js';
 import { planeFrame, to2D, rayPlane } from '../core/plane.js';
 import { sampleEntity } from '../core/geom2d.js';
 
-export const SELECT_KINDS = ['handle', 'spoint', 'curve', 'edge', 'region', 'face', 'body', 'plane'];
+export const SELECT_KINDS = ['handle', 'spoint', 'curve', 'edge', 'region', 'face', 'body', 'plane', 'image'];
 
 export class SelectTool extends Tool {
   get pickKinds() {

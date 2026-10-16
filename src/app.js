@@ -159,6 +159,7 @@ export class App {
     for (const sk of doc.sketches) this.requestRegions(sk);
     this.vp.syncSketches(doc.sketches, (sk) => this.regionDataFor(sk));
     this.vp.syncPlanes(doc.planes);
+    this.vp.syncImages(doc.images);
     this.selection.prune((it) => this.isValidItem(it));
     this.refreshHighlights();
     this.tools.active?.onSelectionChange?.();
@@ -256,6 +257,8 @@ export class App {
         return !!doc.sketch(it.sketchId)?.constraints?.some((c) => c.id === it.cid);
       case 'plane':
         return !!doc.plane(it.planeId);
+      case 'image':
+        return !!doc.image(it.imageId);
       default:
         return true;
     }
@@ -287,6 +290,7 @@ export class App {
     const bodyH = new Map();
     const sketchH = new Map();
     const planeH = new Map();
+    const imageH = new Map();
     const B = (id) => {
       if (!bodyH.has(id)) bodyH.set(id, { faces: new Map(), edges: new Map(), body: null });
       return bodyH.get(id);
@@ -324,6 +328,9 @@ export class App {
         case 'plane':
           planeH.set(it.planeId, color);
           break;
+        case 'image':
+          imageH.set(it.imageId, color);
+          break;
         default:
       }
     };
@@ -338,6 +345,7 @@ export class App {
       view.setHighlight(h);
     }
     for (const [id, view] of this.vp.planeViews) view.setHighlight(planeH.get(id) || null);
+    for (const [id, view] of this.vp.imageViews) view.setHighlight(imageH.get(id) || null);
     this.constraints?.update();
     this.vp.requestRender();
   }
@@ -369,6 +377,10 @@ export class App {
     if (it.kind === 'body') return this.bodyBox(it.bodyId);
     if (it.kind === 'sketch') {
       const v = this.vp.sketchViews.get(it.sketchId);
+      return v ? new THREE.Box3().setFromObject(v.group) : null;
+    }
+    if (it.kind === 'plane' || it.kind === 'image') {
+      const v = it.kind === 'plane' ? this.vp.planeViews.get(it.planeId) : this.vp.imageViews.get(it.imageId);
       return v ? new THREE.Box3().setFromObject(v.group) : null;
     }
     return null;
@@ -1085,7 +1097,7 @@ export class App {
     }
     const sk = it?.sketchId ? this.doc.sketch(it.sketchId) : null;
     if (sk) return this.vp.lookAtPlane(sk.plane);
-    const pl = it?.kind === 'plane' ? this.doc.plane(it.planeId) : null;
+    const pl = it?.kind === 'plane' ? this.doc.plane(it.planeId) : it?.kind === 'image' ? this.doc.image(it.imageId) : null;
     if (pl) return this.vp.lookAtPlane(pl.plane);
     const tp = this.tools.active?.plane;
     if (tp) return this.vp.lookAtPlane(tp);

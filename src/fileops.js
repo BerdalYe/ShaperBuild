@@ -86,13 +86,13 @@ export class FileOps {
   // ---- open ----------------------------------------------------------------
 
   async openDialog() {
-    if (!this.native) return this.browserPick('.shaperbuild,.stl,.obj,.3mf,.step,.stp,.dxf');
+    if (!this.native) return this.browserPick('.shaperbuild,.stl,.obj,.3mf,.step,.stp,.dxf,.png,.jpg,.jpeg,.webp');
     const paths = await this.native.openDialog({ kind: 'open' });
     for (const p of paths) await this.openPath(p);
   }
 
   async importDialog() {
-    if (!this.native) return this.browserPick('.stl,.obj,.3mf,.step,.stp,.dxf', true);
+    if (!this.native) return this.browserPick('.stl,.obj,.3mf,.step,.stp,.dxf,.png,.jpg,.jpeg,.webp', true);
     const paths = await this.native.openDialog({ kind: 'import', multi: true });
     for (const p of paths) await this.openPath(p, { import: true });
   }
@@ -125,7 +125,7 @@ export class FileOps {
       if (!(await this.confirmDiscard())) return;
       return this.loadProject(data, path, name);
     }
-    if (!['stl', 'obj', '3mf', 'step', 'stp', 'dxf'].includes(ext)) {
+    if (!['stl', 'obj', '3mf', 'step', 'stp', 'dxf', 'png', 'jpg', 'jpeg', 'webp'].includes(ext)) {
       toast(`Unsupported file type: .${ext}`, { type: 'error' });
       return;
     }
@@ -137,6 +137,7 @@ export class FileOps {
     }
     void opts;
     if (ext === 'dxf') return this.importDXF(name, data);
+    if (['png', 'jpg', 'jpeg', 'webp'].includes(ext)) return this.importImage(name, data);
     return this.importData(name, data);
   }
 
@@ -155,6 +156,45 @@ export class FileOps {
     } catch (err) {
       toast(`Import failed: ${err.message}`, { type: 'error', ms: 6000 });
       return null;
+    }
+  }
+
+  // A picture to trace: placed on the selected flat face / plane, or the grid.
+  async importImage(name, data) {
+    const app = this.app;
+    try {
+      const ext = (name.split('.').pop() || '').toLowerCase();
+      const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+      let src = `data:${mime};base64,${toB64(data)}`;
+      const img = new Image();
+      img.src = src;
+      await img.decode();
+      let { naturalWidth: w, naturalHeight: hgt } = img;
+      // Keep designs small: big photos are scaled down to 2048 pixels.
+      const max = 2048;
+      if (Math.max(w, hgt) > max) {
+        const k = max / Math.max(w, hgt);
+        const c = document.createElement('canvas');
+        c.width = Math.round(w * k);
+        c.height = Math.round(hgt * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        src = c.toDataURL(mime === 'image/png' ? 'image/png' : 'image/jpeg', 0.9);
+        w = c.width;
+        hgt = c.height;
+      }
+      let plane = GROUND;
+      const it = app.selection.list[0];
+      if (it?.kind === 'plane') plane = app.doc.plane(it.planeId).plane;
+      else if (it?.kind === 'face') {
+        const info = app.faceInfo(it.bodyId, it.index);
+        if (info?.type === 'plane') plane = { origin: info.center, normal: info.normal, xDir: info.xDir };
+      }
+      const width = 100;
+      app.cmd.addImage({ src, plane, width, height: (width * hgt) / w, name: this.stem(name) });
+      toast('Image added. Type its real width in the bar at the bottom, then trace it with the sketch tools.', { type: 'ok', ms: 5000 });
+      setTimeout(() => app.vp.fit(app.selectionBox()), 80);
+    } catch (err) {
+      toast(`Could not add the image: ${err.message}`, { type: 'error', ms: 5000 });
     }
   }
 
@@ -259,7 +299,7 @@ export class FileOps {
       app: (await this.native?.info())?.version || 'dev',
       saved: new Date().toISOString(),
       camera: app.vp.rig.toJSON(),
-      state: { bodies: state.bodies, sketches: state.sketches, planes: state.planes || [], seq: state.seq, units: state.units },
+      state: { bodies: state.bodies, sketches: state.sketches, planes: state.planes || [], images: state.images || [], seq: state.seq, units: state.units },
       shapes,
       thumbnail,
     };

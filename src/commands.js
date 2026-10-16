@@ -167,6 +167,21 @@ export class Commands {
         const b = byShape.get(sid);
         if (b && !result.bodies.some((r) => r.replaces === sid)) d.removeBody(b.id);
       }
+      // Planes and images move with their plane.
+      for (const st of opts.planes || []) {
+        const pl = d.plane(st.id);
+        if (!pl) continue;
+        const plane = transformPlane(pl.plane, st.matrix);
+        if (st.copy) d.addPlane({ plane, size: pl.size, name: `${pl.name} copy` });
+        else d.updatePlane(st.id, { plane });
+      }
+      for (const st of opts.images || []) {
+        const im = d.image(st.id);
+        if (!im) continue;
+        const plane = transformPlane(im.plane, st.matrix);
+        if (st.copy) d.addImage({ ...im, id: undefined, plane, name: `${im.name} copy` });
+        else d.updateImage(st.id, { plane });
+      }
       for (const st of opts.sketches || []) {
         const sk = d.sketch(st.id);
         if (!sk) continue;
@@ -182,12 +197,26 @@ export class Commands {
   // ---- items ---------------------------------------------------------------
 
   rename(kind, id, name) {
-    this.doc.apply('Rename', (d) => (kind === 'body' ? d.updateBody(id, { name }) : kind === 'plane' ? d.updatePlane(id, { name }) : d.updateSketch(id, { name })));
+    this.doc.apply('Rename', (d) => updateItem(d, kind, id, { name }));
   }
 
   setVisible(kind, id, visible) {
-    this.doc.apply(visible ? 'Show' : 'Hide', (d) => (kind === 'body' ? d.updateBody(id, { visible }) : kind === 'plane' ? d.updatePlane(id, { visible }) : d.updateSketch(id, { visible })));
-    if (!visible) this.app.selection.prune((it) => (kind === 'body' ? it.bodyId !== id : kind === 'plane' ? it.planeId !== id : it.sketchId !== id));
+    this.doc.apply(visible ? 'Show' : 'Hide', (d) => updateItem(d, kind, id, { visible }));
+    if (!visible) this.app.selection.prune((it) => (kind === 'body' ? it.bodyId : kind === 'plane' ? it.planeId : kind === 'image' ? it.imageId : it.sketchId) !== id);
+  }
+
+  // Add a reference image and select it.
+  addImage(props) {
+    let id = null;
+    this.doc.apply('Image', (d) => {
+      id = d.addImage(props).id;
+    });
+    this.app.selection.set([{ kind: 'image', imageId: id }]);
+    return id;
+  }
+
+  setImage(id, patch, label = 'Image') {
+    this.doc.apply(label, (d) => d.updateImage(id, patch));
   }
 
   // Add a reference plane and select it.
@@ -204,11 +233,11 @@ export class Commands {
   setVisibleMany(items, visible) {
     if (!items.length) return;
     this.doc.apply(visible ? 'Show' : 'Hide', (d) => {
-      for (const { kind, id } of items) kind === 'body' ? d.updateBody(id, { visible }) : kind === 'plane' ? d.updatePlane(id, { visible }) : d.updateSketch(id, { visible });
+      for (const { kind, id } of items) updateItem(d, kind, id, { visible });
     });
     if (!visible) {
       const gone = new Set(items.map((x) => x.id));
-      this.app.selection.prune((it) => !gone.has(it.bodyId) && !gone.has(it.sketchId) && !gone.has(it.planeId));
+      this.app.selection.prune((it) => !gone.has(it.bodyId) && !gone.has(it.sketchId) && !gone.has(it.planeId) && !gone.has(it.imageId));
     }
   }
 
@@ -224,6 +253,7 @@ export class Commands {
       for (const b of d.bodies) if (b.visible === false) d.updateBody(b.id, { visible: true });
       for (const s of d.sketches) if (s.visible === false) d.updateSketch(s.id, { visible: true });
       for (const p of d.planes) if (p.visible === false) d.updatePlane(p.id, { visible: true });
+      for (const p of d.images) if (p.visible === false) d.updateImage(p.id, { visible: true });
     });
   }
 
@@ -270,6 +300,7 @@ export class Commands {
     const bodies = new Set();
     const sketches = new Set();
     const planes = new Set();
+    const images = new Set();
     const curves = new Map();
     const cons = items.filter((it) => it.kind === 'constraint');
     if (cons.length) {
@@ -288,10 +319,12 @@ export class Commands {
         curves.get(it.sketchId).add(it.entityId);
       } else if (it.kind === 'region') sketches.add(it.sketchId);
       else if (it.kind === 'plane') planes.add(it.planeId);
+      else if (it.kind === 'image') images.add(it.imageId);
     }
-    if (!bodies.size && !sketches.size && !curves.size && !planes.size) return;
+    if (!bodies.size && !sketches.size && !curves.size && !planes.size && !images.size) return;
     this.doc.apply('Delete', (d) => {
       for (const id of planes) d.removePlane(id);
+      for (const id of images) d.removeImage(id);
       for (const id of bodies) d.removeBody(id);
       for (const id of sketches) d.removeSketch(id);
       for (const [sid, ids] of curves) {
@@ -358,4 +391,12 @@ export function transformPlane(plane, m) {
   const n = new THREE.Vector3(...plane.normal).applyMatrix3(N).normalize();
   const x = new THREE.Vector3(...plane.xDir).transformDirection(M);
   return { origin: o.toArray(), normal: n.toArray(), xDir: x.toArray() };
+}
+
+// Patch a body, sketch, plane or image by kind.
+function updateItem(d, kind, id, patch) {
+  if (kind === 'body') return d.updateBody(id, patch);
+  if (kind === 'plane') return d.updatePlane(id, patch);
+  if (kind === 'image') return d.updateImage(id, patch);
+  return d.updateSketch(id, patch);
 }

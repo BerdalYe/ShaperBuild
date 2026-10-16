@@ -38,6 +38,11 @@ export class ContextBar {
         if ([...bodies].some((id) => app.doc.body(id)?.kind === 'mesh')) out.push({ label: 'Convert to solid', icon: 'convert', action: () => app.cmd.convertToSolid() });
       }
     }
+    if (only('image') && list.length === 1) {
+      const im = app.doc.image(list[0].imageId);
+      out.push(tool('line', 'Trace with lines', 'line'), tool('spline', 'Spline'), tool('move', 'Move'));
+      if (im) out.push({ label: 'Look at', icon: 'lookAt', action: () => app.vp.lookAtPlane(im.plane) });
+    }
     if (only('plane') && list.length === 1) {
       const pl = app.doc.plane(list[0].planeId);
       out.push(tool('rect', 'Draw a rectangle', 'rect'), tool('circle', 'Circle'), tool('text', 'Text'));
@@ -52,6 +57,18 @@ export class ContextBar {
   }
 
   render() {
+    // Clearing blurs a focused size box, whose change handler can update
+    // the document and render again; skip that nested call.
+    if (this.rendering) return;
+    this.rendering = true;
+    try {
+      this.renderBar();
+    } finally {
+      this.rendering = false;
+    }
+  }
+
+  renderBar() {
     const app = this.app;
     const list = app.selection.list;
     clear(this.el);
@@ -61,7 +78,7 @@ export class ContextBar {
     }
     const counts = {};
     for (const it of list) counts[it.kind] = (counts[it.kind] || 0) + 1;
-    const NAMES = { constraint: ['constraint', 'constraints'], body: ['body', 'bodies'], face: ['face', 'faces'], edge: ['edge', 'edges'], region: ['region', 'regions'], curve: ['curve', 'curves'], spoint: ['point', 'points'], sketch: ['sketch', 'sketches'], vertex: ['vertex', 'vertices'], plane: ['plane', 'planes'] };
+    const NAMES = { constraint: ['constraint', 'constraints'], body: ['body', 'bodies'], face: ['face', 'faces'], edge: ['edge', 'edges'], region: ['region', 'regions'], curve: ['curve', 'curves'], spoint: ['point', 'points'], sketch: ['sketch', 'sketches'], vertex: ['vertex', 'vertices'], plane: ['plane', 'planes'], image: ['image', 'images'] };
     const label = Object.entries(counts)
       .map(([k, n]) => `${n} ${(NAMES[k] || [k, k])[n === 1 ? 0 : 1]}`)
       .join(', ');
@@ -99,10 +116,46 @@ export class ContextBar {
     this.el.hidden = false;
   }
 
+  // Real width (height follows) and see-through amount of an image.
+  imageProps(id) {
+    const app = this.app;
+    const im = app.doc.image(id);
+    if (!im) return null;
+    const inp = h('input.num-input', { type: 'text', value: formatLength(im.width, app.units, { suffix: false }), title: 'Real width of the picture' });
+    let done = false;
+    const commit = () => {
+      const v = parseLength(inp.value, app.units);
+      if (done || !(v > 0) || Math.abs(v - im.width) < 1e-9) return;
+      done = true;
+      app.cmd.setImage(id, { width: v, height: (im.height / im.width) * v }, 'Image size');
+      app.selection.set([{ kind: 'image', imageId: id }]);
+    };
+    inp.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') commit();
+      if (e.key === 'Escape') inp.blur();
+    });
+    inp.addEventListener('change', commit);
+    const op = h('input.cb-range', { type: 'range', min: 10, max: 100, step: 5, value: Math.round((im.opacity ?? 0.6) * 100), title: 'How see-through the picture is' });
+    op.addEventListener('input', () => {
+      const view = app.vp.imageViews.get(id);
+      if (view) {
+        view.mat.opacity = op.value / 100;
+        app.vp.requestRender();
+      }
+    });
+    op.addEventListener('change', () => {
+      app.cmd.setImage(id, { opacity: op.value / 100 }, 'Image opacity');
+      app.selection.set([{ kind: 'image', imageId: id }]);
+    });
+    return h('span.cb-prop', h('span', { text: 'Width' }), inp, h('span', { text: app.units }), h('span', { text: 'Opacity', style: { marginLeft: '8px' } }), op);
+  }
+
   // Editable size for a single selected line, circle or arc. Setting it adds
   // (or updates) a dimension constraint, like typing into a Shapr3D label.
   quickProps(list) {
     const app = this.app;
+    if (list.length === 1 && list[0].kind === 'image') return this.imageProps(list[0].imageId);
     if (list.length === 1 && list[0].kind === 'constraint') return null;
     if (list.length !== 1 || list[0].kind !== 'curve') return null;
     const it = list[0];

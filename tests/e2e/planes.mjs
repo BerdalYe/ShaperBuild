@@ -79,6 +79,40 @@ try {
   near(Math.max(...imported.entities.map((e) => Math.abs(e.a[0]))), 10);
   await A(() => window.__shaper.cmd.deleteItems([{ kind: 'sketch', sketchId: window.__shaper.doc.sketches[1].id }]));
 
+  step('a picture to trace: import, set its real width, draw on it, move it');
+  // A 4 × 2 pixel PNG.
+  const png = path.join(path.dirname(dxf), 'photo.png');
+  fs.writeFileSync(png, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAYAAAB/qH1jAAAAEUlEQVR4nGP4z8Dwn4GBgQEAJ+AD/btYp9QAAAAASUVORK5CYII=', 'base64'));
+  await A(() => window.__shaper.selection.clear());
+  await A((f) => window.__shaper.files.openPath(f, { import: true }), png);
+  await win.waitForFunction(() => window.__shaper.doc.images.length === 1);
+  let im = await A(() => window.__shaper.doc.images[0]);
+  assert.equal(im.name, 'photo');
+  near(im.width, 100);
+  near(im.height, 50);
+  assert.ok(im.src.startsWith('data:image/png;base64,'));
+  const widthBox = win.locator('#context-bar .cb-prop input.num-input');
+  await widthBox.fill('200');
+  await widthBox.press('Enter');
+  im = await A(() => window.__shaper.doc.images[0]);
+  near(im.width, 200);
+  near(im.height, 100);
+  await shot(win, '81-image');
+  await A(() => {
+    const a = window.__shaper;
+    a.selection.set([{ kind: 'image', imageId: a.doc.images[0].id }]);
+    a.tools.activate('move', { force: true });
+    const t = a.tools.active;
+    t.values.x = 15;
+    t.toGizmo();
+    t.apply();
+  });
+  await win.waitForFunction(() => Math.abs(window.__shaper.doc.images[0].plane.origin[0] - 15) < 1e-6);
+  await A(() => window.__shaper.cmd.deleteItems([{ kind: 'image', imageId: window.__shaper.doc.images[0].id }]));
+  assert.equal(await A(() => window.__shaper.doc.images.length), 0);
+  await win.keyboard.press('Control+z');
+  assert.equal(await A(() => window.__shaper.doc.images.length), 1, 'undo brings the image back');
+
   step('a tilted plane from a face');
   await A(async () => {
     const a = window.__shaper;
@@ -126,6 +160,7 @@ try {
     await a.files.loadProject(bytes, null, 'Planes');
   });
   await win.waitForFunction(() => window.__shaper.doc.planes.length === 2);
+  assert.equal(await A(() => window.__shaper.doc.images.length), 1, 'images are saved too');
   await win.locator('.items-group-head', { hasText: 'Planes' }).hover();
   await win.locator('.items-group-head', { hasText: 'Planes' }).locator('.item-btn').click();
   assert.equal(await A(() => window.__shaper.doc.planes.every((p) => p.visible === false)), true);

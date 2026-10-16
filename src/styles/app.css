@@ -2860,3 +2860,8 @@ svg.icon {
 .mp-shot {
   width: 100%;
 }
+
+.cb-range {
+  width: 90px;
+  accent-color: var(--accent);
+}

@@ -13,7 +13,7 @@ const BASES = {
 
 export class PlaneTool extends Tool {
   get pickKinds() {
-    return ['face', 'region', 'curve', 'plane'];
+    return ['face', 'region', 'curve', 'plane', 'image'];
   }
 
   activate() {
@@ -51,8 +51,8 @@ export class PlaneTool extends Tool {
       const c = it.kind === 'region' ? app.regionCache.get(it.sketchId)?.data?.regions[it.index]?.centroid : null;
       return { plane: c ? { ...sk.plane, origin: c } : sk.plane, label: 'Picked sketch' };
     }
-    if (it.kind === 'plane') {
-      const pl = app.doc.plane(it.planeId);
+    if (it.kind === 'plane' || it.kind === 'image') {
+      const pl = it.kind === 'plane' ? app.doc.plane(it.planeId) : app.doc.image(it.imageId);
       return pl ? { plane: pl.plane, label: pl.name } : null;
     }
     return null;
