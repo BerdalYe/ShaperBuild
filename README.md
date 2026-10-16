@@ -18,6 +18,16 @@ The installers are not code-signed yet, so the first launch shows a warning:
 - **Windows:** "Windows protected your PC" → *More info* → *Run anyway*.
 - **macOS:** right-click the app → *Open* → *Open*.
 
+## 3D printing
+
+Click **3D Print** (Ctrl+P / ⌘P). ShaperBuild checks your design before you print:
+
+- every body is a **closed, solid shape** (no holes in the surface),
+- it **fits your printer's bed** (Prusa, Bambu Lab and Creality presets, or your own size),
+- it isn't tiny or huge by mistake, and whether bodies overlap.
+
+It shows the size, volume and roughly how much plastic it takes. Then save a **3MF** (recommended) or **STL** file — placed on the bed, one file or one per body — or click **Open in** to send it straight to PrusaSlicer, Bambu Studio, OrcaSlicer, UltiMaker Cura or Creality Print if one is installed.
+
 ## Getting started
 
 The first time you open ShaperBuild it offers an **interactive tutorial** (about 3 minutes). It shows you how to move around, draw a rectangle, pull it into 3D and round its edges, and it waits for you to try each step. You can start it again any time from **Help → Interactive tutorial** or the home screen.
@@ -26,27 +36,35 @@ Finding your way around:
 
 - **Tools** are on the right, with names, grouped into Sketch, Model, Transform, Shapes and Inspect. Hover one to see what it does.
 - **Search tools** (Ctrl+K / ⌘K) finds any tool or command by name or purpose — try "hole", "round" or "print".
-- **Items** on the left lists everything in your design: bodies, meshes and sketches. Hide, rename, recolour or delete them there.
+- **Items** on the left lists everything in your design: bodies, meshes, sketches, planes and images. Hide, rename, recolour or delete them there.
 - The **bar at the bottom** suggests tools for whatever you selected. While a tool is active, a hint there tells you what to do next.
 - The **buttons under the view cube** fit the view, jump to standard views, zoom, and switch on **Orbit** or **Pan** mode for dragging with the left button. The **mouse** button explains every way to move around.
 
 ## What it does
 
-**Sketch** – Line, Rectangle, Circle, Arc, Polygon, Spline, Ellipse, Point, Trim, Offset and Construction lines. Click the grid, any flat face or an existing sketch to draw on it. Points snap to ends, midpoints, centers, body corners, alignments and the grid. Start typing while drawing to enter exact sizes (Tab moves between boxes, Enter applies). Closed shapes turn into regions you can click.
+**Sketch** – Line, Rectangle, Circle, Arc, Polygon, Spline, Ellipse, **Text**, Point, Trim, Offset, Project and Construction lines. Click the grid, any flat face, a reference plane, a picture or an existing sketch to draw on it. Points snap to ends, midpoints, centers, body corners, alignments and the grid. Start typing while drawing to enter exact sizes (Tab moves between boxes, Enter applies). Closed shapes turn into regions you can click.
+
+**Text** – Type a name or label, pick Bold, Regular or any font file, set the letter height and click where it goes. The letters come out selected, so pressing E raises them (or a negative height engraves them).
+
+**Planes and pictures** – The **Plane** tool adds a flat surface to draw on, at a distance from or tilted to the grid, a face or another plane. **Import** a PNG or JPG to trace over: type its real width, make it more or less see-through, and draw on it.
 
 **Constraints and dimensions** – Sizes you type become dimensions you can click and change later; the sketch follows. Lines drawn level or upright stay that way, and rectangles stay rectangles when you drag them. Select curves or points and use **Constrain** for parallel, perpendicular, equal, tangent, concentric, midpoint, on-curve, coincident, fixed, angle and distance. The **Dimension** tool (D) adds lengths, diameters, radii and distances.
 
-**Model** – Extrude (also push/pull of faces: grow a body or cut into it), Revolve, Sweep, Loft, Fillet, Chamfer, Shell, Split, Union, Subtract and Intersect. Every tool shows a live preview before you apply it. Select a region or face and drag its blue arrow to extrude directly.
+**Model** – Extrude (also push/pull of faces: grow a body or cut into it), Revolve, Sweep, Loft, Fillet, Chamfer, Shell, Draft, Split, Union, Subtract and Intersect. Every tool shows a live preview before you apply it. Select a region or face and drag its blue arrow to extrude directly.
 
 **Transform** – Move/Rotate with a gizmo or exact values, Scale, Mirror, Linear and Circular patterns, Duplicate.
 
 **Shapes** – Box, Cylinder, Sphere, Cone and Torus, placed by clicking.
 
-**Inspect** – Measure lengths, areas, volumes, distances and angles; Section view with solid cut faces; Visualization mode with soft shadows.
+**Inspect** – Measure lengths, areas, volumes, distances and angles; Section view with solid cut faces; X-ray (see-through bodies, Shift+X).
+
+**Visualization** – Soft shadows and materials (plastic, matte, glossy, rubber, metal, brushed metal, chrome, glass) with any colour; save a PNG image.
+
+**2D drawings** – Front, top and side views with hidden lines dashed, overall sizes, an optional 3D view and a title block, in 1st-angle (Europe) or 3rd-angle (USA) layout on A4, A3 or Letter. Save as PDF, SVG or DXF.
 
 **STL and mesh files** – Import STL (binary or text), OBJ and 3MF. Meshes can be moved, scaled, mirrored, patterned and combined with solids (union / subtract / intersect). *Mesh → Solid* turns a mesh into an editable solid, merging flat triangles into real faces so you can push/pull and fillet them.
 
-**Files** – Save designs as `.shaperbuild`. Export STL, 3MF, OBJ, STEP and PNG images. Import STEP. Drag and drop files onto the window. Unlimited undo/redo.
+**Files** – Save designs as `.shaperbuild`. Export STL, 3MF, OBJ, STEP, DXF (sketches, for laser cutters) and PNG images. Import STEP, DXF (becomes a sketch) and pictures. Autosave with crash recovery. Drag and drop files onto the window. Unlimited undo/redo.
 
 The geometry engine is [OpenCascade](https://dev.opencascade.org/) (a real B-rep CAD kernel, through `replicad-opencascadejs`), with [Manifold](https://github.com/elalish/manifold) for mesh booleans.
 
@@ -68,7 +86,13 @@ Press **?** or use *Help → Keyboard Shortcuts* in the app to see everything. L
 
 ## How it compares to Shapr3D
 
-It follows Shapr3D's workflow and layout closely, but it is not a copy of Shapr3D and does not have everything yet. Not included so far: parametric history (going back to edit earlier steps), 2D drawings, text in sketches, and AR/iPad features.
+It follows Shapr3D's workflow and layout closely, but it is not a copy of Shapr3D and does not have everything yet. Not included so far: parametric history (going back to edit earlier steps), Wrap & Emboss, sweep twist/scale controls, folders in Items, IGES files, AI rendering, the iPad / Vision Pro / AR apps, cloud sync and team sharing, and the video learning center.
+
+## Updates
+
+The installed app checks GitHub for new versions. On Windows and Linux it downloads them in the background and shows **Restart to update** in the top bar; on macOS it shows a **Download** button (the Mac build is not code-signed, which macOS needs for self-updating). Turn checks off in Settings, or use *Help → Check for Updates…*.
+
+To publish a new version, push a tag like `v1.2.0` (or create a release with that tag on GitHub). CI builds the installers, uses the tag as the version, and attaches the files the updater needs.
 
 ## Run from source
 
