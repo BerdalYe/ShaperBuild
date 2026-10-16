@@ -48,6 +48,13 @@ export class Dialogs {
       'div',
       h('h4', { text: 'General' }),
       row('Theme', select(s.theme, [['dark', 'Dark'], ['light', 'Light']], (v) => v !== s.theme && app.toggleTheme())),
+      check(s.autoUpdate !== false, 'Check for updates automatically and install them on restart', (v) => {
+        s.autoUpdate = v;
+        app.saveSettings();
+        if (v) app.updates.start();
+        else app.updates.stop();
+      }),
+      h('div', { style: { height: '8px' } }),
       row('Units for this design', select(app.units, Object.entries(UNITS).map(([k, u]) => [k, u.name]), (v) => app.cmd.setUnits(v))),
       h('h4', { text: 'Navigation' }),
       row(
@@ -149,6 +156,14 @@ export class Dialogs {
       <p>A desktop 3D CAD app for sketching, solid modelling and STL work.</p>
       <p>Geometry by OpenCascade (via replicad-opencascadejs, LGPL-2.1) and Manifold (Apache-2.0). Rendering by three.js (MIT). Built with Electron.</p>`,
     });
-    return modal({ title: 'About', body });
+    const v = await modal({
+      title: 'About',
+      body,
+      buttons: [
+        { label: 'Check for updates', value: 'check' },
+        { label: 'Close', primary: true },
+      ],
+    });
+    if (v === 'check') this.app.updates.check(true);
   }
 }

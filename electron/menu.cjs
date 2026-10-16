@@ -126,6 +126,7 @@ function buildMenu({ send, recent = [], isDev = false }) {
         { type: 'separator' },
         cmd('Keyboard Shortcuts', 'shortcuts', 'CmdOrCtrl+/'),
         cmd('Getting Started', 'getting-started'),
+        cmd('Check for Updates…', 'check-updates'),
         ...(mac ? [] : [{ type: 'separator' }, cmd('About ShaperBuild', 'about')]),
         ...(isDev ? [] : [{ type: 'separator' }, { role: 'toggleDevTools', label: 'Developer Tools' }]),
       ],

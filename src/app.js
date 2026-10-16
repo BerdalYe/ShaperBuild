@@ -20,6 +20,7 @@ import { ViewControls, NavHelp } from './ui/viewcontrols.js';
 import { StarterCard, ToolHint } from './ui/starter.js';
 import { Tutorial } from './ui/tutorial.js';
 import { PrintDialog } from './ui/printdialog.js';
+import { Updates } from './ui/updates.js';
 import { toast, showMenu, hideTooltip } from './ui/overlays.js';
 import { icon } from './ui/icons.js';
 import { isTyping, modKey } from './ui/dom.js';
@@ -42,6 +43,7 @@ const DEFAULT_SETTINGS = {
   stlQuality: 'fine',
   stlBinary: true,
   autoLookAt: false,
+  autoUpdate: true,
   toolLabels: true,
 };
 
@@ -77,6 +79,7 @@ export class App {
     this.navHelp = new NavHelp(this);
     this.tutorial = new Tutorial(this);
     this.print = new PrintDialog(this);
+    this.updates = new Updates(this);
     this.starter = new StarterCard(document.getElementById('starter'), this);
 
     this.doc.on('change', (ev) => this.onDocChange(ev));
@@ -111,6 +114,7 @@ export class App {
     window.native?.ready();
     this.files.startAutosave();
     this.starter.update();
+    this.updates.start();
     // First launch: offer the interactive tutorial.
     const info = await window.native?.info().catch(() => null);
     if (!recovered && !this.tutorial.seen && !info?.noTutorial) this.tutorial.offer();
@@ -1181,6 +1185,8 @@ export class App {
         return this.dialogs.shortcuts();
       case 'getting-started':
         return this.dialogs.gettingStarted();
+      case 'check-updates':
+        return this.updates.check(true);
       case 'tutorial':
         return this.tutorial.start();
       case 'navigation-help':

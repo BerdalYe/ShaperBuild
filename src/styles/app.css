@@ -2613,3 +2613,42 @@ svg.icon {
   padding: 0 8px;
   max-width: 190px;
 }
+
+/* ---- update notice in the top bar ------------------------------------ */
+.update-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 15px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.update-pill.ready {
+  border-color: var(--ok);
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.update-pill.ready:hover {
+  background: rgba(63, 191, 127, 0.12);
+}
+
+.update-pill.busy {
+  cursor: default;
+}
+
+.update-pill svg.icon {
+  width: 16px;
+  height: 16px;
+}
+
+.update-pill .spinner {
+  width: 13px;
+  height: 13px;
+}

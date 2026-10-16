@@ -1,7 +1,7 @@
 {
   "name": "shaperbuild",
   "productName": "ShaperBuild",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A desktop 3D CAD app for sketching, solid modelling and STL work.",
   "author": "BerdalYe",
   "license": "UNLICENSED",
@@ -20,6 +20,7 @@
     "vendor": "node tools/vendor.mjs"
   },
   "dependencies": {
+    "electron-updater": "6.8.9",
     "replicad-opencascadejs": "1.1.0",
     "three": "0.180.0"
   },
@@ -53,6 +54,14 @@
       "!**/*.map"
     ],
     "asar": true,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "BerdalYe",
+        "repo": "ShaperBuild",
+        "releaseType": "release"
+      }
+    ],
     "fileAssociations": [
       {
         "ext": "shaperbuild",

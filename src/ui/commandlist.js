@@ -44,6 +44,7 @@ export function appCommands(app) {
     { id: 'tutorial', label: 'Interactive tutorial', icon: 'learn', keywords: 'help learn guide tour start basics beginner', run: () => app.tutorial.start() },
     { id: 'nav-help', label: 'How to move around (navigation)', icon: 'mouse', keywords: 'help orbit pan zoom rotate view mouse trackpad camera', run: () => app.navHelp.toggle(true) },
     { id: 'shortcuts', label: 'Keyboard shortcuts', icon: 'keyboard', kbd: `${m}/`, keywords: 'help keys hotkeys', run: () => app.dialogs.shortcuts() },
+    { id: 'check-updates', label: 'Check for updates', icon: 'sparkle', keywords: 'update upgrade new version download', run: () => app.updates.check(true) },
     { id: 'home', label: 'Home screen (recent designs)', icon: 'home', keywords: 'recent projects files start', run: () => app.home.show() },
   ];
 }

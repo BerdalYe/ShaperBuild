@@ -23,7 +23,7 @@ export async function launch({ userData, waitReady = true, tutorial = false } = 
     args: packaged ? flags : [ROOT, ...flags],
     cwd: ROOT,
     // The first-run tutorial would cover the window, so suites opt in to it.
-    env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: '1', SHAPER_NO_TUTORIAL: tutorial ? '0' : '1' },
+    env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: '1', SHAPER_NO_TUTORIAL: tutorial ? '0' : '1', SHAPER_NO_UPDATE: '1' },
   });
   const win = await app.firstWindow();
   const errors = [];

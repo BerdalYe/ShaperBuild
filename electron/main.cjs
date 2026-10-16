@@ -6,6 +6,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { buildMenu } = require('./menu.cjs');
 const { listSlicers, openInSlicer } = require('./slicers.cjs');
+const updater = require('./updater.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const SCHEME = 'app';
@@ -289,6 +290,8 @@ ipcMain.handle('fs:write', async (_e, file, data) => {
   await fs.promises.writeFile(file, Buffer.from(data));
   return true;
 });
+
+updater.init({ ipcMain, send: (s) => win?.webContents.send('update-state', s) });
 
 // 3D printing: write the file to a temporary folder and open it in a slicer
 // (or whatever app the system uses for that file type).
