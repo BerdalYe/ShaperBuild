@@ -1,0 +1,126 @@
+{
+  "name": "shaperbuild",
+  "productName": "ShaperBuild",
+  "version": "1.0.0",
+  "description": "A desktop 3D CAD app for sketching, solid modelling and STL work.",
+  "author": "BerdalYe",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test \"tests/unit/*.test.mjs\" \"tests/kernel/*.test.mjs\"",
+    "test:e2e": "node tests/e2e/run.mjs",
+    "icon": "node tools/make-icon.mjs",
+    "dist": "electron-builder --publish never",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:mac": "electron-builder --mac --publish never",
+    "dist:linux": "electron-builder --linux --publish never",
+    "vendor": "node tools/vendor.mjs"
+  },
+  "dependencies": {
+    "replicad-opencascadejs": "1.1.0",
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "electron": "44.5.0",
+    "electron-builder": "26.16.1",
+    "manifold-3d": "3.5.3",
+    "playwright": "1.56.1"
+  },
+  "build": {
+    "appId": "com.berdalye.shaperbuild",
+    "productName": "ShaperBuild",
+    "copyright": "Copyright © 2026 BerdalYe",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**",
+      "src/**",
+      "build/icon.png",
+      "package.json",
+      "!node_modules/three/src/**",
+      "!node_modules/three/examples/**",
+      "!node_modules/three/build/*.cjs",
+      "!node_modules/three/build/*.min.js",
+      "!node_modules/three/build/three.webgpu*",
+      "!node_modules/three/build/three.tsl*",
+      "!node_modules/replicad-opencascadejs/dist/replicad_multi*",
+      "!node_modules/replicad-opencascadejs/dist/*.d.ts",
+      "!**/*.map"
+    ],
+    "asar": true,
+    "fileAssociations": [
+      {
+        "ext": "shaperbuild",
+        "name": "ShaperBuild Design",
+        "role": "Editor"
+      },
+      {
+        "ext": "stl",
+        "name": "STL 3D Model",
+        "role": "Viewer"
+      },
+      {
+        "ext": "3mf",
+        "name": "3MF 3D Model",
+        "role": "Viewer"
+      },
+      {
+        "ext": "step",
+        "name": "STEP CAD Model",
+        "role": "Viewer"
+      },
+      {
+        "ext": "stp",
+        "name": "STEP CAD Model",
+        "role": "Viewer"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "artifactName": "ShaperBuild-Setup-${version}.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.graphics-design",
+      "icon": "build/icon.png",
+      "artifactName": "ShaperBuild-${version}-${arch}.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Graphics",
+      "icon": "build/icon.png",
+      "maintainer": "BerdalYe",
+      "artifactName": "ShaperBuild-${version}-${arch}.${ext}"
+    }
+  }
+}

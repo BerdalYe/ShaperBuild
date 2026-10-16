@@ -1,0 +1,43 @@
+// Colours used by the 3D view for each interface theme.
+export const THEMES = {
+  dark: {
+    bgTop: '#3a3e47',
+    bgBottom: '#1c1e23',
+    body: '#c4ccd6',
+    edge: '#16181c',
+    hover: '#8cc0ff',
+    select: '#3d8bff',
+    preview: '#5aa2ff',
+    previewCut: '#ff6b6b',
+    sketch: '#e9eef5',
+    sketchConstruction: '#9aa3ae',
+    sketchActive: '#ffffff',
+    region: '#6e9bd6',
+    point: '#ffffff',
+    gridMinor: 'rgba(255,255,255,0.06)',
+    gridMajor: 'rgba(255,255,255,0.13)',
+    snap: '#ffd84a',
+    inference: '#ffb02e',
+  },
+  light: {
+    bgTop: '#f5f6f8',
+    bgBottom: '#d5d9df',
+    body: '#bcc5d0',
+    edge: '#2a2d33',
+    hover: '#5ea4ff',
+    select: '#1a73ff',
+    preview: '#1a73ff',
+    previewCut: '#e5484d',
+    sketch: '#1e2329',
+    sketchConstruction: '#7a828c',
+    sketchActive: '#000000',
+    region: '#5b8fd6',
+    point: '#1e2329',
+    gridMinor: 'rgba(0,0,0,0.07)',
+    gridMajor: 'rgba(0,0,0,0.15)',
+    snap: '#e09b00',
+    inference: '#e08a00',
+  },
+};
+
+export const BODY_COLORS = ['#c4ccd6', '#8fb3e8', '#9fd3a8', '#f2c48d', '#ee9b9b', '#c7a8e8', '#f0e08a', '#9ad9d9', '#d8d8d8', '#6b7480'];
