@@ -94,6 +94,7 @@ const P = {
   printer: '<path d="M3 3h18v4H3z"/><path d="M5 7v14M19 7v14"/><path d="M10 7v2.5l2 2 2-2V7"/><path d="M8.5 20.5h7v-4h-7z"/>',
   display: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/><path d="M6 14.5l4 2.2M6 11.5l6 3.4M14 16.7l4-2.2" opacity=".6"/>',
   isolate: '<rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="2.5 2.5" opacity=".6"/><path d="M12 7l5 2.8v5.4L12 18l-5-2.8V9.8z"/><path d="M7 9.8l5 2.8 5-2.8M12 12.6V18"/>',
+  camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
   pin: '<path d="M9 3h6l-1 6 3 3H7l3-3z"/><path d="M12 12v9"/>',
   xray: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9" stroke-dasharray="2 2" opacity=".7"/><circle cx="12" cy="11" r="2.6" fill="currentColor" opacity=".45" stroke="none"/>',
   text: '<path d="M5 7V4.5h14V7M12 4.5v15M9 19.5h6"/>',

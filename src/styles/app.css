@@ -3405,3 +3405,256 @@ svg.icon {
   width: auto;
   font-family: inherit;
 }
+
+/* Visualization panel: search, finish, decals, light, camera */
+.mp-search {
+  width: 100%;
+  height: 28px;
+  margin-bottom: 2px;
+  padding: 0 8px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.mp-hexrow {
+  margin-top: 6px;
+}
+
+.mp-hex {
+  width: 100%;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font: 12px var(--mono, ui-monospace, monospace);
+}
+
+.mp-props {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mp-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
+.mp-slabel {
+  display: flex;
+  justify-content: space-between;
+}
+
+.mp-val {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.mp-range {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.mp-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
+.mp-props .btn.small,
+.mp-decals .btn.small {
+  align-self: flex-start;
+  height: 26px;
+  padding: 0 10px;
+  font-size: 11.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mp-decals {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mp-decal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.mp-decal.on {
+  border-color: var(--accent);
+}
+
+.mp-decal img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  border-radius: 4px;
+  background: repeating-conic-gradient(#888 0 25%, #bbb 0 50%) 0 0 / 8px 8px;
+}
+
+.mp-dname {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mp-shot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* Screenshot dialog */
+.shot-sizes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.shot-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.shot-size small {
+  color: var(--muted);
+}
+
+.shot-size input:disabled ~ span {
+  opacity: 0.5;
+}
+
+/* 2D drawing dialog: more fields */
+.drawing-modal .dd-side {
+  width: 250px;
+  max-height: min(68vh, 640px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.dd-sublabel {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.dd-notes {
+  height: 70px;
+  padding: 6px 8px;
+  resize: vertical;
+  font: inherit;
+  font-size: 12px;
+}
+
+.dd-select {
+  height: 30px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  padding: 0 6px;
+}
+
+.dd-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.dd-num {
+  width: 80px;
+  height: 26px;
+}
+
+/* Recent design cards: the … menu */
+.recent-card {
+  position: relative;
+}
+
+.rc-more {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  background: var(--glass);
+  color: var(--text-2);
+  opacity: 0;
+}
+
+.recent-card:hover .rc-more,
+.recent-card:focus-visible .rc-more {
+  opacity: 1;
+}
+
+.rc-more:hover {
+  color: var(--text);
+  background: var(--panel-3);
+}
+
+@media (hover: none) {
+  .rc-more {
+    opacity: 1;
+  }
+}
+
+/* Versions dialog */
+.versions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.version-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.version-row div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.version-row span {
+  font-size: 11.5px;
+  color: var(--muted);
+}

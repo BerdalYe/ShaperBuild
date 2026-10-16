@@ -205,3 +205,54 @@ works differently on purpose, the choice is written down here.
 - Fillet options other than the radius (chord width, setback corners, G2,
   profile, overflow) and Loft guide curves and tangency are not there.
 - Extrude **From Plane** and an end offset are not there; Start offset is.
+
+## Visualization
+
+- 28 built-in materials (colour and finish; no image textures, so wood and
+  stone are plain colours). Metals and some others bring their own colour
+  when picked. Roughness, opacity, see-through and refraction can be changed
+  per body; Reset finish goes back to the material.
+- The light direction, sun height, brightness, ground shadow and the
+  camera's field of view are app settings (they apply to every design).
+  There is no HDRI choice, depth of field, aperture or blur, and no AI
+  rendering.
+- **Decals** are projected straight onto the body from where they were
+  placed (no cylindrical projection). "Wrap round edges" projects deeper so
+  the picture reaches round corners. Pictures are reduced to 1024 pixels
+  and saved in the design. Decals stay where they were put: moving the body
+  afterwards does not move them. They show in Visualization and are not
+  included in exports.
+- Screenshots: window size, double, Full HD, 4K or 8K, limited by what the
+  graphics card can draw; optionally without the background.
+
+## Drawings
+
+- Drawings are made in a dialog and laid out automatically; they are not
+  a separate editable sheet. The section view cuts through the middle of
+  the bodies, seen from the front, and is hatched; the detail view enlarges
+  a circle of any view (click the sheet to move it). Extra views use the
+  largest standard scale that fits.
+- Title block fields and notes are kept with the design; "Drawn by" is
+  also remembered for new designs.
+- Not included: dimensions other than the overall sizes, tolerances,
+  centre lines, projected views by dragging, and DWG (DXF is offered).
+
+## Files and versions
+
+- GLB and USDZ are written in metres with Y up (the formats' convention),
+  with each body's colour and finish. OBJ comes with a `.mtl` file of the
+  same name. IGES, Parasolid, DWG and JT cannot be written: the geometry
+  engine build used here has no translators for them.
+- Versions are kept on this computer only (the last 30 per design, in the
+  app's data folder). Restoring keeps the current file as a version too.
+  There is no cloud sync, sharing or team spaces.
+- "Move to the bin" uses the system's recycle bin, so it can be undone
+  there. The open design cannot be binned.
+
+## Touch and pen
+
+- One finger: orbit; two fingers: pan and pinch zoom; tap: click; double
+  tap on a flat face: look at it; long press, then drag: box selection or
+  dragging in the active tool. Tool handles (like the extrude arrow) are
+  dragged straight away. A pen works like a mouse, so it draws.
+- Three-finger undo/redo swipes are not supported; use the buttons.

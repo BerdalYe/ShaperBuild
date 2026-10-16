@@ -9,15 +9,37 @@ import { makePickMeshMaterial, makePickLineMaterial, makePickPointMaterial, fill
 const tmpColor = new THREE.Color();
 
 // Surface finishes for visualization mode (body.material).
+// Finishes for visualization. `color` is suggested when the material is
+// picked (metals have their own colour); `cat` groups them in the panel.
 export const MATERIALS = {
-  plastic: { label: 'Plastic', roughness: 0.32, metalness: 0.06 },
-  matte: { label: 'Matte', roughness: 0.85, metalness: 0 },
-  glossy: { label: 'Glossy', roughness: 0.1, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.04 },
-  rubber: { label: 'Rubber', roughness: 1, metalness: 0 },
-  metal: { label: 'Metal', roughness: 0.36, metalness: 1 },
-  brushed: { label: 'Brushed metal', roughness: 0.55, metalness: 1 },
-  chrome: { label: 'Chrome', roughness: 0.03, metalness: 1 },
-  glass: { label: 'Glass', roughness: 0.04, metalness: 0, transmission: 1, thickness: 4, ior: 1.5 },
+  plastic: { label: 'Plastic', cat: 'Plastic', roughness: 0.32, metalness: 0.06 },
+  matte: { label: 'Matte', cat: 'Plastic', roughness: 0.85, metalness: 0 },
+  glossy: { label: 'Glossy', cat: 'Plastic', roughness: 0.1, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.04 },
+  softTouch: { label: 'Soft-touch', cat: 'Plastic', roughness: 0.7, metalness: 0, sheen: 0.6 },
+  translucent: { label: 'Translucent plastic', cat: 'Plastic', roughness: 0.35, metalness: 0, transmission: 0.6, thickness: 6, ior: 1.46 },
+  printed: { label: '3D-printed (PLA)', cat: 'Plastic', roughness: 0.55, metalness: 0, clearcoat: 0.2, clearcoatRoughness: 0.5 },
+  rubber: { label: 'Rubber', cat: 'Rubber and paint', roughness: 1, metalness: 0 },
+  carPaint: { label: 'Car paint', cat: 'Rubber and paint', roughness: 0.35, metalness: 0.5, clearcoat: 1, clearcoatRoughness: 0.03 },
+  satinPaint: { label: 'Satin paint', cat: 'Rubber and paint', roughness: 0.45, metalness: 0, clearcoat: 0.3, clearcoatRoughness: 0.3 },
+  ceramic: { label: 'Ceramic', cat: 'Rubber and paint', roughness: 0.15, metalness: 0, clearcoat: 0.8, clearcoatRoughness: 0.08, color: '#f2efe8' },
+  metal: { label: 'Metal', cat: 'Metal', roughness: 0.36, metalness: 1 },
+  brushed: { label: 'Brushed metal', cat: 'Metal', roughness: 0.55, metalness: 1 },
+  chrome: { label: 'Chrome', cat: 'Metal', roughness: 0.03, metalness: 1 },
+  steel: { label: 'Steel', cat: 'Metal', roughness: 0.3, metalness: 1, color: '#b9bec4' },
+  aluminium: { label: 'Aluminium', cat: 'Metal', roughness: 0.4, metalness: 1, color: '#d4d7db' },
+  gold: { label: 'Gold', cat: 'Metal', roughness: 0.2, metalness: 1, color: '#e3b65a' },
+  copper: { label: 'Copper', cat: 'Metal', roughness: 0.28, metalness: 1, color: '#d08a62' },
+  brass: { label: 'Brass', cat: 'Metal', roughness: 0.3, metalness: 1, color: '#d6b46a' },
+  titanium: { label: 'Titanium', cat: 'Metal', roughness: 0.45, metalness: 1, color: '#9a9690' },
+  anodized: { label: 'Anodized', cat: 'Metal', roughness: 0.4, metalness: 0.8, clearcoat: 0.4, clearcoatRoughness: 0.3 },
+  glass: { label: 'Glass', cat: 'Glass', roughness: 0.04, metalness: 0, transmission: 1, thickness: 4, ior: 1.5 },
+  frosted: { label: 'Frosted glass', cat: 'Glass', roughness: 0.45, metalness: 0, transmission: 1, thickness: 4, ior: 1.5 },
+  tinted: { label: 'Tinted glass', cat: 'Glass', roughness: 0.04, metalness: 0, transmission: 0.85, thickness: 8, ior: 1.5, color: '#6d8fa8' },
+  wood: { label: 'Wood (oiled)', cat: 'Natural', roughness: 0.6, metalness: 0, clearcoat: 0.25, clearcoatRoughness: 0.4, color: '#a8754a' },
+  concrete: { label: 'Concrete', cat: 'Natural', roughness: 0.95, metalness: 0, color: '#a6a39e' },
+  stone: { label: 'Polished stone', cat: 'Natural', roughness: 0.2, metalness: 0, clearcoat: 0.6, clearcoatRoughness: 0.1, color: '#5d5f63' },
+  leather: { label: 'Leather', cat: 'Natural', roughness: 0.65, metalness: 0, sheen: 0.4, color: '#6b4630' },
+  fabric: { label: 'Fabric', cat: 'Natural', roughness: 1, metalness: 0, sheen: 1, color: '#4f5d73' },
 };
 const MODELING_LOOK = { roughness: 0.55, metalness: 0.05, clearcoat: 0, clearcoatRoughness: 0, transmission: 0 };
 
@@ -194,12 +216,12 @@ export class BodyView {
   }
 
   setBody(body) {
-    const looked = this.body?.material;
+    const looked = this.body;
     this.body = body;
     this.group.visible = body.visible !== false;
     this.pickGroup.visible = this.group.visible;
     this.applyColors();
-    if (this.visual && body.material !== looked) this.applyLook();
+    if (this.visual && (body.material !== looked?.material || body.look !== looked?.look)) this.applyLook();
   }
 
   // highlight: { body: color|null, faces: Map(index -> color), edges: Map(index -> color) }
@@ -263,21 +285,33 @@ export class BodyView {
     this.applyLook();
   }
 
+  // body.look holds the person's own changes to the finish (roughness,
+  // opacity, see-through, refraction).
   applyLook() {
-    const look = this.visual ? MATERIALS[this.body.material] || MATERIALS.plastic : MODELING_LOOK;
+    const base = this.visual ? MATERIALS[this.body.material] || MATERIALS.plastic : MODELING_LOOK;
+    const look = this.visual ? { ...base, ...(this.body.look || {}) } : base;
     const m = this.material;
     m.roughness = look.roughness;
     m.metalness = look.metalness;
     m.clearcoat = look.clearcoat || 0;
     m.clearcoatRoughness = look.clearcoatRoughness || 0;
     m.transmission = look.transmission || 0;
-    m.thickness = look.thickness || 0;
+    m.thickness = look.thickness || (look.transmission ? 4 : 0);
     m.ior = look.ior || 1.5;
+    m.sheen = look.sheen || 0;
+    m.sheenRoughness = 0.6;
+    const opacity = look.opacity ?? 1;
+    if (!this.xray) {
+      m.transparent = opacity < 1;
+      m.opacity = opacity;
+      m.depthWrite = opacity >= 1;
+    }
     m.needsUpdate = true;
   }
 
   // See-through faces so hidden edges and inner parts show.
   setXray(on) {
+    this.xray = on;
     const m = this.material;
     m.transparent = on;
     m.opacity = on ? 0.22 : 1;
@@ -285,6 +319,7 @@ export class BodyView {
     this.mesh.castShadow = !on;
     this.mesh.renderOrder = on ? 1 : 0;
     m.needsUpdate = true;
+    if (!on && this.visual) this.applyLook();
   }
 
   setEdgesVisible(v) {

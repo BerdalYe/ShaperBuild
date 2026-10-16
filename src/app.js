@@ -176,6 +176,8 @@ export class App {
     this.vp.setShowEdges(s.showEdges);
     const mac = (window.native?.platform || navigator.platform || '').toLowerCase().includes('mac');
     this.vp.scrollMode = s.scrollMode === 'auto' ? (mac ? 'orbit' : 'zoom') : s.scrollMode;
+    this.vp.setLighting(s.lighting || {});
+    this.vp.setFov(s.fov || 35);
     this.vp.requestRender();
   }
 
@@ -216,6 +218,7 @@ export class App {
     this.vp.syncPlanes(doc.planes);
     this.vp.syncAxes(doc.axes);
     this.vp.syncImages(doc.images);
+    this.vp.syncDecals(doc.decals);
     this.applyIsolation();
     this.selection.prune((it) => this.isValidItem(it));
     this.refreshHighlights();
@@ -999,6 +1002,7 @@ export class App {
       gridBtn.classList.toggle('on', !!this.settings.gridLock);
     };
     this.vp.on('gridstep', showGrid);
+    this.vp.on('doubletap', () => this.onDoubleTap());
     showGrid(this.vp.grid.step);
     gridBtn.addEventListener('click', () => {
       this.settings.gridLock = this.settings.gridLock ? null : this.vp.grid.step;
@@ -1484,6 +1488,14 @@ export class App {
   }
 
   // Look straight at the face under the pointer.
+  // Double tap (touch): look straight at the flat face under the finger.
+  onDoubleTap() {
+    const at = this.vp.pointer;
+    const hit = at && this.vp.hitsUnder(at.x, at.y)[0];
+    if (hit?.kind === 'face') this.lookAtPointer();
+    else this.vp.fit(this.selectionBox());
+  }
+
   lookAtPointer() {
     const at = this.vp.pointer;
     const hit = at && this.vp.hitsUnder(at.x, at.y)[0];
@@ -1579,12 +1591,18 @@ export class App {
         return this.files.exportDialog('obj');
       case 'export-step':
         return this.files.exportDialog('step');
+      case 'versions':
+        return this.files.showVersions();
+      case 'export-glb':
+        return this.files.exportDialog('glb');
+      case 'export-usdz':
+        return this.files.exportDialog('usdz');
       case 'export-dxf':
         return this.files.exportDXF();
       case 'drawing':
         return this.drawing.open();
       case 'export-png':
-        return this.files.exportPNG();
+        return this.dialogs.screenshot();
       case 'close-design':
         return this.files.closeDesign();
       case 'undo':

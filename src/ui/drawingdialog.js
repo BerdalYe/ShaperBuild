@@ -1,11 +1,20 @@
-// "2D drawing": front, top and side views with hidden lines, overall sizes
-// and a title block, saved as PDF, SVG or DXF.
+// "2D drawing": front, top and side views with hidden lines, overall sizes,
+// a title block and notes, plus optional 3D, section and detail views,
+// saved as PDF, SVG or DXF.
 import { h, clear } from './dom.js';
 import { icon } from './icons.js';
 import { modal, toast } from './overlays.js';
 import { t } from '../core/i18n.js';
-import { VIEWS, SHEETS, layoutDrawing, drawingSketches, scaleText } from '../core/drawing.js';
+import { VIEWS, SHEETS, SCALES, layoutDrawing, drawingSketches, scaleText, viewBox } from '../core/drawing.js';
 import { writeDXF } from '../core/dxf.js';
+
+// Title block fields kept with the design (see doc.state.drawing).
+const FIELDS = [
+  ['drawnBy', 'Drawn by'],
+  ['number', 'Drawing number'],
+  ['material', 'Material'],
+  ['revision', 'Revision'],
+];
 
 export class DrawingDialog {
   constructor(app) {
@@ -23,22 +32,48 @@ export class DrawingDialog {
     }
     if (!app.tools.isSelect) app.tools.cancel();
     const s = app.settings;
+    const kept = doc.state.drawing || {};
     this.bodies = bodies;
     this.opts = {
       sheet: SHEETS[s.drawingSheet] ? s.drawingSheet : 'A4',
+      portrait: !!s.drawingPortrait,
       projection: s.drawingProjection || (/^en-US/i.test(navigator.language) ? 'third' : 'first'),
       hidden: s.drawingHidden !== false,
       dims: s.drawingDims !== false,
       iso: s.drawingIso !== false,
-      title: bodies.length === 1 ? bodies[0].name : app.files.name,
+      section: !!s.drawingSection,
+      scale: 'auto',
+      title: kept.title || (bodies.length === 1 ? bodies[0].name : app.files.name),
+      drawnBy: kept.drawnBy ?? s.drawingAuthor ?? '',
+      number: kept.number || '',
+      material: kept.material || '',
+      revision: kept.revision || '',
+      notes: kept.notes || '',
+      detail: null,
     };
     this.views = null;
+    this.section = null;
     this.error = null;
     this.body = h('div.drawing-dialog');
     this.render();
     this.load();
-    await modal({ title: '2D drawing', body: this.body, buttons: [], width: 900, className: 'drawing-modal', bind: (close) => (this.close = close) });
+    await modal({ title: '2D drawing', body: this.body, buttons: [], width: 980, className: 'drawing-modal', bind: (close) => (this.close = close) });
     this.body = null;
+    this.keepFields();
+  }
+
+  // Remember the title block and notes with the design.
+  keepFields() {
+    const o = this.opts;
+    const doc = this.app.doc;
+    const now = { title: o.title, drawnBy: o.drawnBy, number: o.number, material: o.material, revision: o.revision, notes: o.notes };
+    const was = doc.state.drawing || {};
+    if (Object.keys(now).every((k) => (now[k] || '') === (was[k] || ''))) return;
+    doc.apply('Drawing details', (d) => {
+      d.drawing = now;
+    });
+    this.app.settings.drawingAuthor = o.drawnBy;
+    this.app.saveSettings();
   }
 
   async load() {
@@ -49,6 +84,25 @@ export class DrawingDialog {
       this.error = err.message;
     }
     this.render();
+    if (this.opts.section) this.loadSection();
+  }
+
+  // Cut through the middle, seen from the front.
+  async loadSection() {
+    if (this.section || this.sectionBusy) return;
+    this.sectionBusy = true;
+    try {
+      const box = this.bodies.map((b) => this.app.bodyBox(b.id)).reduce((a, bb) => (bb ? (a ? a.union(bb) : bb.clone()) : a), null);
+      const c = box ? box.getCenter(box.min.clone()).toArray() : [0, 0, 0];
+      const res = await this.app.kernel.call('drawingSection', { ids: this.bodies.map((b) => b.shapeId), view: VIEWS.front, at: c });
+      this.section = { view: res, at: c[1] };
+    } catch (err) {
+      toast(t('Could not make the section: {error}', { error: t(err.message) }), { type: 'error', ms: 4000 });
+      this.opts.section = false;
+    } finally {
+      this.sectionBusy = false;
+    }
+    this.render();
   }
 
   layout() {
@@ -56,16 +110,35 @@ export class DrawingDialog {
     const o = this.opts;
     const views = { front: this.views.front, top: this.views.top, right: this.views.right };
     if (o.iso) views.iso = this.views.iso;
-    return layoutDrawing(views, { sheet: o.sheet, projection: o.projection, hidden: o.hidden, dims: o.dims, title: o.title || 'Part', units: 'mm' });
+    if (o.section && this.section) views.section = this.section.view;
+    return layoutDrawing(views, {
+      sheet: o.sheet,
+      portrait: o.portrait,
+      projection: o.projection,
+      hidden: o.hidden,
+      dims: o.dims,
+      title: o.title || 'Part',
+      units: 'mm',
+      scale: o.scale === 'auto' ? null : +o.scale,
+      drawnBy: o.drawnBy,
+      number: o.number,
+      material: o.material,
+      revision: o.revision,
+      notes: o.notes,
+      detail: o.detail,
+      sectionAt: this.section?.at ?? null,
+    });
   }
 
   saveSettings() {
     const s = this.app.settings;
     s.drawingSheet = this.opts.sheet;
+    s.drawingPortrait = this.opts.portrait;
     s.drawingProjection = this.opts.projection;
     s.drawingHidden = this.opts.hidden;
     s.drawingDims = this.opts.dims;
     s.drawingIso = this.opts.iso;
+    s.drawingSection = this.opts.section;
     this.app.saveSettings();
   }
 
@@ -79,14 +152,41 @@ export class DrawingDialog {
     }
   }
 
+  // A detail view starts on the front view, around its middle.
+  defaultDetail() {
+    const bb = viewBox(this.views.front);
+    return { view: 'front', at: [(bb.x0 + bb.x1) / 2, (bb.y0 + bb.y1) / 2], radius: Math.max(1, +(Math.max(bb.w, bb.h) * 0.2).toFixed(1)), factor: 2 };
+  }
+
   renderBody() {
     const o = this.opts;
+    const scroll = this.body.querySelector('.dd-side')?.scrollTop || 0;
     clear(this.body);
     const lay = this.layout();
     const preview = h('div.dd-preview');
     if (this.error) preview.append(h('div.dd-msg', { str: t('Could not make the drawing: {error}', { error: t(this.error) }) }));
     else if (!lay) preview.append(h('div.dd-msg', { html: '<span class="spinner"></span> Making the views…' }));
-    else preview.innerHTML = lay.svg;
+    else {
+      preview.innerHTML = lay.svg;
+      // With a detail view, a click on a view moves the detail there.
+      if (o.detail) {
+        const svgEl = preview.querySelector('svg');
+        svgEl.style.cursor = 'crosshair';
+        svgEl.addEventListener('click', (e) => {
+          const pt = svgEl.createSVGPoint();
+          pt.x = e.clientX;
+          pt.y = e.clientY;
+          const p = pt.matrixTransform(svgEl.getScreenCTM().inverse());
+          for (const key of ['front', 'top', 'right']) {
+            const v = lay.placed[key];
+            if (!v || p.x < v.box.x0 - 4 || p.x > v.box.x1 + 4 || p.y < v.box.y0 - 4 || p.y > v.box.y1 + 4) continue;
+            o.detail = { ...o.detail, view: key, at: [v.mx + (p.x - v.cx) / v.s, v.my - (p.y - v.cy) / v.s] };
+            this.render();
+            return;
+          }
+        });
+      }
+    }
 
     const seg = (key, options) => {
       const el = h('div.seg');
@@ -100,26 +200,62 @@ export class DrawingDialog {
       }
       return el;
     };
-    const check = (key, label) => {
+    const check = (key, label, after) => {
       const inp = h('input', { type: 'checkbox', checked: !!o[key] });
+      inp.dataset.option = key;
       inp.addEventListener('change', () => {
         o[key] = inp.checked;
+        after?.(inp.checked);
         this.render();
       });
       return h('label.dd-check', inp, h('span', { text: label }));
     };
-    const title = h('input.dd-title', { type: 'text', value: o.title, spellcheck: false });
-    title.addEventListener('change', () => {
-      o.title = title.value;
+    const text = (key, multi = false) => {
+      const el = h(multi ? 'textarea.dd-title.dd-notes' : 'input.dd-title', { type: multi ? undefined : 'text', spellcheck: false, maxlength: multi ? 1200 : 80 });
+      el.value = o[key] || '';
+      el.dataset.field = key;
+      el.addEventListener('change', () => {
+        o[key] = el.value;
+        this.render();
+      });
+      el.addEventListener('keydown', (e) => e.stopPropagation());
+      return el;
+    };
+    const scaleSel = h('select.dd-select');
+    scaleSel.append(new Option(t('Fit to the sheet'), 'auto'));
+    for (const sc of SCALES) scaleSel.append(new Option(scaleText(sc), String(sc)));
+    scaleSel.value = String(o.scale);
+    scaleSel.addEventListener('change', () => {
+      o.scale = scaleSel.value;
       this.render();
     });
-    title.addEventListener('keydown', (e) => e.stopPropagation());
+    const detailControls = [];
+    if (o.detail) {
+      const num = (key, label, min, step) => {
+        const el = h('input.dd-title.dd-num', { type: 'number', min, step, value: o.detail[key] });
+        el.addEventListener('change', () => {
+          const v = +el.value;
+          if (v >= min) o.detail = { ...o.detail, [key]: v };
+          this.render();
+        });
+        el.addEventListener('keydown', (e) => e.stopPropagation());
+        return h('label.dd-row', h('span', { text: label }), el);
+      };
+      detailControls.push(h('div.dd-info', { text: 'Click a view on the sheet to move the detail circle.' }), num('radius', 'Circle radius (mm)', 0.5, 0.5), num('factor', 'Magnify', 1, 0.5));
+    }
     const side = h(
       'div.dd-side',
       h('label.dd-label', { text: 'Title' }),
-      title,
+      text('title'),
+      ...FIELDS.flatMap(([key, label]) => [h('label.dd-sublabel', { text: label }), text(key)]),
       h('label.dd-label', { text: 'Paper' }),
       seg('sheet', Object.keys(SHEETS).map((k) => [k, k])),
+      seg('portrait', [
+        [false, 'Landscape'],
+        [true, 'Portrait'],
+      ]),
+      h('label.dd-label', { text: 'Scale' }),
+      scaleSel,
       h('label.dd-label', { text: 'View layout' }),
       seg('projection', [
         ['first', '1st angle (Europe)'],
@@ -128,6 +264,19 @@ export class DrawingDialog {
       check('hidden', 'Show hidden lines (dashed)'),
       check('dims', 'Show overall sizes'),
       check('iso', 'Add a 3D view'),
+      check('section', 'Add a section through the middle', (on) => on && this.loadSection()),
+      (() => {
+        const inp = h('input', { type: 'checkbox', checked: !!o.detail });
+        inp.dataset.option = 'detail';
+        inp.addEventListener('change', () => {
+          o.detail = inp.checked && this.views ? this.defaultDetail() : null;
+          this.render();
+        });
+        return h('label.dd-check', inp, h('span', { text: 'Add a detail view (enlarged)' }));
+      })(),
+      ...detailControls,
+      h('label.dd-label', { text: 'Notes' }),
+      text('notes', true),
       lay ? h('div.dd-info', { str: t('Scale {scale} · sizes in millimetres', { scale: scaleText(lay.scale) }) }) : null,
       this.bodies.length > 1 ? h('div.dd-info', { str: t('{n} bodies', { n: this.bodies.length }) }) : null,
     );
@@ -141,6 +290,7 @@ export class DrawingDialog {
     cancel.addEventListener('click', () => this.close?.(null));
     const foot = h('div.pd-foot', btn('Save DXF…', 'export', 'dxf'), btn('Save SVG…', 'export', 'svg'), h('span.pd-spacer'), cancel, btn('Save PDF…', 'file', 'pdf', true));
     this.body.append(h('div.dd-main', preview, side), foot);
+    side.scrollTop = scroll;
   }
 
   async save(fmt) {

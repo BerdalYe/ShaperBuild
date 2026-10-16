@@ -1987,49 +1987,117 @@ export class Kernel {
   // the view's 2D coordinates (x right, y up), split into visible and
   // hidden lines. Mesh bodies are skipped (they have no exact edges).
   drawingViews({ ids, views }) {
+    const shape = this.drawingShape(ids);
+    try {
+      return { views: views.map((v) => this.guard('2D drawing', () => this.hlrLines(shape, v))) };
+    } finally {
+      if (shape.$owned) shape.delete();
+    }
+  }
+
+  // The solids of `ids` as one shape (a compound that the caller deletes
+  // when $owned is set).
+  drawingShape(ids) {
+    const solids = ids.filter((id) => this.get(id).kind === 'solid').map((id) => this.get(id).shape);
+    if (!solids.length) throw new Error('2D drawings need solid bodies. Convert meshes with Mesh → Solid first.');
+    if (solids.length === 1) return solids[0];
+    const c = this.compound(solids);
+    c.$owned = true;
+    return c;
+  }
+
+  // Hidden-line removal of `shape` seen along view.normal.
+  hlrLines(shape, v) {
+    const oc = this.oc;
+    const r = this.scope();
+    try {
+      const ax = r(new oc.gp_Ax2(this.pnt(r, [0, 0, 0]), this.dir(r, v.normal), this.dir(r, v.xDir)));
+      const algo = r(new oc.HLRBRep_Algo());
+      algo.Add(shape, 0);
+      algo.Projector(r(new oc.HLRAlgo_Projector(ax)));
+      algo.Update();
+      algo.Hide();
+      const hlr = r(new oc.HLRBRep_HLRToShape(algo));
+      const lines = (shapes) => {
+        const polys = [];
+        for (const sh of shapes) {
+          if (!sh || sh.IsNull()) continue;
+          for (const e of this.explore(sh, this.T.TopAbs_EDGE)) {
+            const pl = this.edgePolyline(oc.TopoDS.Edge(e), r);
+            if (pl.length >= 2) polys.push(pl);
+            e.delete();
+          }
+        }
+        return polys;
+      };
+      const visible = lines([r(hlr.VCompound()), r(hlr.OutLineVCompound())]);
+      const hidden = lines([r(hlr.HCompound()), r(hlr.OutLineHCompound())]);
+      return { name: v.name, visible, hidden };
+    } finally {
+      r.free();
+    }
+  }
+
+  // Section view: the bodies cut by the plane through `at` that faces the
+  // viewer (view.normal); the part in front of it is taken away. Returns
+  // the view's lines and the outlines of the cut faces (for hatching), in
+  // the view's 2D coordinates.
+  drawingSection({ ids, view, at }) {
     const oc = this.oc;
     const solids = ids.filter((id) => this.get(id).kind === 'solid').map((id) => this.get(id).shape);
     if (!solids.length) throw new Error('2D drawings need solid bodies. Convert meshes with Mesh → Solid first.');
-    const shape = solids.length === 1 ? solids[0] : this.compound(solids);
-    const out = [];
-    try {
-      for (const v of views) {
-        out.push(
-          this.guard('2D drawing', () => {
-            const r = this.scope();
-            try {
-              const ax = r(new oc.gp_Ax2(this.pnt(r, [0, 0, 0]), this.dir(r, v.normal), this.dir(r, v.xDir)));
-              const algo = r(new oc.HLRBRep_Algo());
-              algo.Add(shape, 0);
-              algo.Projector(r(new oc.HLRAlgo_Projector(ax)));
-              algo.Update();
-              algo.Hide();
-              const hlr = r(new oc.HLRBRep_HLRToShape(algo));
-              const lines = (shapes) => {
-                const polys = [];
-                for (const sh of shapes) {
-                  if (!sh || sh.IsNull()) continue;
-                  for (const e of this.explore(sh, this.T.TopAbs_EDGE)) {
-                    const pl = this.edgePolyline(oc.TopoDS.Edge(e), r);
-                    if (pl.length >= 2) polys.push(pl);
-                    e.delete();
-                  }
-                }
-                return polys;
-              };
-              const visible = lines([r(hlr.VCompound()), r(hlr.OutLineVCompound())]);
-              const hidden = lines([r(hlr.HCompound()), r(hlr.OutLineHCompound())]);
-              return { name: v.name, visible, hidden };
-            } finally {
-              r.free();
+    return this.guard('Section view', () => {
+      const r = this.scope();
+      const pieces = [];
+      try {
+        const n = norm(view.normal);
+        const x = norm(view.xDir);
+        const y = cross(n, x);
+        const B = 1e5;
+        const corner = [0, 1, 2].map((i) => at[i] - x[i] * B - y[i] * B - n[i] * B);
+        const ax = r(new oc.gp_Ax2(this.pnt(r, corner), this.dir(r, n), this.dir(r, x)));
+        const box = r(new oc.BRepPrimAPI_MakeBox(ax, 2 * B, 2 * B, B)).Shape();
+        // Each body on its own: overlapping bodies in one compound do not cut.
+        for (const sh of solids) {
+          const op = r(new oc.BRepAlgoAPI_Common(sh, box, r(new oc.Message_ProgressRange())));
+          if (!op.IsDone()) throw new Error('the cut failed');
+          pieces.push(op.Shape());
+        }
+        const all = pieces.length === 1 ? pieces[0] : r(this.compound(pieces));
+        const out = this.hlrLines(all, view);
+        // Faces lying on the cut plane.
+        const cutFaces = [];
+        for (const piece of pieces) {
+          for (const ex of this.explore(piece, this.T.TopAbs_FACE)) {
+            const f = oc.TopoDS.Face(ex);
+            const ad = r(new oc.BRepAdaptor_Surface(f, true));
+            if (ad.GetType() !== oc.GeomAbs_SurfaceType.GeomAbs_Plane) continue;
+            const pl = r(ad.Plane());
+            const d = r(r(pl.Axis()).Direction());
+            const o = r(pl.Location());
+            const nn = [d.X(), d.Y(), d.Z()];
+            if (Math.abs(dot(nn, n)) < 1 - 1e-6 || Math.abs(dot(sub([o.X(), o.Y(), o.Z()], at), n)) > 1e-4) continue;
+            for (const ee of this.explore(f, this.T.TopAbs_EDGE)) {
+              const ad2 = r(new oc.BRepAdaptor_Curve(oc.TopoDS.Edge(ee)));
+              const u0 = ad2.FirstParameter();
+              const u1 = ad2.LastParameter();
+              const k = ad2.GetType() === oc.GeomAbs_CurveType.GeomAbs_Line ? 1 : 48;
+              const pts = [];
+              for (let i = 0; i <= k; i++) {
+                const P = r(ad2.Value(u0 + ((u1 - u0) * i) / k));
+                const p = [P.X(), P.Y(), P.Z()];
+                pts.push([dot(p, x), dot(p, y)]);
+              }
+              cutFaces.push(pts);
             }
-          }),
-        );
+          }
+        }
+        return { ...out, name: 'section', cut: cutFaces };
+      } finally {
+        for (const p of pieces) p.delete();
+        r.free();
       }
-    } finally {
-      if (solids.length > 1) shape.delete();
-    }
-    return { views: out };
+    });
   }
 
   // Points along an edge (x, y of a projected edge; z is ignored).

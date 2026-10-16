@@ -11,6 +11,7 @@ import { TransformTool } from './transform.js';
 import { TranslateTool, RotateAxisTool, AlignTool } from './transform2.js';
 import { PrimitiveTool } from './primitive.js';
 import { MeasureTool, SectionTool } from './inspect.js';
+import { DecalTool } from './decal.js';
 
 const def = (id, label, icon, Tool, extra = {}) => ({ id, label, icon, Tool, ...extra });
 
@@ -93,7 +94,9 @@ export const TOOL_SECTIONS = [
   },
 ];
 
-export const TOOLS = { select: def('select', 'Select', 'select', SelectTool) };
+// Tools that are not in the tools menu: Select, and placing a decal
+// (started from the Materials panel).
+export const TOOLS = { select: def('select', 'Select', 'select', SelectTool), decal: def('decal', 'Decal', 'image', DecalTool) };
 for (const s of TOOL_SECTIONS) for (const t of s.tools) TOOLS[t.id] = t;
 
 // Single-key shortcuts.

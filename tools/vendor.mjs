@@ -20,6 +20,10 @@ fs.writeFileSync('src/vendor/manifold/VERSION', `${version('manifold-3d')}\n`);
 copy('node_modules/three/examples/jsm', 'src/vendor/three-addons', [
   'controls/TransformControls.js',
   'environments/RoomEnvironment.js',
+  'exporters/GLTFExporter.js',
+  'exporters/USDZExporter.js',
+  'geometries/DecalGeometry.js',
+  'libs/fflate.module.js',
   'lines/LineMaterial.js',
   'lines/LineSegments2.js',
   'lines/LineSegmentsGeometry.js',

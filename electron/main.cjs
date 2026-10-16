@@ -4,6 +4,7 @@
 const { app, BrowserWindow, Menu, dialog, ipcMain, protocol, shell, nativeTheme, screen } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 const { buildMenu } = require('./menu.cjs');
 const i18n = require('./i18n.cjs');
 const { listSlicers, openInSlicer } = require('./slicers.cjs');
@@ -247,21 +248,21 @@ async function serve(request) {
 const filters = () => ({
   project: [{ name: i18n.t('ShaperBuild design'), extensions: [PROJECT_EXT] }],
   open: [
-    { name: i18n.t('All supported'), extensions: [PROJECT_EXT, 'stl', 'obj', 'step', 'stp', '3mf', 'dxf', 'png', 'jpg', 'jpeg', 'webp'] },
+    { name: i18n.t('All supported'), extensions: [PROJECT_EXT, 'stl', 'obj', 'step', 'stp', '3mf', 'dxf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] },
     { name: i18n.t('ShaperBuild design'), extensions: [PROJECT_EXT] },
     { name: i18n.t('Mesh (STL, OBJ, 3MF)'), extensions: ['stl', 'obj', '3mf'] },
     { name: i18n.t('STEP'), extensions: ['step', 'stp'] },
     { name: i18n.t('DXF drawing'), extensions: ['dxf'] },
-    { name: i18n.t('Image to trace'), extensions: ['png', 'jpg', 'jpeg', 'webp'] },
+    { name: i18n.t('Image to trace'), extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] },
   ],
   import: [
-    { name: i18n.t('All supported'), extensions: ['stl', 'obj', 'step', 'stp', '3mf', 'dxf', 'png', 'jpg', 'jpeg', 'webp'] },
+    { name: i18n.t('All supported'), extensions: ['stl', 'obj', 'step', 'stp', '3mf', 'dxf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] },
     { name: i18n.t('STL'), extensions: ['stl'] },
     { name: i18n.t('OBJ'), extensions: ['obj'] },
     { name: i18n.t('STEP'), extensions: ['step', 'stp'] },
     { name: i18n.t('3MF'), extensions: ['3mf'] },
     { name: i18n.t('DXF drawing (becomes a sketch)'), extensions: ['dxf'] },
-    { name: i18n.t('Image to trace (PNG, JPG)'), extensions: ['png', 'jpg', 'jpeg', 'webp'] },
+    { name: i18n.t('Image to trace (PNG, JPG)'), extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] },
   ],
   dxf: [{ name: i18n.t('DXF drawing'), extensions: ['dxf'] }],
   pdf: [{ name: i18n.t('PDF document'), extensions: ['pdf'] }],
@@ -271,6 +272,8 @@ const filters = () => ({
   obj: [{ name: i18n.t('OBJ'), extensions: ['obj'] }],
   step: [{ name: i18n.t('STEP'), extensions: ['step', 'stp'] }],
   '3mf': [{ name: i18n.t('3MF'), extensions: ['3mf'] }],
+  glb: [{ name: i18n.t('glTF binary (GLB)'), extensions: ['glb'] }],
+  usdz: [{ name: i18n.t('USDZ (AR on iPhone and iPad)'), extensions: ['usdz'] }],
   png: [{ name: i18n.t('PNG image'), extensions: ['png'] }],
 });
 
@@ -333,6 +336,99 @@ ipcMain.handle('drawing:pdf', async (_e, { svg, width, height } = {}) => {
   } finally {
     page.destroy();
   }
+});
+
+// ---- versions and design files ---------------------------------------------
+// Saving keeps the file it replaces, so older versions can be restored.
+const MAX_VERSIONS = 30;
+function versionsDir(file) {
+  const id = crypto.createHash('sha1').update(path.resolve(file)).digest('hex').slice(0, 16);
+  return path.join(app.getPath('userData'), 'versions', id);
+}
+async function keepVersion(file) {
+  let st;
+  try {
+    st = await fs.promises.stat(file);
+  } catch {
+    return false; // nothing saved there yet
+  }
+  const dir = versionsDir(file);
+  await fs.promises.mkdir(dir, { recursive: true });
+  await fs.promises.copyFile(file, path.join(dir, `${Math.round(st.mtimeMs)}.${PROJECT_EXT}`));
+  const list = (await fs.promises.readdir(dir)).filter((f) => f.endsWith(`.${PROJECT_EXT}`)).sort();
+  for (const f of list.slice(0, Math.max(0, list.length - MAX_VERSIONS))) await fs.promises.unlink(path.join(dir, f)).catch(() => {});
+  return true;
+}
+const versionName = (id) => (/^\d+\.shaperbuild$/.test(String(id)) ? id : null);
+ipcMain.handle('versions:keep', (_e, file) => keepVersion(file));
+ipcMain.handle('versions:list', async (_e, file) => {
+  const dir = versionsDir(file);
+  try {
+    const names = (await fs.promises.readdir(dir)).filter(versionName);
+    const out = [];
+    for (const id of names) {
+      const st = await fs.promises.stat(path.join(dir, id));
+      out.push({ id, time: Number(id.split('.')[0]), size: st.size });
+    }
+    return out.sort((a, b) => b.time - a.time);
+  } catch {
+    return [];
+  }
+});
+ipcMain.handle('versions:read', async (_e, file, id) => {
+  if (!versionName(id)) throw new Error('No such version');
+  const data = await fs.promises.readFile(path.join(versionsDir(file), id));
+  return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+});
+// Rename, duplicate or bin a design file from the home screen.
+const designFile = (p) => typeof p === 'string' && p.toLowerCase().endsWith(`.${PROJECT_EXT}`);
+const safeName = (n) => String(n || '').replace(/[\\/:*?"<>|\x00-\x1f]+/g, ' ').trim().slice(0, 120);
+function replaceRecent(from, to) {
+  let raw = [];
+  try {
+    raw = JSON.parse(fs.readFileSync(recentFile(), 'utf8'));
+  } catch {}
+  // The old path may be gone already (renamed), so start from the stored list.
+  const list = (Array.isArray(raw) ? raw : [])
+    .map((x) => (x === from ? to : x))
+    .filter((x, i, all) => x && all.indexOf(x) === i);
+  try {
+    fs.writeFileSync(recentFile(), JSON.stringify(list.filter(Boolean)));
+  } catch {}
+  refreshMenu();
+}
+ipcMain.handle('file:rename', async (_e, file, name) => {
+  if (!designFile(file) || !safeName(name)) throw new Error('That name cannot be used');
+  const to = path.join(path.dirname(file), `${safeName(name)}.${PROJECT_EXT}`);
+  if (to === file) return file;
+  if (fs.existsSync(to)) throw new Error('A design with that name is already there');
+  await fs.promises.rename(file, to);
+  // Versions follow the file.
+  await fs.promises.rename(versionsDir(file), versionsDir(to)).catch(() => {});
+  replaceRecent(file, to);
+  return to;
+});
+ipcMain.handle('file:duplicate', async (_e, file) => {
+  if (!designFile(file)) throw new Error('Only designs can be duplicated');
+  const stem = path.basename(file, `.${PROJECT_EXT}`);
+  let to;
+  for (let i = 1; i < 100; i++) {
+    to = path.join(path.dirname(file), `${stem} ${i === 1 ? i18n.t('copy') : `${i18n.t('copy')} ${i}`}.${PROJECT_EXT}`);
+    if (!fs.existsSync(to)) break;
+  }
+  await fs.promises.copyFile(file, to, fs.constants.COPYFILE_EXCL);
+  addRecent(to);
+  return to;
+});
+ipcMain.handle('file:trash', async (_e, file) => {
+  if (!designFile(file)) throw new Error('Only designs can be moved to the bin');
+  await shell.trashItem(file);
+  replaceRecent(file, null);
+  return true;
+});
+ipcMain.handle('recent:remove', (_e, file) => {
+  replaceRecent(file, null);
+  return readRecent();
 });
 
 ipcMain.handle('recent:get', () => readRecent());

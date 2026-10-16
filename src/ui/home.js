@@ -1,7 +1,8 @@
 // Start screen: new design, open, import and recent designs.
 import { h, clear, escapeHtml } from './dom.js';
 import { icon } from './icons.js';
-import { loadThumbs } from '../fileops.js';
+import { loadThumbs, moveThumb } from '../fileops.js';
+import { showMenu, modal, toast } from './overlays.js';
 import { t } from '../core/i18n.js';
 
 export class Home {
@@ -52,8 +53,17 @@ export class Home {
         const name = p.split(/[\\/]/).pop().replace(/\.[^.]+$/, '');
         const thumb = h('div.thumb');
         if (thumbs[p]) thumb.style.backgroundImage = `url(${thumbs[p]})`;
-        const card = h('button.recent-card', thumb, h('div.meta', h('b', { str: name }), h('span', { str: p })));
-        card.addEventListener('click', () => this.app.files.openPath(p));
+        const more = h('span.rc-more', { html: icon('more'), title: 'More', role: 'button' });
+        const card = h('button.recent-card', thumb, h('div.meta', h('b', { str: name }), h('span', { str: p })), more);
+        card.dataset.path = p;
+        card.addEventListener('click', (e) => {
+          if (more.contains(e.target)) return this.cardMenu(e, p, name);
+          this.app.files.openPath(p);
+        });
+        card.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          this.cardMenu(e, p, name);
+        });
         grid.append(card);
       }
       inner.append(grid);
@@ -63,6 +73,54 @@ export class Home {
     this.el.append(inner);
     this.el.hidden = false;
     app.starter?.update();
+  }
+
+  // Open, rename, duplicate, versions, show in folder, remove, bin.
+  cardMenu(e, p, name) {
+    const files = this.app.files;
+    const native = window.native;
+    const run = (fn) => async () => {
+      try {
+        await fn();
+      } catch (err) {
+        toast(t(err.message), { type: 'error' });
+      }
+      if (!this.el.hidden) this.show();
+    };
+    showMenu(e.clientX, e.clientY, [
+      { label: 'Open', icon: 'folder', action: () => files.openPath(p) },
+      {
+        label: 'Rename…',
+        icon: 'edit',
+        action: run(async () => {
+          const input = h('input', { type: 'text', value: name });
+          const ok = await modal({ title: 'Rename design', body: h('div.form-row', h('label', { text: 'Name' }), input), buttons: [{ label: 'Cancel', value: false }, { label: 'Rename', value: true, primary: true }] });
+          if (!ok || !input.value.trim() || input.value.trim() === name) return;
+          const to = await native.renameFile(p, input.value.trim());
+          moveThumb(p, to);
+          if (files.path === p) {
+            files.path = to;
+            files.name = files.stem(to);
+            this.app.updateTitle();
+          }
+        }),
+      },
+      { label: 'Duplicate', icon: 'duplicate', action: run(() => native.duplicateFile(p)) },
+      { label: 'Versions…', icon: 'history', action: () => files.showVersions(p) },
+      { label: 'Show in folder', icon: 'folder', action: () => native.showInFolder(p) },
+      '-',
+      { label: 'Remove from this list', icon: 'close', action: run(() => native.removeRecent(p)) },
+      {
+        label: 'Move to the bin…',
+        icon: 'trash',
+        danger: true,
+        action: run(async () => {
+          if (files.path === p) throw new Error('Close this design before moving it to the bin');
+          const ok = await modal({ title: 'Move to the bin?', body: h('div', { text: t('"{name}" goes to the bin (recycle bin). You can get it back from there.', { name }) }), buttons: [{ label: 'Cancel', value: false }, { label: 'Move to the bin', value: true, danger: true }] });
+          if (ok) await native.trashFile(p);
+        }),
+      },
+    ]);
   }
 
   hide() {

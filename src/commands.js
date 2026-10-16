@@ -490,6 +490,42 @@ export class Commands {
     this.app.selection.prune((it) => !gone.has(it.bodyId) && !gone.has(it.sketchId) && !gone.has(it.planeId) && !gone.has(it.axisId) && !gone.has(it.imageId));
   }
 
+  // ---- visualization ---------------------------------------------------------
+
+  // Changes to a body's finish ({ roughness, opacity, transmission, ior });
+  // null clears them.
+  setLook(ids, patch, label = 'Finish') {
+    this.doc.apply(label, (d) =>
+      ids.forEach((id) => {
+        const b = d.body(id);
+        if (!b) return;
+        const look = patch ? { ...(b.look || {}), ...patch } : null;
+        d.updateBody(id, { look: look && Object.keys(look).length ? look : undefined });
+      }),
+    );
+  }
+
+  addDecal(decal) {
+    let id = null;
+    this.doc.apply('Decal', (d) => {
+      id = d.nextId('decal');
+      d.decals = [...d.decals, { id, ...decal }];
+    });
+    return id;
+  }
+
+  updateDecal(id, patch, label = 'Decal') {
+    this.doc.apply(label, (d) => {
+      d.decals = d.decals.map((x) => (x.id === id ? { ...x, ...patch } : x));
+    });
+  }
+
+  deleteDecal(id) {
+    this.doc.apply('Delete decal', (d) => {
+      d.decals = d.decals.filter((x) => x.id !== id);
+    });
+  }
+
   setMaterial(ids, material) {
     this.doc.apply('Material', (d) => ids.forEach((id) => d.updateBody(id, { material })));
   }

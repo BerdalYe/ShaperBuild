@@ -42,7 +42,7 @@ const QUOTED = /(['"`])((?:\\.|(?!\1)[^\\\n])*?)\1/g;
 const SKIP_LINE = /def\('[a-z0-9 ]+', -?\d|console\.(log|warn|error|debug)|^\s*import |require\(|querySelector|classList|addEventListener|getElementById|dataset|localStorage|postMessage|kernel\.call\(/;
 const CODE_LIKE = /var\(--|px\b|gradient\(|rgba?\(|^\w+\(|=>|^[a-z]+:|^[\w-]+ [\w-]+:|\.(png|svg|stl|step|3mf|ttf)\b|^[A-Z][a-z]+[A-Z]\w*$|;$|^M[\d.-]|^(Ctrl|Shift|Alt)\+[\w+]+$/;
 // Text that stays as it is in every language.
-const KEEP = new Set(['English', 'Norsk (bokmål)', 'Menyer, verktøy og hjelp på norsk', 'Menus, tools and help in English', 'num-input dim-edit', 'Ctrl+', 'opacity .25s', 'Alt', 'Shift', 'Control', 'Meta', 'AltGraph', 'Up', 'Down', 'Not plain']);
+const KEEP = new Set(['English', 'Norsk (bokmål)', 'Menyer, verktøy og hjelp på norsk', 'Menus, tools and help in English', 'num-input dim-edit', 'Ctrl+', 'opacity .25s', 'Alt', 'Shift', 'Control', 'Meta', 'AltGraph', 'Up', 'Down', 'Not plain', 'Ka 0 0 0']);
 
 const unescape = (s) => s.replace(/\\'/g, "'").replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\\\/g, '\\');
 

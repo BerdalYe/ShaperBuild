@@ -69,13 +69,13 @@ Finding your way around:
 
 **View** – Display as shaded, **wireframe** or **zebra stripes** (to check how smoothly surfaces join), with or without **hidden edges** dashed. **Isolate** (Shift+I) shows only the selected items until you click *Show all*. **Save a view** (camera and section) from the views menu and go back to it any time; saved views are kept in the design.
 
-**Visualization** – Soft shadows and materials (plastic, matte, glossy, rubber, metal, brushed metal, chrome, glass) with any colour; save a PNG image.
+**Visualization** – Soft shadows and 28 materials in groups with search (plastics, paints, metals such as steel, gold and copper, glass, wood, stone, leather…) with any colour or hex code. Change a body's roughness, opacity and see-through. Put pictures (logos, labels) on bodies as **decals**. Turn the light and the sun's height, set the brightness and the camera's field of view. **Screenshots** up to 8K, with a transparent background if you like.
 
-**2D drawings** – Front, top and side views with hidden lines dashed, overall sizes, an optional 3D view and a title block, in 1st-angle (Europe) or 3rd-angle (USA) layout on A4, A3 or Letter. Save as PDF, SVG or DXF.
+**2D drawings** – Front, top and side views with hidden lines dashed, overall sizes, an optional 3D view, a **section** through the middle (hatched) and an enlarged **detail** view, in 1st-angle (Europe) or 3rd-angle (USA) layout on A4–A1, Letter or Tabloid, landscape or portrait, at a standard scale you choose. The title block has title, drawing number, drawn by, material and revision, plus notes; they are kept with the design. Save as PDF, SVG or DXF.
 
 **STL and mesh files** – Import STL (binary or text), OBJ and 3MF. Meshes can be moved, scaled, mirrored, patterned and combined with solids (union / subtract / intersect). *Mesh → Solid* turns a mesh into an editable solid, merging flat triangles into real faces so you can push/pull and fillet them.
 
-**Files** – Save designs as `.shaperbuild`. Export STL, 3MF, OBJ, STEP, DXF (sketches, for laser cutters) and PNG images. Import STEP, DXF (becomes a sketch) and pictures. Autosave with crash recovery. Drag and drop files onto the window. Unlimited undo/redo.
+**Files** – Save designs as `.shaperbuild`. Every save keeps the version before it: *File → Versions…* lists them and restores any one as the latest. On the home screen, the **⋯** menu on a design renames, duplicates, shows versions or moves it to the bin. Export STL, 3MF, OBJ (with a colour file), STEP, **GLB** (with colours, for web and 3D viewers), **USDZ** (AR on iPhone and iPad), DXF (sketches, for laser cutters) and PNG images. Import STEP, DXF (becomes a sketch) and pictures (PNG, JPG, WebP, GIF, BMP). Autosave with crash recovery. Drag and drop files onto the window. Unlimited undo/redo.
 
 The geometry engine is [OpenCascade](https://dev.opencascade.org/) (a real B-rep CAD kernel, through `replicad-opencascadejs`), with [Manifold](https://github.com/elalish/manifold) for mesh booleans.
 
@@ -101,6 +101,7 @@ The geometry engine is [OpenCascade](https://dev.opencascade.org/) (a real B-rep
 | Undo / redo | Ctrl+Z / Ctrl+Y (⌘ on Mac) |
 | Find a tool | Ctrl+K (⌘K on Mac) |
 | Design history | Shift+H |
+| Touch screen | One finger drags to orbit · two fingers pan and pinch to zoom · tap to click · double-tap a flat face to look at it · long-press then drag to box-select · double-tap the view cube to reset |
 
 | Constraints | Shift+A parallel · Shift+P perpendicular · Shift+V horizontal/vertical · Shift+E equal · Shift+T tangent · Shift+C concentric · Shift+N coincident · Shift+M midpoint · Shift+L lock |
 

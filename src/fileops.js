@@ -87,13 +87,13 @@ export class FileOps {
   // ---- open ----------------------------------------------------------------
 
   async openDialog() {
-    if (!this.native) return this.browserPick('.shaperbuild,.stl,.obj,.3mf,.step,.stp,.dxf,.png,.jpg,.jpeg,.webp');
+    if (!this.native) return this.browserPick('.shaperbuild,.stl,.obj,.3mf,.step,.stp,.dxf,.png,.jpg,.jpeg,.webp,.gif,.bmp');
     const paths = await this.native.openDialog({ kind: 'open' });
     for (const p of paths) await this.openPath(p);
   }
 
   async importDialog() {
-    if (!this.native) return this.browserPick('.stl,.obj,.3mf,.step,.stp,.dxf,.png,.jpg,.jpeg,.webp', true);
+    if (!this.native) return this.browserPick('.stl,.obj,.3mf,.step,.stp,.dxf,.png,.jpg,.jpeg,.webp,.gif,.bmp', true);
     const paths = await this.native.openDialog({ kind: 'import', multi: true });
     for (const p of paths) await this.openPath(p, { import: true });
   }
@@ -123,10 +123,10 @@ export class FileOps {
     const ext = (name.split('.').pop() || '').toLowerCase();
     const app = this.app;
     if (ext === PROJECT_EXT) {
-      if (!(await this.confirmDiscard())) return;
+      if (!opts.force && !(await this.confirmDiscard())) return;
       return this.loadProject(data, path, name);
     }
-    if (!['stl', 'obj', '3mf', 'step', 'stp', 'dxf', 'png', 'jpg', 'jpeg', 'webp'].includes(ext)) {
+    if (!['stl', 'obj', '3mf', 'step', 'stp', 'dxf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'].includes(ext)) {
       toast(t('Unsupported file type: .{ext}', { ext }), { type: 'error' });
       return;
     }
@@ -138,7 +138,7 @@ export class FileOps {
     }
     void opts;
     if (ext === 'dxf') return this.importDXF(name, data);
-    if (['png', 'jpg', 'jpeg', 'webp'].includes(ext)) return this.importImage(name, data);
+    if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'].includes(ext)) return this.importImage(name, data);
     return this.importData(name, data);
   }
 
@@ -165,7 +165,7 @@ export class FileOps {
     const app = this.app;
     try {
       const ext = (name.split('.').pop() || '').toLowerCase();
-      const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+      const mime = { png: 'image/png', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp' }[ext] || 'image/jpeg';
       let src = `data:${mime};base64,${toB64(data)}`;
       const img = new Image();
       img.src = src;
@@ -302,7 +302,7 @@ export class FileOps {
       app: (await this.native?.info())?.version || 'dev',
       saved: new Date().toISOString(),
       camera: app.vp.rig.toJSON(),
-      state: { bodies: state.bodies, sketches: state.sketches, planes: state.planes || [], axes: state.axes || [], images: state.images || [], folders: state.folders || [], history: state.history || [], variables: state.variables || [], views: state.views || [], seq: state.seq, units: state.units },
+      state: { bodies: state.bodies, sketches: state.sketches, planes: state.planes || [], axes: state.axes || [], images: state.images || [], folders: state.folders || [], history: state.history || [], variables: state.variables || [], views: state.views || [], decals: state.decals || [], drawing: state.drawing || null, seq: state.seq, units: state.units },
       shapes,
       thumbnail,
     };
@@ -323,6 +323,8 @@ export class FileOps {
       app.busy(true, 'Saving…');
       const json = await this.serialize();
       const bytes = await gzip(new TextEncoder().encode(JSON.stringify(json)));
+      // The file being replaced becomes an older version (File → Versions).
+      await this.native.keepVersion?.(target).catch(() => {});
       await this.native.writeFile(target, bytes);
       this.path = target;
       this.name = this.stem(target);
@@ -446,6 +448,49 @@ export class FileOps {
     return true;
   }
 
+  // ---- versions ----------------------------------------------------------------
+
+  // Older saves of a design file; any of them can become the latest again.
+  async showVersions(path = this.path) {
+    const native = this.native;
+    if (!native?.listVersions) return toast('Versions need the desktop app', { type: 'error' });
+    if (!path) return toast('Save the design first. Every later save keeps the version before it.', { ms: 4000 });
+    const list = await native.listVersions(path);
+    const locale = language() === 'nb' ? 'nb-NO' : undefined;
+    const body = h('div.versions');
+    let close;
+    if (!list.length) body.append(h('div.home-empty', { text: 'No older versions yet. Each time you save, the version before is kept here.' }));
+    for (const v of list) {
+      const restore = h('button.btn.small', { text: 'Restore as latest' });
+      restore.addEventListener('click', async () => {
+        const ok = await modal({
+          title: 'Restore this version?',
+          body: h('div', { text: t('The design becomes the version from {when}. The current file is kept as a version too, so you can go back.', { when: new Date(v.time).toLocaleString(locale) }) }),
+          buttons: [
+            { label: 'Cancel', value: false },
+            { label: 'Restore', value: true, primary: true },
+          ],
+        });
+        if (!ok) return;
+        close?.(null);
+        try {
+          const bytes = await native.readVersion(path, v.id);
+          const current = this.path === path;
+          if (current && !(await this.confirmDiscard())) return;
+          await native.keepVersion(path);
+          await native.writeFile(path, bytes);
+          await this.openPath(path, { force: current });
+          toast('Restored the older version', { type: 'ok' });
+        } catch (err) {
+          toast(t('Could not restore: {error}', { error: t(err.message) }), { type: 'error' });
+        }
+      });
+      body.append(h('div.version-row', h('div', h('b', { str: new Date(v.time).toLocaleString(locale) }), h('span', { str: `${Math.max(1, Math.round(v.size / 1024))} KB` })), restore));
+    }
+    await modal({ title: t('Versions of {name}', { name: this.stem(this.basename(path)) }), body, buttons: [{ label: 'Close', primary: true }], width: 460, bind: (c) => (close = c) });
+    return list;
+  }
+
   // ---- export ----------------------------------------------------------------
 
   exportIds(ids) {
@@ -468,6 +513,7 @@ export class FileOps {
     try {
       app.busy(true, t('Exporting {format}…', { format: format.toUpperCase() }));
       let bytes;
+      let mtlParts = null;
       if (format === 'step') {
         const res = await app.kernel.call('exportSTEP', { ids: bodies.map((b) => b.shapeId) });
         bytes = res.data;
@@ -475,17 +521,38 @@ export class FileOps {
       } else {
         const tol = QUALITY[app.settings.stlQuality] ?? QUALITY.fine;
         const { parts } = await app.kernel.call('exportMeshes', { ids: bodies.map((b) => b.shapeId), tolerance: tol });
-        parts.forEach((p, i) => (p.name = bodies[i].name));
+        parts.forEach((p, i) => {
+          p.name = bodies[i].name;
+          p.color = bodies[i].color || null;
+          p.material = bodies[i].material || null;
+          p.look = bodies[i].look || null;
+        });
         if (format === 'stl') bytes = writeSTL(parts, { binary: app.settings.stlBinary !== false, name: this.name });
-        else if (format === 'obj') bytes = writeOBJ(parts);
-        else if (format === '3mf') bytes = write3MF(parts);
+        else if (format === 'obj') {
+          // Colours go in a material file next to the OBJ.
+          mtlParts = parts;
+          bytes = writeOBJ(parts, { mtl: `${defaultName.replace(/[\\/:*?"<>|\s]+/g, '_')}.mtl` });
+        } else if (format === '3mf') bytes = write3MF(parts);
+        else if (format === 'glb') bytes = await (await import('./core/exporters.js')).writeGLB(parts);
+        else if (format === 'usdz') bytes = await (await import('./core/exporters.js')).writeUSDZ(parts);
       }
       app.busy(false);
       let target = path;
+      const { writeMTL } = mtlParts ? await import('./core/exporters.js') : {};
+      const mtlName = (file) => `${this.basename(file).replace(/\.[^.]+$/, '').replace(/[\s]+/g, '_')}.mtl`;
       if (!target) {
-        if (!this.native) return downloadBytes(`${defaultName}.${format}`, bytes);
+        if (!this.native) {
+          if (mtlParts) downloadBytes(mtlName(`${defaultName}.obj`), writeMTL(mtlParts));
+          return downloadBytes(`${defaultName}.${format}`, mtlParts ? writeOBJ(mtlParts, { mtl: mtlName(`${defaultName}.obj`) }) : bytes);
+        }
         target = await this.native.saveDialog({ kind: format, defaultName });
         if (!target) return null;
+      }
+      if (mtlParts) {
+        // The OBJ names its material file after itself.
+        const mtl = mtlName(target);
+        bytes = writeOBJ(mtlParts, { mtl });
+        await this.native.writeFile(target.replace(/[^\\/]+$/, mtl), writeMTL(mtlParts));
       }
       await this.native.writeFile(target, bytes);
       toast(t('Exported {name}', { name: this.basename(target) }), { type: 'ok' });
@@ -498,8 +565,11 @@ export class FileOps {
     }
   }
 
-  async exportPNG({ path = null } = {}) {
-    const url = this.app.vp.capture({ width: 1920, height: 1080 });
+  // pixels: [width, height] of the picture (Full HD unless given).
+  async exportPNG({ path = null, pixels = [1920, 1080], transparent = false } = {}) {
+    const vp = this.app.vp;
+    const pr = vp.renderer.getPixelRatio();
+    const url = vp.capture({ width: pixels[0] / pr, height: pixels[1] / pr, transparent });
     const bytes = fromB64(url.split(',')[1]);
     let target = path;
     if (!target) {
@@ -547,6 +617,18 @@ function downloadBytes(name, bytes) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
   return name;
+}
+
+// Move a thumbnail when its design file is renamed.
+export function moveThumb(from, to) {
+  const all = loadThumbs();
+  if (!all[from]) return;
+  storeThumb(to, all[from]);
+  const now = loadThumbs();
+  delete now[from];
+  try {
+    localStorage.setItem(THUMBS_KEY, JSON.stringify(now));
+  } catch {}
 }
 
 export function loadThumbs() {

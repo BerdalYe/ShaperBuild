@@ -10,6 +10,8 @@ import { SketchView } from './sketchview.js';
 import { PlaneView } from './planeview.js';
 import { AxisView } from './axisview.js';
 import { ImageView } from './imageview.js';
+import { DecalView } from './decalview.js';
+import { TouchInput } from './touch.js';
 import { Overlay } from './overlay.js';
 import { ViewCube } from './viewcube.js';
 import { THEMES } from './theme.js';
@@ -18,6 +20,9 @@ import { to3D } from '../core/plane.js';
 
 const PRIORITY = { handle: 0, spoint: 1, vertex: 1, curve: 2, edge: 2, axis: 2, region: 3, face: 4, body: 4, plane: 5, image: 5 };
 const RADIUS = { handle: 10, spoint: 9, vertex: 9, curve: 7, edge: 7, axis: 7, region: 1.5, face: 1.5, body: 1.5, plane: 1.5, image: 1.5 };
+
+// Default visualization light (the sun comes from the front left).
+export const LIGHTING = { rotation: 236, elevation: 57, intensity: 1, ground: true };
 
 export class Viewport extends Emitter {
   constructor(container, { theme = 'dark' } = {}) {
@@ -102,7 +107,9 @@ export class Viewport extends Emitter {
     this.planeGroup = new THREE.Group();
     this.axisGroup = new THREE.Group();
     this.imageGroup = new THREE.Group();
-    this.scene.add(this.bodyGroup, this.sketchGroup, this.planeGroup, this.axisGroup, this.imageGroup);
+    this.decalGroup = new THREE.Group();
+    this.decalGroup.visible = false;
+    this.scene.add(this.bodyGroup, this.sketchGroup, this.planeGroup, this.axisGroup, this.imageGroup, this.decalGroup);
     this.pickBodies = new THREE.Group();
     this.pickSketches = new THREE.Group();
     this.pickPlanes = new THREE.Group();
@@ -119,6 +126,7 @@ export class Viewport extends Emitter {
     this.planeViews = new Map();
     this.axisViews = new Map();
     this.imageViews = new Map();
+    this.decalViews = new Map();
 
     this.viewcube = new ViewCube(container, (p) => this.onCubePick(p));
 
@@ -335,6 +343,31 @@ export class Viewport extends Emitter {
     this.requestRender();
   }
 
+  // Decals sit on bodies and show only in visualization.
+  syncDecals(decals) {
+    const seen = new Set();
+    for (const dc of decals) {
+      seen.add(dc.id);
+      let view = this.decalViews.get(dc.id);
+      if (!view) {
+        view = new DecalView(dc, this.ctx);
+        this.decalViews.set(dc.id, view);
+        this.decalGroup.add(view.group);
+      }
+      const body = this.bodyViews.get(dc.bodyId);
+      view.update(dc, body?.mesh || null);
+      view.group.visible = !!body && body.group.visible;
+    }
+    for (const [id, view] of this.decalViews) {
+      if (!seen.has(id)) {
+        view.dispose();
+        this.decalViews.delete(id);
+      }
+    }
+    this.decalGroup.visible = !!this.visualization;
+    this.requestRender();
+  }
+
   syncImages(images) {
     const seen = new Set();
     for (const im of images) {
@@ -487,8 +520,12 @@ export class Viewport extends Emitter {
     let nav = null;
     let moved = false;
     c.addEventListener('contextmenu', (e) => e.preventDefault());
+    // Fingers have their own gestures (see touch.js); pens work like a mouse.
+    this.touch = new TouchInput(this);
+    c.style.touchAction = 'none';
     c.addEventListener('pointerdown', (e) => {
       c.focus({ preventScroll: true });
+      if (e.pointerType === 'touch') return this.touch.down(e);
       const { x, y } = this.local(e);
       moved = false;
       // Left-drag navigates while an orbit/pan mode is on or Space is held.
@@ -509,6 +546,7 @@ export class Viewport extends Emitter {
       }
     });
     c.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'touch') return this.touch.move(e);
       const { x, y } = this.local(e);
       this.pointer = { x, y };
       if (nav) {
@@ -531,6 +569,7 @@ export class Viewport extends Emitter {
       }
     });
     const end = (e) => {
+      if (e.pointerType === 'touch') return this.touch.up(e, e.type === 'pointercancel');
       if (nav) {
         const wasMoved = moved;
         const button = nav.button;
@@ -549,7 +588,9 @@ export class Viewport extends Emitter {
     c.addEventListener('pointerup', end);
     c.addEventListener('pointercancel', end);
     c.addEventListener('pointerleave', () => this.emit('pointerleave'));
-    c.addEventListener('dblclick', (e) => this.emit('dblclick', this.event(e)));
+    // A double tap is handled by touch.js (it looks at the face instead).
+    c.addEventListener('dblclick', (e) => this.lastPointerType !== 'touch' && this.emit('dblclick', this.event(e)));
+    c.addEventListener('pointerdown', (e) => (this.lastPointerType = e.pointerType), true);
     c.addEventListener(
       'wheel',
       (e) => {
@@ -716,32 +757,58 @@ export class Viewport extends Emitter {
 
   // ---- visualization mode ------------------------------------------------
 
+  // Light for visualization: the sun's direction (degrees around and above
+  // the horizon), how bright everything is, and the ground shadow.
+  setLighting(l = {}) {
+    this.lighting = { ...LIGHTING, ...l };
+    this.applyLighting();
+    this.requestRender();
+  }
+
+  applyLighting() {
+    const on = this.visualization;
+    const l = this.lighting || LIGHTING;
+    this.scene.environmentIntensity = on ? l.intensity : 0.35;
+    this.sun.intensity = 2.2 * l.intensity;
+    this.ground.visible = !!on && l.ground;
+    if (!on) return;
+    const box = this.contentBox();
+    const s = box.isEmpty() ? new THREE.Sphere(new THREE.Vector3(), 50) : box.getBoundingSphere(new THREE.Sphere());
+    const r0 = Math.max(s.radius, 10);
+    const az = (l.rotation * Math.PI) / 180;
+    const el = (Math.max(5, Math.min(90, l.elevation)) * Math.PI) / 180;
+    const dir = new THREE.Vector3(Math.cos(el) * Math.cos(az), Math.cos(el) * Math.sin(az), Math.sin(el));
+    this.sun.position.copy(s.center).add(dir.multiplyScalar(r0 * 2.6));
+    this.sun.target.position.copy(s.center);
+    const cam = this.sun.shadow.camera;
+    cam.left = cam.bottom = -r0 * 1.6;
+    cam.right = cam.top = r0 * 1.6;
+    cam.near = 0.1;
+    cam.far = r0 * 10;
+    cam.updateProjectionMatrix();
+    const zMin = box.isEmpty() ? 0 : box.min.z;
+    this.ground.position.set(s.center.x, s.center.y, zMin - 0.01);
+    this.ground.scale.setScalar(r0 * 12);
+  }
+
+  // Field of view of the perspective camera, in degrees.
+  setFov(deg) {
+    this.rig.persp.fov = Math.max(10, Math.min(100, deg));
+    this.rig.persp.updateProjectionMatrix();
+    this.rig.update();
+    this.requestRender();
+  }
+
   setVisualization(on) {
     this.visualization = on;
     const r = this.renderer;
     r.toneMapping = on ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
     r.toneMappingExposure = on ? 1.05 : 1;
-    this.scene.environmentIntensity = on ? 1.0 : 0.35;
     this.headlight.intensity = on ? 0.5 : 1.25;
     this.hemi.intensity = on ? 0.35 : 0.55;
     this.sun.visible = on;
-    this.ground.visible = on;
-    if (on) {
-      const box = this.contentBox();
-      const s = box.isEmpty() ? new THREE.Sphere(new THREE.Vector3(), 50) : box.getBoundingSphere(new THREE.Sphere());
-      const r0 = Math.max(s.radius, 10);
-      this.sun.position.copy(s.center).add(new THREE.Vector3(-0.8, -1.2, 2.2).multiplyScalar(r0 * 2));
-      this.sun.target.position.copy(s.center);
-      const cam = this.sun.shadow.camera;
-      cam.left = cam.bottom = -r0 * 1.6;
-      cam.right = cam.top = r0 * 1.6;
-      cam.near = 0.1;
-      cam.far = r0 * 10;
-      cam.updateProjectionMatrix();
-      const zMin = box.isEmpty() ? 0 : box.min.z;
-      this.ground.position.set(s.center.x, s.center.y, zMin - 0.01);
-      this.ground.scale.setScalar(r0 * 12);
-    }
+    this.decalGroup.visible = on;
+    this.applyLighting();
     for (const v of this.bodyViews.values()) {
       // Visualization always shows shaded bodies.
       v.setDisplay(on ? 'shaded' : this.display || 'shaded', on ? false : this.hiddenEdges);

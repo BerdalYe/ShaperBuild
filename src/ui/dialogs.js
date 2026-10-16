@@ -21,13 +21,56 @@ export class Dialogs {
       { label: '3MF — 3D printing', icon: 'export', action: () => f.exportDialog('3mf') },
       { label: 'OBJ — mesh', icon: 'export', action: () => f.exportDialog('obj') },
       { label: 'STEP — CAD exchange', icon: 'export', action: () => f.exportDialog('step') },
+      { label: 'GLB — 3D viewers and the web (with colours)', icon: 'export', action: () => f.exportDialog('glb') },
+      { label: 'USDZ — AR on iPhone and iPad', icon: 'export', action: () => f.exportDialog('usdz') },
       { label: 'DXF — sketches for laser cutting', icon: 'export', action: () => f.exportDXF() },
       '-',
       { label: '2D drawing (PDF, SVG, DXF)…', icon: 'file', action: () => this.app.drawing.open() },
-      { label: 'Image (PNG)', icon: 'sparkle', action: () => f.exportPNG() },
+      { label: 'Screenshot (PNG)…', icon: 'camera', action: () => this.screenshot() },
       '-',
       { label: 'Save design', icon: 'file', kbd: `${modKey()}S`, action: () => f.save() },
     ]);
+  }
+
+  // Screenshot: the view as a PNG at a chosen size, optionally without
+  // the background.
+  async screenshot() {
+    const app = this.app;
+    const vp = app.vp;
+    const gl = vp.renderer.getContext();
+    const max = Math.min(gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), gl.getParameter(gl.MAX_TEXTURE_SIZE), ...gl.getParameter(gl.MAX_VIEWPORT_DIMS));
+    const pr = vp.renderer.getPixelRatio();
+    const win = [Math.round(vp.width * pr), Math.round(vp.height * pr)];
+    const sizes = [
+      ['window', 'Window size', win],
+      ['double', 'Double', [win[0] * 2, win[1] * 2]],
+      ['hd', 'Full HD', [1920, 1080]],
+      ['4k', '4K', [3840, 2160]],
+      ['8k', '8K', [7680, 4320]],
+    ];
+    const choice = h('div.shot-sizes');
+    let pick = app.settings.shotSize || 'hd';
+    for (const [key, label, [w, hh]] of sizes) {
+      const ok = w <= max && hh <= max;
+      const r = h('input', { type: 'radio', name: 'shot-size', value: key, checked: key === pick && ok, disabled: !ok });
+      r.addEventListener('change', () => (pick = key));
+      choice.append(h('label.shot-size', r, h('span', { text: label }), h('small', { str: `${w} × ${hh}` }), ok ? null : h('small', { text: 'too big for this graphics card' })));
+    }
+    const clear = h('input', { type: 'checkbox', checked: !!app.settings.shotTransparent });
+    const ok = await modal({
+      title: 'Screenshot',
+      body: h('div', choice, h('label.toggle', clear, h('span', { text: 'Transparent background' }))),
+      buttons: [
+        { label: 'Cancel', value: false },
+        { label: 'Save PNG…', value: true, primary: true },
+      ],
+    });
+    if (!ok) return null;
+    const size = sizes.find((s) => s[0] === pick && s[2][0] <= max && s[2][1] <= max) || sizes[0];
+    app.settings.shotSize = size[0];
+    app.settings.shotTransparent = clear.checked;
+    app.saveSettings();
+    return app.files.exportPNG({ pixels: size[2], transparent: clear.checked });
   }
 
   async settings() {

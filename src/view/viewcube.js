@@ -66,6 +66,10 @@ export class ViewCube {
     home.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>';
     home.addEventListener('click', () => this.onPick({ home: true }));
     this.el.appendChild(home);
+    // Double tap on the cube: back to the home view (touch screens).
+    let touched = false;
+    this.el.addEventListener('pointerdown', (e) => (touched = e.pointerType === 'touch'), true);
+    this.el.addEventListener('dblclick', () => touched && this.onPick({ home: true }));
   }
 
   addPart(cls, w, h, n, x, y, pos, label) {
