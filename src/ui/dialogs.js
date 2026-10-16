@@ -294,7 +294,7 @@ export class Dialogs {
     area.addEventListener('keydown', (e) => e.stopPropagation());
     const v = await modal({
       title: 'Keyboard shortcuts as JSON',
-      body: h('div', h('p.ks-hint', { text: '"preset" is shaperbuild or shapr; "keys" changes single actions, like "tool:extrude": "E". An empty text removes a key.' }), area),
+      body: h('div', h('p.ks-hint', { text: '"preset" is shaperbuild or tablet; "keys" changes single actions, like "tool:extrude": "E". An empty text removes a key.' }), area),
       width: 560,
       buttons: [{ label: 'Cancel', value: false }, { label: 'Apply', value: true, primary: true }],
     });
@@ -305,7 +305,8 @@ export class Dialogs {
       const known = new Set(this.actions().map(([id]) => id));
       const keys = {};
       for (const [k, c] of Object.entries(data.keys || {})) if (known.has(k) && typeof c === 'string') keys[k] = c;
-      app.settings.keymap = { preset: PRESETS[data.preset] ? data.preset : 'shaperbuild', keys };
+      const id = data.preset === 'shapr' ? 'tablet' : data.preset;
+      app.settings.keymap = { preset: PRESETS[id] ? id : 'shaperbuild', keys };
       app.saveSettings();
       app.reloadKeymap();
     } catch (err) {
@@ -331,16 +332,71 @@ export class Dialogs {
     const body = h('div', {
       html: `<p><b>ShaperBuild ${info.version}</b></p>
       <p>${t('A desktop 3D CAD app for sketching, solid modelling and STL work.')}</p>
-      <p>${t('Geometry by OpenCascade (via replicad-opencascadejs, LGPL-2.1) and Manifold (Apache-2.0). Rendering by three.js (MIT). Built with Electron.')}</p>`,
+      <p>${t('Geometry by OpenCascade (via replicad-opencascadejs, LGPL-2.1) and Manifold (Apache-2.0). Rendering by three.js (MIT). Built with Electron.')}</p>
+      <p class="about-note">${t('ShaperBuild is an independent project. It is not made, endorsed or supported by Shapr3D Zrt.; Shapr3D is their trademark.')}</p>`,
     });
     const v = await modal({
       title: 'About',
       body,
       buttons: [
+        { label: 'Open-source licences', value: 'licences' },
+        { label: 'Privacy', value: 'privacy' },
         { label: 'Check for updates', value: 'check' },
         { label: 'Close', primary: true },
       ],
     });
     if (v === 'check') this.app.updates.check(true);
+    if (v === 'licences') this.licences();
+    if (v === 'privacy') this.privacy();
+  }
+
+  // The open-source software inside ShaperBuild and its licences.
+  async licences() {
+    const list = [
+      ['Open CASCADE Technology (replicad-opencascadejs 1.1.0)', 'LGPL-2.1 with the Open CASCADE Exception 1.0', ['src/licenses/LGPL-2.1.txt', 'src/licenses/OCCT_LGPL_EXCEPTION.txt'], 'https://github.com/sgenoud/replicad'],
+      ['Manifold 3.5.3', 'Apache-2.0', ['src/vendor/manifold/LICENSE'], 'https://github.com/elalish/manifold'],
+      ['three.js 0.180.0', 'MIT', ['src/vendor/three-addons/LICENSE'], 'https://github.com/mrdoob/three.js'],
+      ['fflate 0.8.2 (in the USDZ exporter)', 'MIT', [], 'https://github.com/101arrowz/fflate'],
+      ['opentype.js 2.0.0', 'MIT', ['src/vendor/opentype/LICENSE'], 'https://github.com/opentypejs/opentype.js'],
+      ['Inter typeface', 'SIL Open Font License 1.1', ['src/fonts/OFL.txt'], 'https://github.com/rsms/inter'],
+      ['Electron 44.5.0 (with Chromium and Node.js)', 'MIT; Chromium and Node.js have their own licences (LICENSES.chromium.html next to the app)', ['src/licenses/electron.txt'], 'https://github.com/electron/electron'],
+      ['electron-updater 6.8.9 and the packages it uses', 'MIT, ISC, BlueOak-1.0.0, 0BSD, Python-2.0', ['src/licenses/update-checker.txt'], 'https://github.com/electron-userland/electron-builder'],
+    ];
+    const text = h('pre.lic-text', { str: '' });
+    const listEl = h('div.lic-list');
+    const show = async (files, row) => {
+      for (const r of listEl.children) r.classList.toggle('on', r === row);
+      if (!files.length) {
+        text.textContent = t('The licence is at the top of the file src/vendor/three-addons/libs/fflate.module.js.');
+        return;
+      }
+      const parts = await Promise.all(files.map((f) => fetch(`/${f}`).then((r) => (r.ok ? r.text() : '')).catch(() => '')));
+      text.textContent = parts.join('\n\n');
+      text.scrollTop = 0;
+    };
+    for (const [name, licence, files, url] of list) {
+      const row = h('button.lic-row', h('b', { str: name }), h('span', { text: licence }));
+      row.addEventListener('click', () => show(files, row));
+      row.title = url;
+      listEl.append(row);
+    }
+    const body = h(
+      'div.licences',
+      h('p', { text: 'ShaperBuild uses this open-source software. Click one to read its licence. The geometry engine is a separate, unchanged library that can be replaced; its source code is at github.com/sgenoud/replicad and github.com/Open-Cascade-SAS/OCCT.' }),
+      h('div.lic-main', listEl, text),
+    );
+    show(list[0][2], listEl.firstChild);
+    await modal({ title: 'Open-source licences', body, width: 860, buttons: [{ label: 'Close', primary: true }] });
+  }
+
+  async privacy() {
+    const paras = [
+      'ShaperBuild does not collect personal data. There are no accounts, no tracking, no analytics and no advertising.',
+      'Designs, settings, saved versions, thumbnails and crash-recovery copies stay on this computer.',
+      'The update check asks GitHub (github.com) whether a newer version exists, when the app starts and every few hours. Like any web request, GitHub sees your IP address; nothing about your designs is sent. You can turn it off in Settings.',
+    ];
+    const body = h('div', ...paras.map((p) => h('p', { text: p })));
+    const v = await modal({ title: 'Privacy', body, width: 520, buttons: [{ label: 'Settings…', value: 'settings' }, { label: 'Close', primary: true }] });
+    if (v === 'settings') this.settings();
   }
 }

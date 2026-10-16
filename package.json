@@ -56,6 +56,23 @@
       "!**/*.map"
     ],
     "asar": true,
+    "asarUnpack": [
+      "node_modules/replicad-opencascadejs/dist/replicad_single.*"
+    ],
+    "extraResources": [
+      {
+        "from": "THIRD_PARTY_NOTICES.md",
+        "to": "THIRD_PARTY_NOTICES.md"
+      },
+      {
+        "from": "PRIVACY.md",
+        "to": "PRIVACY.md"
+      },
+      {
+        "from": "src/licenses",
+        "to": "licenses"
+      }
+    ],
     "publish": [
       {
         "provider": "github",

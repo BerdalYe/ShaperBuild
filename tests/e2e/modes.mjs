@@ -107,6 +107,8 @@ try {
   });
   await win.locator('.step', { hasText: 'Extrude' }).first().click();
   const taperInp = win.locator('.step-edit .num-input[data-key="taper"]');
+  await taperInp.waitFor();
+  await win.waitForTimeout(300);
   await taperInp.fill('0');
   await taperInp.press('Enter');
   await idle();

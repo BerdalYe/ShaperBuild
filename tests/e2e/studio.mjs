@@ -234,6 +234,23 @@ try {
   await win.waitForTimeout(200);
   assert.equal(await A(() => window.__shaper.selection.list[0]?.bodyId), box, 'a tap selects');
 
+  step('open-source licences and privacy');
+  await A(() => {
+    window.__shaper.dialogs.licences();
+  });
+  await win.waitForSelector('.lic-row');
+  assert.equal(await win.locator('.lic-row').count(), 8);
+  await win.waitForFunction(() => document.querySelector('.lic-text')?.textContent.includes('GNU LESSER GENERAL PUBLIC LICENSE'));
+  await win.locator('.lic-row', { hasText: 'Manifold' }).click();
+  await win.waitForFunction(() => document.querySelector('.lic-text')?.textContent.includes('Apache License'));
+  await win.locator('.modal .btn.primary', { hasText: 'Close' }).click();
+  await A(() => {
+    window.__shaper.dialogs.privacy();
+  });
+  await win.waitForSelector('.modal-head:has-text("Privacy")');
+  assert.match(await win.locator('.modal-body').innerText(), /does not collect personal data/);
+  await win.locator('.modal .btn.primary', { hasText: 'Close' }).click();
+
   assert.deepEqual(errors, []);
   console.log('studio: all steps passed');
 } catch (err) {

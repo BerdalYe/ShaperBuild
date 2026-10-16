@@ -1,6 +1,8 @@
 # ShaperBuild
 
-A desktop 3D CAD app for Windows, macOS and Linux, modelled on the way Shapr3D works: sketch on any flat surface, pull shapes into 3D, round and combine them, and export for 3D printing or other CAD tools. It opens and edits **STL** files too.
+A desktop 3D CAD app for Windows, macOS and Linux, inspired by the way Shapr3D works: sketch on any flat surface, pull shapes into 3D, round and combine them, and export for 3D printing or other CAD tools. It opens and edits **STL** files too. In English and Norwegian (bokmål).
+
+ShaperBuild is an independent project. It is not made, endorsed or supported by Shapr3D Zrt.; Shapr3D is their trademark.
 
 ![ShaperBuild](docs/screenshot.png)
 
@@ -105,11 +107,11 @@ The geometry engine is [OpenCascade](https://dev.opencascade.org/) (a real B-rep
 
 | Constraints | Shift+A parallel · Shift+P perpendicular · Shift+V horizontal/vertical · Shift+E equal · Shift+T tangent · Shift+C concentric · Shift+N coincident · Shift+M midpoint · Shift+L lock |
 
-Press **?** or use *Help → Keyboard Shortcuts* in the app to see everything. **Settings → Keyboard shortcuts** switches to a Shapr3D-style set of keys (V revolve, W sweep, I spline, G polygon, X search, Tab selection filter…) and lets you change any key, or edit them all as JSON. See [DECISIONS.md](DECISIONS.md) for how conflicts are handled. Laptop without a mouse? Use the Orbit and Pan buttons, or set *Settings → Scroll wheel / two-finger swipe* to orbit.
+Press **?** or use *Help → Keyboard Shortcuts* in the app to see everything. **Settings → Keyboard shortcuts** switches to an alternative set of keys laid out like Shapr3D's (V revolve, W sweep, I spline, G polygon, X search, Tab selection filter…) and lets you change any key, or edit them all as JSON. See [DECISIONS.md](DECISIONS.md) for how conflicts are handled. Laptop without a mouse? Use the Orbit and Pan buttons, or set *Settings → Scroll wheel / two-finger swipe* to orbit.
 
 ## How it compares to Shapr3D
 
-It follows Shapr3D's workflow and layout closely, but it is not a copy of Shapr3D and does not have everything yet. Not included so far: IGES files, AI rendering, the iPad / Vision Pro / AR apps, cloud sync and team sharing, and the video learning center.
+It follows a similar workflow and layout, with its own code, icons and texts, and does not have everything Shapr3D has. Not included so far: IGES, Parasolid and DWG files, AI rendering, the iPad / Vision Pro / AR apps, cloud sync and team sharing, and the video learning center. [DECISIONS.md](DECISIONS.md) lists the differences.
 
 ## Updates
 
@@ -155,6 +157,8 @@ tools/           helper scripts (i18n-extract.mjs lists text that still needs a 
 build/           app icon
 ```
 
-## Third-party software
+## Third-party software, privacy and legal
 
-OpenCascade via replicad-opencascadejs (LGPL-2.1), Manifold (Apache-2.0), three.js (MIT) and Electron (MIT).
+ShaperBuild uses OpenCascade via replicad-opencascadejs (LGPL-2.1, kept as a separate, replaceable library), Manifold (Apache-2.0), three.js (MIT), opentype.js (MIT), the Inter font (OFL-1.1) and Electron (MIT). [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists everything with versions and where the licence texts are; the app shows them under *Help → Open-source licences*.
+
+ShaperBuild collects no personal data; the only network use is the update check ([PRIVACY.md](PRIVACY.md)). [LEGAL.md](LEGAL.md) is a checklist of what to settle before sharing or selling it (choosing a licence for ShaperBuild itself, checking the name, tax and consumer rules).

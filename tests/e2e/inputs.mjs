@@ -117,10 +117,10 @@ try {
   });
   near(dir[2], -1, 0.02);
 
-  step('Shapr3D-style keys: V is Revolve, X finds a tool');
+  step('alternative keys: V is Revolve, X finds a tool');
   await A(() => {
     const a = window.__shaper;
-    a.settings.keymap = { preset: 'shapr', keys: {} };
+    a.settings.keymap = { preset: 'tablet', keys: {} };
     a.reloadKeymap();
   });
   await win.keyboard.press('v');

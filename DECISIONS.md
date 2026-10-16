@@ -56,12 +56,14 @@ works differently on purpose, the choice is written down here.
 ## Keyboard shortcuts
 
 - Two ready-made sets: **ShaperBuild** (the keys the app always had) and
-  **Shapr3D style** (spec parts 4.1 and 4.2). Any key can be changed in
+  **Alternative (tablet CAD style)**, laid out like Shapr3D's keys (spec
+  parts 4.1 and 4.2). Its name does not use the Shapr3D trademark; settings
+  saved with the old name still work. Any key can be changed in
   Settings > Keyboard shortcuts, or as JSON. A key given to one action is
   taken away from the action that had it.
 - Both sets: Ctrl+1–7 for the standard views, Ctrl+Shift+A clears the
   selection, Shift+letter adds sketch constraints (spec 4.2).
-- Shapr3D style conflicts in the spec itself are resolved like this: E and
+- Conflicts in the spec's key list are resolved like this: E and
   F stay Extrude and Fillet; the face and edge filters are Shift+F and
   Shift+G, B selects bodies only, and Tab cycles the filter. While dragging
   a selection box, B, F, E and A switch the filter (as in Shapr3D).

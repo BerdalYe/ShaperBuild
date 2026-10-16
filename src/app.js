@@ -36,7 +36,7 @@ import { planeFrame, to3D, to2D, samePlane } from './core/plane.js';
 import { keyPoints, closestOnEntity, dist, intersect, sampleEntity } from './core/geom2d.js';
 
 const SETTINGS_KEY = 'shaperbuild.settings.v1';
-// What a click selects (status bar; Tab cycles in the Shapr3D-style keys).
+// What a click selects (status bar; Tab cycles in the alternative keys).
 const SELECT_FILTERS = [
   ['all', 'Select all items'],
   ['bodies', 'Bodies only'],
@@ -1031,6 +1031,8 @@ export class App {
       { label: 'Keyboard shortcuts', icon: 'keyboard', kbd: `${m}/`, action: () => this.dialogs.shortcuts() },
       { label: 'Getting started', icon: 'help', action: () => this.dialogs.gettingStarted() },
       '-',
+      { label: 'Open-source licences', icon: 'file', action: () => this.dialogs.licences() },
+      { label: 'Privacy', icon: 'eye', action: () => this.dialogs.privacy() },
       { label: 'About ShaperBuild', icon: 'logo', action: () => this.dialogs.about() },
     ]);
   }
@@ -1663,6 +1665,10 @@ export class App {
         return this.toggleToolLabels();
       case 'about':
         return this.dialogs.about();
+      case 'licences':
+        return this.dialogs.licences();
+      case 'privacy':
+        return this.dialogs.privacy();
       default:
         if (cmd.startsWith('view-')) return this.vp.setView(cmd.slice(5));
     }

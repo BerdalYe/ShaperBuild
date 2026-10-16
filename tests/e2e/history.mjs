@@ -50,6 +50,10 @@ async function typeIn(label, key, value) {
   });
   await win.locator('.step', { hasText: label }).first().click();
   const inp = win.locator(`.step-edit .num-input[data-key="${key}"]`);
+  // A click on a step's name opens it after a short wait (a second click
+  // would rename it); let the editor settle before typing.
+  await inp.waitFor();
+  await win.waitForTimeout(300);
   await inp.fill(String(value));
   await inp.press('Enter');
   await idle();

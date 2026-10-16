@@ -1,7 +1,8 @@
 // Keyboard shortcuts. Every shortcut is an action with a key combination
 // ("E", "Shift+V", "Ctrl+4"; Ctrl means Cmd on a Mac). There are two
-// ready-made sets — ShaperBuild's own and one laid out like Shapr3D's —
-// and people can change any key on top of the set they chose.
+// ready-made sets — ShaperBuild's own and an alternative one laid out like
+// tablet CAD apps — and people can change any key on top of the set they
+// chose.
 
 // [action id, label, group]. Tools are added from the tool registry.
 export const COMMANDS = [
@@ -110,8 +111,8 @@ export const PRESETS = {
     // Ctrl+1…7 also work in this set.
     extra: { 'view-iso': ['Ctrl+1'], 'view-front': ['Ctrl+2'], 'view-back': ['Ctrl+3'], 'view-top': ['Ctrl+4'], 'view-bottom': ['Ctrl+5'], 'view-right': ['Ctrl+6'], 'view-left': ['Ctrl+7'], 'find-tool': ['Ctrl+F'] },
   },
-  shapr: {
-    name: 'Shapr3D style',
+  tablet: {
+    name: 'Alternative (tablet CAD style)',
     keys: {
       ...COMMON,
       'find-tool': 'X',
@@ -180,6 +181,8 @@ export function normalizeCombo(text) {
 
 // The keys in use: { preset, keys: { action: combo|'' } } -> lookups.
 export function buildKeymap(presetId = 'shaperbuild', overrides = {}) {
+  // Settings from before the alternative set was renamed.
+  if (presetId === 'shapr') presetId = 'tablet';
   const preset = PRESETS[presetId] || PRESETS.shaperbuild;
   const keys = { ...preset.keys };
   for (const [action, combo] of Object.entries(overrides || {})) {

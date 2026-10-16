@@ -16,6 +16,8 @@ const NB = {
   Save: 'Lagre',
   'Save As…': 'Lagre som…',
   'Versions…': 'Versjoner…',
+  'Open-Source Licences': 'Lisenser for åpen kildekode',
+  Privacy: 'Personvern',
   'Import…': 'Importer…',
   '3D Print…': '3D-utskrift…',
   '2D Drawing (PDF)…': '2D-tegning (PDF)…',
