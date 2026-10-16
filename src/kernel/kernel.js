@@ -4,6 +4,7 @@
 //
 // Every operation is functional: it reads shapes by id and stores results
 // under new ids, so undo on the main thread is just swapping ids.
+import { closestOnEntity } from '../core/geom2d.js';
 
 const EPS = 1e-7;
 
@@ -353,7 +354,18 @@ export class Kernel {
         info.radius = cy.Radius();
         info.axis = { origin: [loc.X(), loc.Y(), loc.Z()], dir: [d.X(), d.Y(), d.Z()] };
       } else if (t === ST.GeomAbs_Sphere) info.type = 'sphere';
-      else if (t === ST.GeomAbs_Cone) info.type = 'cone';
+      else if (t === ST.GeomAbs_Cone) {
+        info.type = 'cone';
+        // The cone's axis is the axis of its circular edges (gp_Cone has no
+        // binding here).
+        for (const ex of this.explore(face, this.T.TopAbs_EDGE)) {
+          const e = this.edgeInfo(oc.TopoDS.Edge(ex));
+          if (e.type === 'circle') {
+            info.axis = { origin: e.center, dir: e.axisDir };
+            break;
+          }
+        }
+      }
       else if (t === ST.GeomAbs_Torus) info.type = 'torus';
       else if (t === ST.GeomAbs_BSplineSurface || t === ST.GeomAbs_BezierSurface) info.type = 'freeform';
       return info;
@@ -484,6 +496,7 @@ export class Kernel {
         const pts = ent.pts;
         if (pts.length < 2) return null;
         if (pts.length === 2) return r(new oc.BRepBuilderAPI_MakeEdge(P(pts[0]), P(pts[1]))).Edge();
+        if (ent.control) return this.controlSplineEdge(ent, P, r);
         const closed = !!ent.closed;
         const n = closed ? pts.length - (dist2(pts[0], pts[pts.length - 1]) < 1e-12 ? 1 : 0) : pts.length;
         const plain = r(new oc.NCollection_Array1_gp_Pnt(1, n));
@@ -569,6 +582,7 @@ export class Kernel {
           centroid: [c.X(), c.Y(), c.Z()],
           positions: mesh.positions,
           indices: mesh.indices,
+          entities: this.boundaryEntities(face, sketch, f, r),
         });
       }
       this.regionCache.set(sketch.id, keep);
@@ -576,6 +590,55 @@ export class Kernel {
     } finally {
       r.free();
     }
+  }
+
+  // Ids of the sketch curves that form a region's outline (and holes):
+  // each boundary edge belongs to the curve nearest its midpoint.
+  boundaryEntities(face, sketch, f, r) {
+    const oc = this.oc;
+    const ids = new Set();
+    const ents = sketch.entities.filter((e) => !e.construction && e.type !== 'point');
+    for (const e of this.explore(face, this.T.TopAbs_EDGE)) {
+      try {
+        const ad = r(new oc.BRepAdaptor_Curve(oc.TopoDS.Edge(e)));
+        const P = r(ad.Value((ad.FirstParameter() + ad.LastParameter()) / 2));
+        const v = [P.X() - f.o[0], P.Y() - f.o[1], P.Z() - f.o[2]];
+        const q = [dot(v, f.x), dot(v, f.y)];
+        let best = null;
+        for (const en of ents) {
+          const d = closestOnEntity(q, en).d;
+          if (!best || d < best.d) best = { id: en.id, d };
+        }
+        if (best?.id) ids.add(best.id);
+      } catch {
+        // Unusual edges are skipped.
+      } finally {
+        e.delete();
+      }
+    }
+    return [...ids].sort();
+  }
+
+  // A cubic B-spline from control points: clamped (open) or periodic
+  // (closed), with uniform knots — the same curve geom2d draws.
+  controlSplineEdge(ent, P, r) {
+    const oc = this.oc;
+    let pts = ent.pts;
+    const closed = !!ent.closed && pts.length > 2;
+    if (closed && dist2(pts[0], pts[pts.length - 1]) < 1e-12) pts = pts.slice(0, -1);
+    const n = pts.length;
+    const d = Math.min(3, n - 1);
+    const poles = r(new oc.NCollection_Array1_gp_Pnt(1, n));
+    pts.forEach((p, i) => poles.SetValue(i + 1, P(p)));
+    const nk = closed ? n + 1 : n - d + 1;
+    const knots = r(new oc.NCollection_Array1_double(1, nk));
+    const mults = r(new oc.NCollection_Array1_int(1, nk));
+    for (let i = 1; i <= nk; i++) {
+      knots.SetValue(i, i - 1);
+      mults.SetValue(i, closed ? 1 : i === 1 || i === nk ? d + 1 : 1);
+    }
+    const curve = new oc.Geom_BSplineCurve(poles, knots, mults, d, closed);
+    return r(new oc.BRepBuilderAPI_MakeEdge(curve)).Edge();
   }
 
   // Exact polylines (plane coordinates) for spline entities, for display.
@@ -617,6 +680,10 @@ export class Kernel {
     const indices = this.heapCopy(Uint32Array, raw.getTrianglesPtr(), raw.getTrianglesSize());
     raw.delete();
     return { positions, indices };
+  }
+
+  dropSketches({ ids }) {
+    for (const id of ids || []) this.dropSketch(id);
   }
 
   dropSketch(sketchId) {
@@ -673,28 +740,80 @@ export class Kernel {
     });
   }
 
-  // Apply a tool solid to the document according to mode.
+  // Fuse many shapes in one go (much faster than one by one, e.g. letters).
+  fuseAll(shapes, what) {
+    const oc = this.oc;
+    if (shapes.length <= 1) return shapes[0] || null;
+    return this.guard(what || 'fuse', () => {
+      const r = this.scope();
+      try {
+        const args = r(new oc.NCollection_List_TopoDS_Shape());
+        args.Append(shapes[0]);
+        const tools = r(new oc.NCollection_List_TopoDS_Shape());
+        for (const s of shapes.slice(1)) tools.Append(s);
+        const op = r(new oc.BRepAlgoAPI_Fuse());
+        op.SetArguments(args);
+        op.SetTools(tools);
+        op.Build(r(new oc.Message_ProgressRange()));
+        if (op.HasErrors()) throw new Error('boolean error');
+        op.SimplifyResult(true, true, 1e-4);
+        return op.Shape();
+      } finally {
+        r.free();
+      }
+    });
+  }
+
+  // Cut many tools out of a shape in one go.
+  cutAll(shape, tools, what) {
+    const oc = this.oc;
+    return this.guard(what || 'cut', () => {
+      const r = this.scope();
+      try {
+        const args = r(new oc.NCollection_List_TopoDS_Shape());
+        args.Append(shape);
+        const list = r(new oc.NCollection_List_TopoDS_Shape());
+        for (const s of tools) list.Append(s);
+        const op = r(new oc.BRepAlgoAPI_Cut());
+        op.SetArguments(args);
+        op.SetTools(list);
+        op.Build(r(new oc.Message_ProgressRange()));
+        if (op.HasErrors()) throw new Error('boolean error');
+        op.SimplifyResult(true, true, 1e-4);
+        return op.Shape();
+      } finally {
+        r.free();
+      }
+    });
+  }
+
+  // Apply a tool solid (or a list of tool solids, e.g. one per letter) to
+  // the document according to mode. A list is combined with the bodies in
+  // one boolean: joining the tools first and then the body can lose parts.
   applyTool(tool, mode, targets, what) {
     const created = [];
     const removed = [];
+    const many = Array.isArray(tool);
+    const whole = () => (many ? this.fuseAll(tool, what) : tool);
     if (mode === 'new' || !targets.length) {
-      for (const id of this.storeSolids(tool)) created.push({ id });
+      for (const id of this.storeSolids(whole())) created.push({ id });
       return this.result(created, removed);
     }
     const meshInvolved = targets.some((t) => this.get(t).kind === 'mesh');
-    if (meshInvolved) return this.applyToolMesh(tool, mode, targets);
+    if (meshInvolved) return this.applyToolMesh(whole(), mode, targets);
     if (mode === 'union') {
       let acc = this.solid(targets[0]);
       for (const t of targets.slice(1)) acc = this.boolOp('fuse', acc, this.solid(t), what);
-      acc = this.boolOp('fuse', acc, tool, what);
+      acc = many ? this.fuseAll([acc, ...tool], what) : this.boolOp('fuse', acc, tool, what);
       const ids = this.storeSolids(acc);
       ids.forEach((id, i) => created.push(i === 0 ? { id, replaces: targets[0] } : { id, from: targets[0] }));
       removed.push(...targets.slice(1));
       if (!ids.length) removed.push(targets[0]);
       return this.result(created, removed);
     }
+    const common = mode !== 'subtract' && many ? whole() : null;
     for (const t of targets) {
-      const res = this.boolOp(mode === 'subtract' ? 'cut' : 'common', this.solid(t), tool, what);
+      const res = mode === 'subtract' && many ? this.cutAll(this.solid(t), tool, what) : this.boolOp(mode === 'subtract' ? 'cut' : 'common', this.solid(t), common || tool, what);
       const ids = this.storeSolids(res);
       if (!ids.length) removed.push(t);
       ids.forEach((id, i) => created.push(i === 0 ? { id, replaces: t } : { id, from: t }));
@@ -704,29 +823,46 @@ export class Kernel {
 
   // ---- modelling operations ---------------------------------------------
 
-  extrude({ profiles, distance, symmetric = false, mode = 'new', targets = [] }) {
+  // start: begin this far from the profile (along the extrude direction).
+  // taper: side walls lean in (positive) or out by this many degrees.
+  extrude({ profiles, distance, symmetric = false, mode = 'new', targets = [], start = 0, taper = 0 }) {
     const oc = this.oc;
     if (!profiles.length) throw new Error('Select a sketch region or a flat face');
     if (Math.abs(distance) < 1e-6) throw new Error('Distance must not be zero');
+    if (Math.abs(taper) >= 89) throw new Error('The taper must be less than 89°');
     const tool = this.guard('Extrude', () => {
       const r = this.scope();
       try {
-        let acc = null;
+        const parts = [];
         for (const ref of profiles) {
           const { face, normal } = this.profile(ref);
           const n = norm(normal);
-          let base = face;
+          const dir = Math.sign(distance) || 1;
+          let shift = start * dir;
           let len = distance;
           if (symmetric) {
-            const tr = r(new oc.gp_Trsf());
-            tr.SetTranslation(this.vec(r, scale3(n, -Math.abs(distance))));
-            base = r(new oc.BRepBuilderAPI_Transform(face, tr, true)).Shape();
+            shift -= Math.abs(distance);
             len = Math.abs(distance) * 2;
           }
-          const prism = r(new oc.BRepPrimAPI_MakePrism(base, this.vec(r, scale3(n, len)), false, true)).Shape();
-          acc = acc ? this.boolOp('fuse', acc, prism, 'Extrude') : prism;
+          const moved = (by) => {
+            if (!by) return face;
+            const tr = r(new oc.gp_Trsf());
+            tr.SetTranslation(this.vec(r, scale3(n, by)));
+            return r(new oc.BRepBuilderAPI_Transform(face, tr, true)).Shape();
+          };
+          if (symmetric && Math.abs(taper) > 1e-9) {
+            // Both halves lean in, away from the middle.
+            const mid = moved(start * dir);
+            const half = (sign) => this.taperSides(r(new oc.BRepPrimAPI_MakePrism(mid, this.vec(r, scale3(n, sign * Math.abs(distance))), false, true)).Shape(), mid, n, sign * Math.abs(distance), taper, r);
+            parts.push(this.boolOp('fuse', half(1), half(-1), 'Extrude'));
+            continue;
+          }
+          const base = moved(shift);
+          let prism = r(new oc.BRepPrimAPI_MakePrism(base, this.vec(r, scale3(n, len)), false, true)).Shape();
+          if (Math.abs(taper) > 1e-9) prism = this.taperSides(prism, base, n, len, taper, r);
+          parts.push(prism);
         }
-        return acc;
+        return parts;
       } finally {
         r.free();
       }
@@ -734,27 +870,102 @@ export class Kernel {
     return this.applyTool(tool, mode, targets, 'Extrude');
   }
 
-  revolve({ profiles, axis, angle = 360, mode = 'new', targets = [] }) {
+  // Lean the side walls of an extruded prism: they stay put at the profile
+  // and lean in by `taper` degrees.
+  taperSides(prism, base, n, len, taper, r) {
+    const oc = this.oc;
+    const props = r(new oc.GProp_GProps());
+    oc.BRepGProp.SurfaceProperties(base, props, false, false);
+    const c = r(props.CentreOfMass());
+    const origin = [c.X(), c.Y(), c.Z()];
+    const pull = norm(scale3(n, Math.sign(len) || 1));
+    const b = r(new oc.BRepOffsetAPI_DraftAngle(prism));
+    const dir = this.dir(r, pull);
+    const pln = r(new oc.gp_Pln(this.pnt(r, origin), dir));
+    let added = 0;
+    for (const ex of this.explore(prism, this.T.TopAbs_FACE)) {
+      const f = oc.TopoDS.Face(ex);
+      const ad = r(new oc.BRepAdaptor_Surface(f, true));
+      if (ad.GetType() === oc.GeomAbs_SurfaceType.GeomAbs_Plane) {
+        const pl = r(ad.Plane());
+        const ax = r(pl.Axis());
+        const d = r(ax.Direction());
+        // Caps (parallel to the profile) keep their place.
+        if (Math.abs(d.X() * pull[0] + d.Y() * pull[1] + d.Z() * pull[2]) > 1 - 1e-6) continue;
+      }
+      b.Add(f, dir, (taper * Math.PI) / 180, pln, true);
+      if (!b.AddDone()) throw new Error('the sides cannot be tapered');
+      added++;
+    }
+    if (!added) return prism;
+    b.Build(r(new oc.Message_ProgressRange()));
+    if (!b.IsDone()) throw new Error('the sides cannot be tapered');
+    return b.Shape();
+  }
+
+  // pitch: rise along the axis per full turn, for a helix (springs,
+  // threads); the angle may then be more than 360°.
+  revolve({ profiles, axis, angle = 360, mode = 'new', targets = [], pitch = 0 }) {
     const oc = this.oc;
     if (!profiles.length) throw new Error('Select a sketch region or a flat face');
+    if (Math.abs(pitch) > 1e-9) return this.applyTool(this.guard('Revolve', () => this.helixParts(profiles, axis, angle, pitch)), mode, targets, 'Revolve');
     const tool = this.guard('Revolve', () => {
       const r = this.scope();
       try {
         const ax = r(new oc.gp_Ax1(this.pnt(r, axis.origin), this.dir(r, axis.dir)));
-        let acc = null;
+        const parts = [];
         const full = Math.abs(Math.abs(angle) - 360) < 1e-6;
         for (const ref of profiles) {
           const { face } = this.profile(ref);
           const rad = (angle * Math.PI) / 180;
           const rev = r(new oc.BRepPrimAPI_MakeRevol(face, ax, full ? Math.PI * 2 : rad, false)).Shape();
-          acc = acc ? this.boolOp('fuse', acc, rev, 'Revolve') : rev;
+          parts.push(rev);
         }
-        return acc;
+        return parts;
       } finally {
         r.free();
       }
     });
     return this.applyTool(tool, mode, targets, 'Revolve');
+  }
+
+  // Helical revolve: copies of the profile turned and raised step by step,
+  // joined by a smooth loft (holes in the profile are cut the same way).
+  helixParts(profiles, axis, angle, pitch) {
+    const oc = this.oc;
+    const r = this.scope();
+    try {
+      const d = norm(axis.dir);
+      const turns = Math.abs(angle) / 360;
+      const steps = Math.max(8, Math.ceil(Math.abs(angle) / 22.5));
+      const parts = [];
+      for (const ref of profiles) {
+        const { face } = this.profile(ref);
+        const outer = r(oc.BRepTools.OuterWire(face));
+        const wires = [outer, ...this.explore(face, this.T.TopAbs_WIRE).map((w) => oc.TopoDS.Wire(w)).filter((w) => !w.IsSame(outer))];
+        const solids = wires.map((w) => {
+          const loft = r(new oc.BRepOffsetAPI_ThruSections(true, false, 1e-6));
+          for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            const m = rotationMatrix(axis.origin, d, ((angle * Math.PI) / 180) * t);
+            const rise = scale3(d, pitch * turns * t * Math.sign(angle || 1));
+            for (const k of [0, 1, 2]) m[12 + k] += rise[k];
+            const moved = r(new oc.BRepBuilderAPI_Transform(w, this.trsf(r, m), true)).Shape();
+            loft.AddWire(oc.TopoDS.Wire(moved));
+          }
+          loft.CheckCompatibility(false);
+          loft.Build(r(new oc.Message_ProgressRange()));
+          if (!loft.IsDone()) throw new Error('could not make the helix');
+          return loft.Shape();
+        });
+        let solid = solids[0];
+        for (const hole of solids.slice(1)) solid = this.boolOp('cut', solid, hole, 'Revolve');
+        parts.push(solid);
+      }
+      return parts;
+    } finally {
+      r.free();
+    }
   }
 
   // Wire from a list of path references (sketch curves or body edges).
@@ -771,27 +982,301 @@ export class Kernel {
     return wb.Wire();
   }
 
-  sweep({ profiles, path, mode = 'new', targets = [] }) {
+  // twist: degrees the profile turns from start to end; endScale: its size
+  // at the end (1 = same size).
+  sweep({ profiles, path, mode = 'new', targets = [], twist = 0, endScale = 1 }) {
     const oc = this.oc;
     if (!profiles.length) throw new Error('Select a profile to sweep');
     if (!path.length) throw new Error('Select a path');
+    if (!(endScale > 0)) throw new Error('The size at the end must be greater than zero');
+    const shaped = Math.abs(twist) > 1e-6 || Math.abs(endScale - 1) > 1e-6;
     const tool = this.guard('Sweep', () => {
       const r = this.scope();
       try {
         const wire = this.pathWire(path, r);
-        let acc = null;
+        const parts = [];
         for (const ref of profiles) {
           const { face } = this.profile(ref);
-          const pipe = r(new oc.BRepOffsetAPI_MakePipe(wire, face));
-          const s = pipe.Shape();
-          acc = acc ? this.boolOp('fuse', acc, s, 'Sweep') : s;
+          const s = shaped ? this.shapedSweep(face, wire, twist, endScale, r) : r(new oc.BRepOffsetAPI_MakePipe(wire, face)).Shape();
+          parts.push(s);
         }
-        return acc;
+        return parts;
       } finally {
         r.free();
       }
     });
     return this.applyTool(tool, mode, targets, 'Sweep');
+  }
+
+  // A sweep that twists and/or changes size: copies of the profile placed
+  // along the path (turning with it, without extra roll), joined by a loft.
+  shapedSweep(face, wire, twist, endScale, r) {
+    const oc = this.oc;
+    const curve = r(new oc.BRepAdaptor_CompCurve(wire, true));
+    if (curve.IsClosed()) throw new Error('Twist and end size need a path with two ends');
+    const u0 = curve.FirstParameter();
+    const u1 = curve.LastParameter();
+    const M = 240;
+    const pts = [];
+    for (let i = 0; i <= M; i++) {
+      const p = r(curve.EvalD0(u0 + ((u1 - u0) * i) / M));
+      pts.push([p.X(), p.Y(), p.Z()]);
+    }
+    // Start at the end of the path nearest the profile.
+    const c = this.faceInfo(face).center;
+    if (dist2(pts[M], c) < dist2(pts[0], c)) pts.reverse();
+    const mats = sweepSections(pts, { twist, endScale });
+    const loftOf = (w) => {
+      const ts = r(new oc.BRepOffsetAPI_ThruSections(true, false, 1e-6));
+      for (const m of mats) {
+        const moved = r(new oc.BRepBuilderAPI_Transform(w, this.trsf(r, m), true)).Shape();
+        ts.AddWire(oc.TopoDS.Wire(moved));
+      }
+      ts.CheckCompatibility(false);
+      ts.Build(r(new oc.Message_ProgressRange()));
+      if (!ts.IsDone()) throw new Error('could not make the shape');
+      return ts.Shape();
+    };
+    const outer = r(oc.BRepTools.OuterWire(face));
+    let solid = loftOf(outer);
+    for (const w of this.explore(face, this.T.TopAbs_WIRE)) {
+      if (w.IsSame(outer)) continue;
+      solid = this.boolOp('cut', solid, loftOf(oc.TopoDS.Wire(w)), 'Sweep');
+    }
+    return solid;
+  }
+
+  // Wrap sketch regions onto a body face and raise them (height > 0) or
+  // engrave them (height < 0). Flat faces: the regions are placed on the
+  // face. Curved faces: the regions are wrapped around it (see embossCurved),
+  // like a label on a can or a logo on a ball.
+  emboss({ profiles, target, height, mode = 'auto' }) {
+    if (!profiles.length) throw new Error('Select the sketch shapes (e.g. text) to wrap');
+    if (!target) throw new Error('Select the face to wrap them onto');
+    if (Math.abs(height) < 1e-6) throw new Error('Height must not be zero');
+    const targetFace = this.face(target.id, target.face);
+    const info = this.faceInfo(targetFace);
+    const faces = profiles.map((p) => this.profile(p).face);
+    const tool = this.guard('Wrap & Emboss', () => {
+      const r = this.scope();
+      try {
+        if (info.type === 'plane') return this.embossFlat(faces, info, height, r);
+        return this.embossCurved(faces, targetFace, info, height, r);
+      } finally {
+        r.free();
+      }
+    });
+    const op = mode === 'new' ? 'new' : height > 0 ? 'union' : 'subtract';
+    if (op === 'new' && height < 0) throw new Error('Engraving needs the body: choose Automatic');
+    return this.applyTool(tool, op, op === 'new' ? [] : [target.id], 'Wrap & Emboss');
+  }
+
+  embossFlat(faces, info, height, r) {
+    const oc = this.oc;
+    const n = norm(info.normal);
+    const parts = [];
+    for (const face of faces) {
+      const fi = this.faceInfo(face);
+      if (Math.abs(Math.abs(dot(norm(fi.normal), n)) - 1) > 1e-6) throw new Error('For a flat face, draw on the face or a plane parallel to it');
+      // Move the shape onto the face, then raise or sink it.
+      const off = dot(sub(info.center, fi.center), n);
+      const tr = r(new oc.gp_Trsf());
+      tr.SetTranslation(this.vec(r, scale3(n, off)));
+      const placed = r(new oc.BRepBuilderAPI_Transform(face, tr, true)).Shape();
+      const prism = r(new oc.BRepPrimAPI_MakePrism(placed, this.vec(r, scale3(n, height)), false, true)).Shape();
+      parts.push(prism);
+    }
+    return parts;
+  }
+
+  // Wrap onto a curved face. Round faces (cylinders, balls) get their own
+  // surface turned so the shapes sit around the point facing them, and are
+  // rolled on keeping their sizes; other faces (cones, rings, free-form) are
+  // mapped through their own surface, true to size around that point.
+  embossCurved(faces, target, info, height, r) {
+    const oc = this.oc;
+    const eps = Math.min(0.05, Math.abs(height) * 0.1);
+    const raise = height > 0;
+    let mid = [0, 0, 0];
+    for (const f of faces) mid = mid.map((v, i) => v + this.faceInfo(f).center[i] / faces.length);
+    // The point of the face the shapes look at: on the line through their
+    // middle, square to their plane (the nearest one if both ways hit).
+    const tsurf = oc.BRep_Tool.Surface(target);
+    const ns = norm(this.faceInfo(faces[0]).normal);
+    let best = null;
+    for (const t of [0, 1, -1, 3, -3, 10, -10, 30, -30, 100, -100]) {
+      const q = mid.map((v, i) => v + ns[i] * t);
+      const proj = r(new oc.GeomAPI_ProjectPointOnSurf(this.pnt(r, q), tsurf));
+      if (!proj.NbPoints()) continue;
+      const P = r(proj.NearestPoint());
+      const w = sub([P.X(), P.Y(), P.Z()], mid);
+      const off = Math.hypot(...cross(w, ns));
+      const score = off + Math.hypot(...w) * 1e-3 + (dot(w, ns) < 0 ? 1e-6 : 0);
+      if (!best || score < best.score - 1e-9) best = { score, ...proj.LowerDistanceParameters() };
+    }
+    if (!best) throw new Error('The shapes are too far from the face');
+    const { U: u0, V: v0 } = best;
+    const d1 = (srf, u, v) => {
+      const P = r(new oc.gp_Pnt(0, 0, 0));
+      const Su = r(new oc.gp_Vec(0, 0, 0));
+      const Sv = r(new oc.gp_Vec(0, 0, 0));
+      srf.D1(u, v, P, Su, Sv);
+      return { P: [P.X(), P.Y(), P.Z()], Su: [Su.X(), Su.Y(), Su.Z()], Sv: [Sv.X(), Sv.Y(), Sv.Z()] };
+    };
+    const at = d1(tsurf, u0, v0);
+    const P0 = at.P;
+    let nOut = norm(cross(at.Su, at.Sv));
+    if (target.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED) nOut = scale3(nOut, -1);
+    for (const f of faces) {
+      if (Math.abs(dot(norm(this.faceInfo(f).normal), nOut)) < 0.3) throw new Error('Draw the shapes on a plane that faces the curved face');
+    }
+    // Base surface for the shapes, moved slightly into the body (raise) or
+    // out of it (engrave) so the result overlaps the body.
+    const into = raise ? -eps : eps; // along nOut
+    let surf;
+    let map;
+    let offset = 0;
+    // The face's outward direction at a point of `surf`.
+    let outAt;
+    if (info.type === 'cylinder' || info.type === 'sphere') {
+      const ad = r(new oc.BRepAdaptor_Surface(target, true));
+      const round = info.type === 'cylinder' ? r(ad.Cylinder()) : r(ad.Sphere());
+      const R = round.Radius();
+      let C;
+      let axis;
+      if (info.type === 'cylinder') {
+        const pos = r(round.Position());
+        const loc = r(pos.Location());
+        const dir = r(pos.Direction());
+        C = [loc.X(), loc.Y(), loc.Z()];
+        axis = [dir.X(), dir.Y(), dir.Z()];
+      } else {
+        const loc = r(round.Location());
+        C = [loc.X(), loc.Y(), loc.Z()];
+      }
+      const toP = sub(P0, C);
+      let X = axis ? sub(toP, scale3(axis, dot(toP, axis))) : toP;
+      X = norm(X);
+      if (!axis) {
+        // Keep "up" up: the pole of the ball's own surface is sideways.
+        let up = [0, 0, 1];
+        if (Math.abs(dot(up, X)) > 0.9) up = [0, 1, 0];
+        axis = norm(sub(up, scale3(X, dot(up, X))));
+      }
+      const Y = cross(axis, X);
+      // Convex (outside of a can) or concave (inside of a cup).
+      const outward = dot(nOut, X) > 0 ? 1 : -1;
+      const R0 = R + into * outward;
+      const ax3 = r(new oc.gp_Ax3(this.pnt(r, C), this.dir(r, axis), this.dir(r, X)));
+      surf = info.type === 'cylinder' ? new oc.Geom_CylindricalSurface(ax3, R0) : new oc.Geom_SphericalSurface(ax3, R0);
+      map = (P) => {
+        const v = sub(P, C);
+        return info.type === 'cylinder' ? [dot(v, Y) / R, dot(v, axis)] : [dot(v, Y) / R, dot(v, axis) / R];
+      };
+      const kind = info.type;
+      outAt = (P) => {
+        const v = sub(P, C);
+        return scale3(norm(kind === 'cylinder' ? sub(v, scale3(axis, dot(v, axis))) : v), outward);
+      };
+    } else {
+      // Linear around the nearest point: sizes are kept there.
+      surf = tsurf;
+      const { Su, Sv } = at;
+      const a = dot(Su, Su);
+      const b = dot(Su, Sv);
+      const c = dot(Sv, Sv);
+      const det = a * c - b * b;
+      if (Math.abs(det) < 1e-12) throw new Error('The face is too pinched there to wrap onto');
+      map = (P) => {
+        const w = sub(P, P0);
+        const p = dot(Su, w);
+        const q = dot(Sv, w);
+        return [u0 + (c * p - b * q) / det, v0 + (a * q - b * p) / det];
+      };
+      offset = into;
+      const flip = target.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED ? -1 : 1;
+      outAt = (P, d) => scale3(norm(cross(d.Su, d.Sv)), flip);
+    }
+    const bounds = surf.Bounds(0, 0, 0, 0);
+    const inside = ([u, v]) => (surf.IsUPeriodic() || (u >= bounds.U1 - 1e-7 && u <= bounds.U2 + 1e-7)) && (surf.IsVPeriodic() || (v >= bounds.V1 - 1e-7 && v <= bounds.V2 + 1e-7));
+    const parts = [];
+    for (const face of faces) {
+      let base = this.wrapFace(face, surf, map, r, inside);
+      // Normal of the wrapped face, to offset and thicken the right way.
+      const [mu, mv] = map(this.faceInfo(face).center);
+      const wd = d1(surf, mu, mv);
+      let nW = norm(cross(wd.Su, wd.Sv));
+      if (base.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED) nW = scale3(nW, -1);
+      // Compared where this shape sits: text can reach far round a can.
+      const sign = dot(nW, outAt(wd.P, wd)) >= 0 ? 1 : -1;
+      if (offset) {
+        const off = r(new oc.BRepOffsetAPI_MakeOffsetShape());
+        off.PerformBySimple(base, offset * sign);
+        const moved = this.explore(off.Shape(), this.T.TopAbs_FACE)[0];
+        if (!moved) throw new Error('could not wrap the shape');
+        base = oc.TopoDS.Face(moved);
+      }
+      const thick = r(new oc.BRepOffsetAPI_MakeThickSolid());
+      thick.MakeThickSolidBySimple(base, sign * (raise ? height + eps : height - eps));
+      let solid = thick.Shape();
+      // Turned inside out when the face points inwards.
+      const vp = r(new oc.GProp_GProps());
+      oc.BRepGProp.VolumeProperties(solid, vp, false, false, false);
+      if (vp.Mass() < 0) solid = solid.Reversed();
+      parts.push(solid);
+    }
+    return parts;
+  }
+
+  // A planar face rebuilt on `surf`, each curve mapped through `map` (plane
+  // point -> surface (u, v)). Curves are converted to B-splines, whose
+  // control points map exactly under this kind of (affine) map.
+  wrapFace(face, surf, map, r, inside = () => true) {
+    const oc = this.oc;
+    const wrapWire = (wire) => {
+      const list = r(new oc.NCollection_List_TopoDS_Shape());
+      for (const ex of this.explore(wire, this.T.TopAbs_EDGE)) {
+        const edge = oc.TopoDS.Edge(ex);
+        const cv = oc.BRep_Tool.Curve(edge, 0, 0);
+        const trimmed = r(new oc.Geom_TrimmedCurve(cv.returnValue, cv.First, cv.Last, true, true));
+        const bs = oc.GeomConvert.CurveToBSplineCurve(trimmed, oc.Convert_ParameterisationType.Convert_TgtThetaOver2);
+        const np = bs.NbPoles();
+        const nk = bs.NbKnots();
+        const poles = r(new oc.NCollection_Array1_gp_Pnt2d(1, np));
+        const weights = r(new oc.NCollection_Array1_double(1, np));
+        for (let i = 1; i <= np; i++) {
+          const P = r(bs.Pole(i));
+          const [u, v] = map([P.X(), P.Y(), P.Z()]);
+          if (!inside([u, v])) throw new Error('The shapes are bigger than the face they are wrapped onto');
+          poles.SetValue(i, r(new oc.gp_Pnt2d(u, v)));
+          weights.SetValue(i, bs.Weight(i));
+        }
+        const knots = r(new oc.NCollection_Array1_double(1, nk));
+        const mults = r(new oc.NCollection_Array1_int(1, nk));
+        for (let i = 1; i <= nk; i++) {
+          knots.SetValue(i, bs.Knot(i));
+          mults.SetValue(i, bs.Multiplicity(i));
+        }
+        const c2 = bs.IsRational() ? new oc.Geom2d_BSplineCurve(poles, weights, knots, mults, bs.Degree(), bs.IsPeriodic()) : new oc.Geom2d_BSplineCurve(poles, knots, mults, bs.Degree(), bs.IsPeriodic());
+        let ne = r(new oc.BRepBuilderAPI_MakeEdge(c2, surf)).Edge();
+        oc.BRepLib.BuildCurves3d(ne);
+        if (edge.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED) ne = oc.TopoDS.Edge(ne.Reversed());
+        list.Append(ne);
+      }
+      const mw = r(new oc.BRepBuilderAPI_MakeWire());
+      mw.Add(list);
+      if (!mw.IsDone()) throw new Error('could not wrap the shape');
+      return mw.Wire();
+    };
+    const outer = r(oc.BRepTools.OuterWire(face));
+    const mf = r(new oc.BRepBuilderAPI_MakeFace(surf, wrapWire(outer), true));
+    for (const w of this.explore(face, this.T.TopAbs_WIRE)) {
+      if (!w.IsSame(outer)) mf.Add(wrapWire(oc.TopoDS.Wire(w)));
+    }
+    if (!mf.IsDone()) throw new Error('could not wrap the shape');
+    const fix = r(new oc.ShapeFix_Face(mf.Face()));
+    fix.Perform();
+    return fix.Face();
   }
 
   loft({ profiles, mode = 'new', targets = [] }) {
@@ -918,15 +1403,21 @@ export class Kernel {
     return this.result(ids.map((nid, i) => (i === 0 ? { id: nid, replaces: id } : { id: nid, from: id })));
   }
 
-  chamfer({ id, edges, distance }) {
+  // distance2: a different size on the second face (two-distance chamfer).
+  chamfer({ id, edges, distance, distance2 = null }) {
     const oc = this.oc;
     if (!(distance > 0)) throw new Error('Distance must be greater than zero');
+    if (distance2 !== null && !(distance2 > 0)) throw new Error('Distance must be greater than zero');
     const shape = this.solid(id);
     const res = this.guard('Chamfer', () => {
       const r = this.scope();
       try {
         const b = r(new oc.BRepFilletAPI_MakeChamfer(shape));
-        for (const i of edges) b.Add(distance, this.edge(id, i));
+        for (const i of edges) {
+          const edge = this.edge(id, i);
+          if (distance2 === null || Math.abs(distance2 - distance) < 1e-9) b.Add(distance, edge);
+          else b.Add(distance, distance2, edge, this.faceOfEdge(shape, edge));
+        }
         b.Build(r(new oc.Message_ProgressRange()));
         if (!b.IsDone()) throw new Error('distance too large for the selected edges');
         return b.Shape();
@@ -936,6 +1427,16 @@ export class Kernel {
     });
     const ids = this.storeSolids(res);
     return this.result(ids.map((nid, i) => (i === 0 ? { id: nid, replaces: id } : { id: nid, from: id })));
+  }
+
+  // A face of `shape` that has `edge` on its border.
+  faceOfEdge(shape, edge) {
+    const oc = this.oc;
+    for (const ex of this.explore(shape, this.T.TopAbs_FACE)) {
+      const f = oc.TopoDS.Face(ex);
+      for (const e of this.explore(f, this.T.TopAbs_EDGE)) if (e.IsSame(edge)) return f;
+    }
+    throw new Error('Edge not found');
   }
 
   shell({ id, faces, thickness, outward = false }) {
@@ -987,7 +1488,9 @@ export class Kernel {
 
   // Boolean between bodies. `targets` keep their identity; `tools` are
   // consumed unless keepTools is set.
-  boolean({ op, targets, tools = [], keepTools = false }) {
+  // keepTargets: the result is a new body and the originals stay
+  // (Keep originals).
+  boolean({ op, targets, tools = [], keepTools = false, keepTargets = false }) {
     if (op === 'union') {
       const all = [...targets, ...tools];
       if (all.length < 2) throw new Error('Select at least two bodies to combine');
@@ -996,8 +1499,8 @@ export class Kernel {
       for (const id of all.slice(1)) acc = this.boolOp('fuse', acc, this.solid(id), 'Union');
       const ids = this.storeSolids(acc);
       return this.result(
-        ids.map((id, i) => (i === 0 ? { id, replaces: all[0] } : { id, from: all[0] })),
-        all.slice(1),
+        ids.map((id, i) => (i === 0 && !keepTargets ? { id, replaces: all[0] } : { id, from: all[0] })),
+        keepTargets ? [] : all.slice(1),
       );
     }
     if (!targets.length || !tools.length) throw new Error('Select the bodies to keep and the bodies to use as tools');
@@ -1009,8 +1512,8 @@ export class Kernel {
     for (const t of targets) {
       const res = this.boolOp(op === 'subtract' ? 'cut' : 'common', this.solid(t), tool, op === 'subtract' ? 'Subtract' : 'Intersect');
       const ids = this.storeSolids(res);
-      if (!ids.length) removed.push(t);
-      ids.forEach((id, i) => created.push(i === 0 ? { id, replaces: t } : { id, from: t }));
+      if (!ids.length && !keepTargets) removed.push(t);
+      ids.forEach((id, i) => created.push(i === 0 && !keepTargets ? { id, replaces: t } : { id, from: t }));
     }
     return this.result(created, removed);
   }
@@ -1107,21 +1610,46 @@ export class Kernel {
     return this.result(out);
   }
 
-  pattern({ ids, kind = 'linear', count = 3, spacing = 10, direction = [1, 0, 0], axis, angle = 360, union = false }) {
+  // Linear: `count` copies along `direction`, and with `more` (up to two
+  // further [{ direction, count, spacing }]) a grid. Circular: around
+  // `axis`; `keepTurn` moves the copies without turning them.
+  pattern({ ids, kind = 'linear', count = 3, spacing = 10, direction = [1, 0, 0], more = [], axis, angle = 360, union = false, keepTurn = false }) {
     const out = [];
     const n = Math.max(2, Math.floor(count));
+    // Offsets of every copy (linear), as index tuples.
+    const dirs = [{ direction, count: n, spacing }, ...more.filter((d) => d && Math.floor(d.count) >= 2)];
+    let grid = [[]];
+    for (const d of dirs) {
+      const next = [];
+      for (const g of grid) for (let i = 0; i < Math.floor(d.count); i++) next.push([...g, i]);
+      grid = next;
+    }
+    grid = grid.filter((g) => g.some((i) => i));
     for (const id of ids) {
       const copies = [];
-      for (let i = 1; i < n; i++) {
-        let m;
-        if (kind === 'circular') {
-          const full = Math.abs(Math.abs(angle) - 360) < 1e-9;
-          const step = (angle * Math.PI) / 180 / (full ? n : n - 1);
-          m = rotationMatrix(axis.origin, axis.dir, step * i);
-        } else {
-          m = translationMatrix(scale3(norm(direction), spacing * i));
+      if (kind === 'circular') {
+        const full = Math.abs(Math.abs(angle) - 360) < 1e-9;
+        const step = (angle * Math.PI) / 180 / (full ? n : n - 1);
+        const bb = keepTurn ? this.bbox(this.get(id).shape) : null;
+        const c = bb ? bb.min.map((v, i) => (v + bb.max[i]) / 2) : null;
+        for (let i = 1; i < n; i++) {
+          let m = rotationMatrix(axis.origin, axis.dir, step * i);
+          if (c) {
+            // Move the middle point round the circle; keep the direction.
+            const moved = [0, 1, 2].map((k) => m[k] * c[0] + m[4 + k] * c[1] + m[8 + k] * c[2] + m[12 + k]);
+            m = translationMatrix(moved.map((v, k) => v - c[k]));
+          }
+          copies.push(this.transformShape(id, m));
         }
-        copies.push(this.transformShape(id, m));
+      } else {
+        for (const g of grid) {
+          const t = [0, 0, 0];
+          g.forEach((i, k) => {
+            const d = scale3(norm(dirs[k].direction), dirs[k].spacing * i);
+            for (let a = 0; a < 3; a++) t[a] += d[a];
+          });
+          copies.push(this.transformShape(id, translationMatrix(t)));
+        }
       }
       if (union) {
         out.push(...this.unionInto(id, copies));
@@ -1436,6 +1964,158 @@ export class Kernel {
     return { parts: ids.map((id) => ({ id, ...this.tessellateForExport(id, tolerance) })) };
   }
 
+  // Meshes ready for 3D printing: welded into closed surfaces, facing
+  // outwards, with size, volume and a watertightness check for each body.
+  printMeshes({ ids, tolerance = 0.01 }) {
+    const parts = ids.map((id) => {
+      const e = this.get(id);
+      const t = this.tessellateForExport(id, tolerance);
+      let { positions, indices } = mergeVertices(t.positions, t.indices, 1e-5);
+      let stats = meshStats(positions, indices);
+      // A mesh turned inside out prints as nothing; flip it.
+      if (stats.signedVolume < 0) {
+        indices = flipWinding(indices);
+        stats = { ...stats, signedVolume: -stats.signedVolume };
+      }
+      return { id, kind: e.kind, positions, indices, stats };
+    });
+    return { parts };
+  }
+
+  // Flat views for 2D drawings: hidden-line removal per view. Each view is
+  // { name, normal (towards the viewer), xDir }; results are polylines in
+  // the view's 2D coordinates (x right, y up), split into visible and
+  // hidden lines. Mesh bodies are skipped (they have no exact edges).
+  drawingViews({ ids, views }) {
+    const shape = this.drawingShape(ids);
+    try {
+      return { views: views.map((v) => this.guard('2D drawing', () => this.hlrLines(shape, v))) };
+    } finally {
+      if (shape.$owned) shape.delete();
+    }
+  }
+
+  // The solids of `ids` as one shape (a compound that the caller deletes
+  // when $owned is set).
+  drawingShape(ids) {
+    const solids = ids.filter((id) => this.get(id).kind === 'solid').map((id) => this.get(id).shape);
+    if (!solids.length) throw new Error('2D drawings need solid bodies. Convert meshes with Mesh → Solid first.');
+    if (solids.length === 1) return solids[0];
+    const c = this.compound(solids);
+    c.$owned = true;
+    return c;
+  }
+
+  // Hidden-line removal of `shape` seen along view.normal.
+  hlrLines(shape, v) {
+    const oc = this.oc;
+    const r = this.scope();
+    try {
+      const ax = r(new oc.gp_Ax2(this.pnt(r, [0, 0, 0]), this.dir(r, v.normal), this.dir(r, v.xDir)));
+      const algo = r(new oc.HLRBRep_Algo());
+      algo.Add(shape, 0);
+      algo.Projector(r(new oc.HLRAlgo_Projector(ax)));
+      algo.Update();
+      algo.Hide();
+      const hlr = r(new oc.HLRBRep_HLRToShape(algo));
+      const lines = (shapes) => {
+        const polys = [];
+        for (const sh of shapes) {
+          if (!sh || sh.IsNull()) continue;
+          for (const e of this.explore(sh, this.T.TopAbs_EDGE)) {
+            const pl = this.edgePolyline(oc.TopoDS.Edge(e), r);
+            if (pl.length >= 2) polys.push(pl);
+            e.delete();
+          }
+        }
+        return polys;
+      };
+      const visible = lines([r(hlr.VCompound()), r(hlr.OutLineVCompound())]);
+      const hidden = lines([r(hlr.HCompound()), r(hlr.OutLineHCompound())]);
+      return { name: v.name, visible, hidden };
+    } finally {
+      r.free();
+    }
+  }
+
+  // Section view: the bodies cut by the plane through `at` that faces the
+  // viewer (view.normal); the part in front of it is taken away. Returns
+  // the view's lines and the outlines of the cut faces (for hatching), in
+  // the view's 2D coordinates.
+  drawingSection({ ids, view, at }) {
+    const oc = this.oc;
+    const solids = ids.filter((id) => this.get(id).kind === 'solid').map((id) => this.get(id).shape);
+    if (!solids.length) throw new Error('2D drawings need solid bodies. Convert meshes with Mesh → Solid first.');
+    return this.guard('Section view', () => {
+      const r = this.scope();
+      const pieces = [];
+      try {
+        const n = norm(view.normal);
+        const x = norm(view.xDir);
+        const y = cross(n, x);
+        const B = 1e5;
+        const corner = [0, 1, 2].map((i) => at[i] - x[i] * B - y[i] * B - n[i] * B);
+        const ax = r(new oc.gp_Ax2(this.pnt(r, corner), this.dir(r, n), this.dir(r, x)));
+        const box = r(new oc.BRepPrimAPI_MakeBox(ax, 2 * B, 2 * B, B)).Shape();
+        // Each body on its own: overlapping bodies in one compound do not cut.
+        for (const sh of solids) {
+          const op = r(new oc.BRepAlgoAPI_Common(sh, box, r(new oc.Message_ProgressRange())));
+          if (!op.IsDone()) throw new Error('the cut failed');
+          pieces.push(op.Shape());
+        }
+        const all = pieces.length === 1 ? pieces[0] : r(this.compound(pieces));
+        const out = this.hlrLines(all, view);
+        // Faces lying on the cut plane.
+        const cutFaces = [];
+        for (const piece of pieces) {
+          for (const ex of this.explore(piece, this.T.TopAbs_FACE)) {
+            const f = oc.TopoDS.Face(ex);
+            const ad = r(new oc.BRepAdaptor_Surface(f, true));
+            if (ad.GetType() !== oc.GeomAbs_SurfaceType.GeomAbs_Plane) continue;
+            const pl = r(ad.Plane());
+            const d = r(r(pl.Axis()).Direction());
+            const o = r(pl.Location());
+            const nn = [d.X(), d.Y(), d.Z()];
+            if (Math.abs(dot(nn, n)) < 1 - 1e-6 || Math.abs(dot(sub([o.X(), o.Y(), o.Z()], at), n)) > 1e-4) continue;
+            for (const ee of this.explore(f, this.T.TopAbs_EDGE)) {
+              const ad2 = r(new oc.BRepAdaptor_Curve(oc.TopoDS.Edge(ee)));
+              const u0 = ad2.FirstParameter();
+              const u1 = ad2.LastParameter();
+              const k = ad2.GetType() === oc.GeomAbs_CurveType.GeomAbs_Line ? 1 : 48;
+              const pts = [];
+              for (let i = 0; i <= k; i++) {
+                const P = r(ad2.Value(u0 + ((u1 - u0) * i) / k));
+                const p = [P.X(), P.Y(), P.Z()];
+                pts.push([dot(p, x), dot(p, y)]);
+              }
+              cutFaces.push(pts);
+            }
+          }
+        }
+        return { ...out, name: 'section', cut: cutFaces };
+      } finally {
+        for (const p of pieces) p.delete();
+        r.free();
+      }
+    });
+  }
+
+  // Points along an edge (x, y of a projected edge; z is ignored).
+  edgePolyline(edge, r) {
+    const oc = this.oc;
+    const ad = r(new oc.BRepAdaptor_Curve(edge));
+    const u0 = ad.FirstParameter();
+    const u1 = ad.LastParameter();
+    const straight = ad.GetType() === oc.GeomAbs_CurveType.GeomAbs_Line;
+    const n = straight ? 1 : 48;
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+      const P = r(ad.Value(u0 + ((u1 - u0) * i) / n));
+      pts.push([P.X(), P.Y()]);
+    }
+    return pts;
+  }
+
   exportSTEP({ ids }) {
     const oc = this.oc;
     const solids = ids.filter((id) => this.get(id).kind === 'solid');
@@ -1562,6 +2242,65 @@ export function entityExtentPoints(ent) {
     default:
       return [];
   }
+}
+
+// Placements of a sweep's profile along a path (points sampled from the
+// end where the profile is): column-major 4x4 matrices from the profile's
+// own position to each section. Frames follow the path without extra roll
+// (rotation-minimizing, by double reflection); the profile also turns by
+// `twist` degrees and grows to `endScale` along the way.
+export function sweepSections(pts, { twist = 0, endScale = 1, count } = {}) {
+  const n = pts.length;
+  if (n < 2) throw new Error('The path is too short');
+  const s = [0];
+  for (let i = 1; i < n; i++) s.push(s[i - 1] + Math.sqrt(dist2(pts[i], pts[i - 1])));
+  const L = s[n - 1];
+  if (L < 1e-9) throw new Error('The path is too short');
+  const tan = pts.map((p, i) => norm(sub(pts[Math.min(n - 1, i + 1)], pts[Math.max(0, i - 1)])));
+  // Rotation-minimizing frames.
+  const any = Math.abs(tan[0][2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+  const rr = [norm(cross(tan[0], any))];
+  let turning = 0;
+  for (let i = 0; i < n - 1; i++) {
+    const v1 = sub(pts[i + 1], pts[i]);
+    const c1 = dot(v1, v1);
+    if (c1 < 1e-18) {
+      rr.push(rr[i]);
+      continue;
+    }
+    const rL = sub(rr[i], scale3(v1, (2 / c1) * dot(v1, rr[i])));
+    const tL = sub(tan[i], scale3(v1, (2 / c1) * dot(v1, tan[i])));
+    const v2 = sub(tan[i + 1], tL);
+    const c2 = dot(v2, v2);
+    rr.push(norm(c2 < 1e-18 ? rL : sub(rL, scale3(v2, (2 / c2) * dot(v2, rL)))));
+    turning += Math.acos(Math.max(-1, Math.min(1, dot(tan[i], tan[i + 1]))));
+  }
+  const frame = (i) => [tan[i], rr[i], cross(tan[i], rr[i])];
+  const F0 = frame(0);
+  const k = count || Math.max(6, Math.min(48, Math.round(4 + Math.abs(twist) / 15 + (turning * 180) / Math.PI / 12)));
+  const out = [];
+  for (let j = 0; j < k; j++) {
+    const target = (L * j) / (k - 1);
+    let i = 0;
+    while (i < n - 1 && s[i + 1] < target) i++;
+    i = j === k - 1 ? n - 1 : i;
+    const t = s[i] / L;
+    const Fk = frame(i);
+    // R = Fk · F0ᵀ, then twist about the start tangent and scale.
+    const R = [0, 1, 2].map((row) => [0, 1, 2].map((col) => Fk[0][row] * F0[0][col] + Fk[1][row] * F0[1][col] + Fk[2][row] * F0[2][col]));
+    const T = rotationMatrix([0, 0, 0], tan[0], (twist * Math.PI * t) / 180);
+    const sc = 1 + (endScale - 1) * t;
+    const Tw = [
+      [T[0], T[4], T[8]],
+      [T[1], T[5], T[9]],
+      [T[2], T[6], T[10]],
+    ];
+    const A = [0, 1, 2].map((row) => [0, 1, 2].map((col) => sc * (R[row][0] * Tw[0][col] + R[row][1] * Tw[1][col] + R[row][2] * Tw[2][col])));
+    const P0 = pts[0];
+    const tr = [0, 1, 2].map((row) => pts[i][row] - (A[row][0] * P0[0] + A[row][1] * P0[1] + A[row][2] * P0[2]));
+    out.push([A[0][0], A[1][0], A[2][0], 0, A[0][1], A[1][1], A[2][1], 0, A[0][2], A[1][2], A[2][2], 0, tr[0], tr[1], tr[2], 1]);
+  }
+  return out;
 }
 
 export function translationMatrix(t) {
@@ -1811,6 +2550,57 @@ export function meshVolume(p, idx) {
     v += (p[a] * (p[b + 1] * p[c + 2] - p[b + 2] * p[c + 1]) - p[a + 1] * (p[b] * p[c + 2] - p[b + 2] * p[c]) + p[a + 2] * (p[b] * p[c + 1] - p[b + 1] * p[c])) / 6;
   }
   return Math.abs(v);
+}
+
+// Facts about a welded triangle mesh for 3D printing: bounding box, volume
+// and whether it is a closed surface (every edge shared by exactly two
+// triangles, consistently oriented).
+export function meshStats(p, idx) {
+  const nv = p.length / 3;
+  const nt = idx.length / 3;
+  const bbox = meshBBox(p);
+  let vol = 0;
+  for (let i = 0; i < idx.length; i += 3) {
+    const a = idx[i] * 3;
+    const b = idx[i + 1] * 3;
+    const c = idx[i + 2] * 3;
+    vol += (p[a] * (p[b + 1] * p[c + 2] - p[b + 2] * p[c + 1]) - p[a + 1] * (p[b] * p[c + 2] - p[b + 2] * p[c]) + p[a + 2] * (p[b] * p[c + 1] - p[b + 1] * p[c])) / 6;
+  }
+  // Edge keys as numbers (safe while nv² < 2^53).
+  const und = new Float64Array(nt * 3);
+  const dir = new Float64Array(nt * 3);
+  for (let t = 0; t < nt; t++) {
+    for (let k = 0; k < 3; k++) {
+      const a = idx[t * 3 + k];
+      const b = idx[t * 3 + ((k + 1) % 3)];
+      und[t * 3 + k] = a < b ? a * nv + b : b * nv + a;
+      dir[t * 3 + k] = a * nv + b;
+    }
+  }
+  und.sort();
+  dir.sort();
+  let openEdges = 0;
+  let nonManifoldEdges = 0;
+  for (let i = 0; i < und.length; ) {
+    let j = i + 1;
+    while (j < und.length && und[j] === und[i]) j++;
+    const n = j - i;
+    if (n === 1) openEdges++;
+    else if (n > 2) nonManifoldEdges++;
+    i = j;
+  }
+  let flippedEdges = 0;
+  for (let i = 1; i < dir.length; i++) if (dir[i] === dir[i - 1]) flippedEdges++;
+  return {
+    bbox,
+    volume: Math.abs(vol),
+    signedVolume: vol,
+    triangles: nt,
+    openEdges,
+    nonManifoldEdges,
+    flippedEdges,
+    watertight: nt > 0 && openEdges === 0 && nonManifoldEdges === 0 && flippedEdges === 0,
+  };
 }
 
 export function meshArea(p, idx) {

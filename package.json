@@ -1,10 +1,10 @@
 {
   "name": "shaperbuild",
   "productName": "ShaperBuild",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A desktop 3D CAD app for sketching, solid modelling and STL work.",
   "author": "BerdalYe",
-  "license": "UNLICENSED",
+  "license": "GPL-3.0-or-later",
   "private": true,
   "type": "module",
   "main": "electron/main.cjs",
@@ -20,13 +20,16 @@
     "vendor": "node tools/vendor.mjs"
   },
   "dependencies": {
+    "electron-updater": "6.8.9",
     "replicad-opencascadejs": "1.1.0",
     "three": "0.180.0"
   },
   "devDependencies": {
+    "@expo-google-fonts/inter": "0.4.2",
     "electron": "44.5.0",
     "electron-builder": "26.16.1",
     "manifold-3d": "3.5.3",
+    "opentype.js": "2.0.0",
     "playwright": "1.56.1"
   },
   "build": {
@@ -53,6 +56,35 @@
       "!**/*.map"
     ],
     "asar": true,
+    "asarUnpack": [
+      "node_modules/replicad-opencascadejs/dist/replicad_single.*"
+    ],
+    "extraResources": [
+      {
+        "from": "LICENSE",
+        "to": "LICENSE.txt"
+      },
+      {
+        "from": "THIRD_PARTY_NOTICES.md",
+        "to": "THIRD_PARTY_NOTICES.md"
+      },
+      {
+        "from": "PRIVACY.md",
+        "to": "PRIVACY.md"
+      },
+      {
+        "from": "src/licenses",
+        "to": "licenses"
+      }
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "BerdalYe",
+        "repo": "ShaperBuild",
+        "releaseType": "release"
+      }
+    ],
     "fileAssociations": [
       {
         "ext": "shaperbuild",

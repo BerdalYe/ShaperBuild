@@ -19,6 +19,7 @@
       <header class="topbar">
         <div class="tb-group">
           <button id="btn-home" class="tb-btn" title="Home – your designs"></button>
+          <button id="btn-items" class="tb-btn on" title="Show / hide the items list (Tab)"></button>
           <div class="doc-title" id="doc-title" title="Rename design">
             <span id="doc-name">Untitled</span><span id="doc-dirty" class="dirty-dot" hidden></span>
           </div>
@@ -28,6 +29,7 @@
           <button id="btn-redo" class="tb-btn" title="Redo (Ctrl+Y)"></button>
         </div>
         <div class="tb-spacer"></div>
+        <button id="update-pill" class="update-pill" hidden></button>
         <div class="tb-group">
           <div class="seg" id="mode-seg">
             <button data-mode="model" class="on">Modeling</button>
@@ -35,8 +37,10 @@
           </div>
         </div>
         <div class="tb-group">
-          <button id="btn-import" class="tb-btn wide" title="Import STL, OBJ, 3MF or STEP (Ctrl+I)"><span class="ic"></span><span>Import</span></button>
-          <button id="btn-export" class="tb-btn wide primary" title="Export (Ctrl+E)"><span class="ic"></span><span>Export</span></button>
+          <button id="btn-import" class="tb-btn wide" title="Import STL, OBJ, 3MF, STEP or DXF (Ctrl+I)"><span class="ic"></span><span>Import</span></button>
+          <button id="btn-export" class="tb-btn wide" title="Export STL, 3MF, OBJ, STEP or an image"><span class="ic"></span><span>Export</span></button>
+          <button id="btn-print" class="tb-btn wide primary" title="Check your design and save a file for 3D printing (Ctrl+P)"><span class="ic"></span><span>3D Print</span></button>
+          <button id="btn-help" class="tb-btn" title="Help, tutorial and shortcuts"></button>
           <button id="btn-settings" class="tb-btn" title="Settings"></button>
         </div>
       </header>
@@ -46,17 +50,23 @@
           <div id="tool-panel" class="tool-panel" hidden></div>
           <div id="context-bar" class="context-bar" hidden></div>
           <div id="view-controls" class="view-controls"></div>
+          <div id="isolate-bar" class="isolate-bar" hidden><span>Isolated: only the selected items are shown</span><button id="isolate-show-all" class="btn small">Show all</button></div>
+          <div id="tool-hint" class="tool-hint" hidden></div>
+          <div id="starter" class="starter" hidden></div>
           <div id="busy" class="busy" hidden><span class="spinner"></span><span id="busy-text">Working…</span></div>
           <div id="toasts" class="toasts"></div>
           <div id="boot" class="boot"><div class="boot-card"><div class="spinner big"></div><div>Starting the geometry engine…</div></div></div>
         </section>
         <nav id="tools" class="tools-menu"></nav>
+        <aside id="materials" class="materials-panel" hidden></aside>
       </main>
       <footer class="statusbar">
         <div id="status-hint" class="status-hint"></div>
         <div id="status-info" class="status-info"></div>
         <div class="status-right">
-          <button id="btn-snap" class="sb-btn on" title="Snap to grid and geometry (S)">Snap</button>
+          <button id="btn-grid-size" class="sb-btn sb-grid" title="Grid size. Click to lock it at this size (or to let it follow the zoom again)."></button>
+          <select id="filter-select" class="sb-select" title="What a click selects"></select>
+          <span class="sb-split"><button id="btn-snap" class="sb-btn on" title="Snap to grid and geometry (S)">Snap</button><button id="btn-snap-more" class="sb-btn sb-more" title="What to snap to">▾</button></span>
           <select id="unit-select" class="sb-select" title="Units"></select>
         </div>
       </footer>

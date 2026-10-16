@@ -6,6 +6,7 @@ import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { makePickMeshMaterial, fillIdColors } from './pick.js';
 import { makeDotMaterial } from './sketchview.js';
+import { t } from '../core/i18n.js';
 
 export class Overlay {
   constructor(viewport) {
@@ -240,7 +241,8 @@ export class Overlay {
       }
     }
     el.className = `vp-label ${className}`;
-    if (title) el.title = title;
+    if (title) el.title = t(title);
+    text = t(text);
     if (!el.classList.contains('editing') && el.textContent !== text) el.textContent = text;
     this.labels.set(key, { el, world, offset, onClick });
     this.positionLabel(this.labels.get(key));

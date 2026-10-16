@@ -2,7 +2,7 @@
 // sketch to draw on that plane. Points snap to existing geometry, the grid
 // and horizontal/vertical alignments. Start typing to enter exact sizes.
 import { Tool } from './base.js';
-import { add, sub, mul, len, dist, angleOf, polar, normAngle, arcFrom3Points, samePoint, sampleSpline, regularPolygon, TAU, sweep } from '../core/geom2d.js';
+import { add, sub, mul, len, dist, angleOf, polar, normAngle, arcFrom3Points, samePoint, sampleSpline, controlSplinePoints, regularPolygon, TAU, sweep } from '../core/geom2d.js';
 import { planeFrame, to2D, to3D, rayPlane, GROUND, makePlane, samePlane } from '../core/plane.js';
 import { formatLength } from '../core/units.js';
 
@@ -10,7 +10,7 @@ const DEG = Math.PI / 180;
 
 export class SketchTool extends Tool {
   get pickKinds() {
-    return ['spoint', 'curve', 'region', 'face', 'body'];
+    return ['spoint', 'curve', 'region', 'face', 'body', 'plane', 'image'];
   }
 
   get options() {
@@ -74,6 +74,10 @@ export class SketchTool extends Tool {
         const plane = makePlane(info.center, info.normal, info.xDir);
         return { plane, sketchId: app.findSketchOnPlane(plane), hit };
       }
+    }
+    if (hit && (hit.kind === 'plane' || hit.kind === 'image')) {
+      const pl = hit.kind === 'plane' ? app.doc.plane(hit.planeId) : app.doc.image(hit.imageId);
+      if (pl) return { plane: pl.plane, sketchId: app.findSketchOnPlane(pl.plane), hit };
     }
     if (hit && hit.kind === 'body' && hit.normal && hit.point) {
       const plane = makePlane(hit.point, hit.normal);
@@ -304,9 +308,30 @@ export class RectTool extends SketchTool {
         options: [
           { value: 'corner', label: 'Corner' },
           { value: 'center', label: 'Center' },
+          { value: 'three', label: '3 points', title: 'Draw one side, then the height (for a turned rectangle)' },
         ],
       },
     ];
+  }
+
+  // 3 points: one side from a to b, then the height towards p.
+  threeCorners(a, b, p) {
+    const d = sub(b, a);
+    const L = Math.hypot(d[0], d[1]);
+    if (L < 1e-9) return null;
+    const n = [-d[1] / L, d[0] / L];
+    let h = (p[0] - a[0]) * n[0] + (p[1] - a[1]) * n[1];
+    if ('height' in this.locked) h = Math.sign(h || 1) * this.locked.height;
+    return [a, b, add(b, mul(n, h)), add(a, mul(n, h))];
+  }
+
+  // The second point of the first side (the typed width keeps its length).
+  sideEnd(p) {
+    const a = this.pts[0];
+    if (!('width' in this.locked)) return p;
+    const d = sub(p, a);
+    const L = Math.hypot(d[0], d[1]) || 1;
+    return add(a, mul(d, this.locked.width / L));
   }
 
   onOption(key, value) {
@@ -338,6 +363,19 @@ export class RectTool extends SketchTool {
 
   preview(p, e) {
     if (!this.pts.length) return;
+    if (this.mode === 'three') {
+      if (this.pts.length === 1) {
+        const b = this.sideEnd(p);
+        this.rubber([[this.pts[0], b]]);
+        this.dims([{ key: 'width', label: 'W', type: 'length', value: dist(this.pts[0], b) }], e, () => this.click(this.cursor || p));
+      } else {
+        const q = this.threeCorners(this.pts[0], this.pts[1], p);
+        if (!q) return;
+        this.rubber([[...q, q[0]]]);
+        this.dims([{ key: 'height', label: 'H', type: 'length', value: dist(q[1], q[2]) }], e, () => this.place(this.cursor || p));
+      }
+      return;
+    }
     const [c0, c1] = this.corners(p);
     this.rubber([this.outline(c0, c1)]);
     const w = Math.abs(c1[0] - c0[0]);
@@ -355,13 +393,21 @@ export class RectTool extends SketchTool {
   click(p) {
     if (!this.pts.length) {
       this.pts = [p];
-      this.setHint('Click the opposite corner · type width, <kbd>Tab</kbd>, height');
+      this.setHint(this.mode === 'three' ? 'Click the end of the first side · type its length' : 'Click the opposite corner · type width, <kbd>Tab</kbd>, height');
+      return;
+    }
+    if (this.mode === 'three' && this.pts.length === 1) {
+      const b = this.sideEnd(p);
+      if (dist(this.pts[0], b) < 1e-6) return;
+      this.pts.push(b);
+      this.setHint('Click to set the height · type it');
       return;
     }
     this.place(p);
   }
 
   place(p) {
+    if (this.mode === 'three') return this.placeThree(p);
     const [c0, c1] = this.corners(p);
     if (Math.abs(c1[0] - c0[0]) < 1e-6 || Math.abs(c1[1] - c0[1]) < 1e-6) return;
     const o = this.outline(c0, c1);
@@ -375,6 +421,25 @@ export class RectTool extends SketchTool {
     if ('height' in this.locked) cons.push({ type: 'length', e: '#1', value: Math.abs(c1[1] - c0[1]) });
     this.commit(
       o.slice(0, 4).map((a, i) => ({ type: 'line', a, b: o[i + 1] })),
+      'Rectangle',
+      cons,
+    );
+    this.reset();
+  }
+
+  placeThree(p) {
+    if (this.pts.length < 2) return;
+    const q = this.threeCorners(this.pts[0], this.pts[1], p);
+    if (!q || dist(q[1], q[2]) < 1e-6) return;
+    const cons = [
+      { type: 'perpendicular', e: '#0', e2: '#1' },
+      { type: 'parallel', e: '#0', e2: '#2' },
+      { type: 'parallel', e: '#1', e2: '#3' },
+    ];
+    if ('width' in this.locked) cons.push({ type: 'length', e: '#0', value: dist(q[0], q[1]) });
+    if ('height' in this.locked) cons.push({ type: 'length', e: '#1', value: dist(q[1], q[2]) });
+    this.commit(
+      q.map((a, i) => ({ type: 'line', a, b: q[(i + 1) % 4] })),
       'Rectangle',
       cons,
     );
@@ -575,19 +640,55 @@ export class PolygonTool extends SketchTool {
 // ---- Spline --------------------------------------------------------------
 
 export class SplineTool extends SketchTool {
+  get options() {
+    return [
+      {
+        type: 'choice',
+        key: 'kind',
+        label: 'Shape by',
+        value: this.kind,
+        options: [
+          { value: 'fit', label: 'Points on it', title: 'The curve passes through every point you click' },
+          { value: 'control', label: 'Control points', title: 'The points pull the curve like magnets; it starts and ends on the first and last' },
+        ],
+      },
+    ];
+  }
+
+  onOption(key, value) {
+    if (key === 'kind') {
+      this.app.settings.splineKind = value;
+      this.app.saveSettings();
+      this.render?.();
+    } else super.onOption(key, value);
+  }
+
+  get kind() {
+    return this.app.settings.splineKind === 'control' ? 'control' : 'fit';
+  }
+
   continueHint() {
     return 'Click to add points · click the first point to close · <kbd>Enter</kbd> / double-click to finish';
+  }
+
+  curve(pts, closed = false) {
+    return this.kind === 'control' ? controlSplinePoints(pts, closed, 12) : sampleSpline(pts, closed, 12);
   }
 
   preview(p) {
     if (!this.pts.length) return;
     const pts = [...this.pts, p];
-    this.rubber([sampleSpline(pts, false, 12)]);
+    // Control points: also show the polygon that shapes the curve.
+    this.rubber(this.kind === 'control' ? [this.curve(pts), pts] : [this.curve(pts)]);
+  }
+
+  spline(pts, closed) {
+    return { type: 'spline', pts, ...(closed ? { closed: true } : {}), ...(this.kind === 'control' ? { control: true } : {}) };
   }
 
   click(p) {
     if (this.pts.length > 2 && samePoint(p, this.pts[0], 1e-6)) {
-      this.commit([{ type: 'spline', pts: [...this.pts, this.pts[0]], closed: true }], 'Spline');
+      this.commit([this.spline([...this.pts, this.pts[0]], true)], 'Spline');
       this.reset();
       return;
     }
@@ -599,7 +700,7 @@ export class SplineTool extends SketchTool {
   finish() {
     // A double-click adds the same point twice; drop duplicates.
     const pts = this.pts.filter((p, i, a) => i === 0 || !samePoint(p, a[i - 1], 1e-6));
-    if (pts.length >= 2) this.commit([{ type: 'spline', pts }], 'Spline');
+    if (pts.length >= 2) this.commit([this.spline(pts, false)], 'Spline');
     this.reset();
   }
 }

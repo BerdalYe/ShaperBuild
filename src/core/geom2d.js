@@ -83,6 +83,46 @@ export function regularPolygon(c, r, sides, startAngle) {
 }
 
 // Centripetal Catmull-Rom through points (display approximation).
+// A spline shaped by control points (cubic B-spline; the ends of an open
+// one sit on its first and last control points). Matches the kernel's curve.
+export function controlSplinePoints(pts, closed = false, perSpan = 16) {
+  const P = closed && pts.length > 2 && samePoint(pts[0], pts[pts.length - 1]) ? pts.slice(0, -1) : pts;
+  const n = P.length;
+  if (n < 2) return P.slice();
+  const d = Math.min(3, n - 1);
+  let W;
+  let knots;
+  if (closed && n > 2) {
+    W = [...P, ...P.slice(0, d)];
+    knots = Array.from({ length: W.length + d + 1 }, (_, i) => i);
+  } else {
+    W = P;
+    knots = [...Array(d + 1).fill(0)];
+    for (let i = 1; i < n - d; i++) knots.push(i);
+    knots.push(...Array(d + 1).fill(n - d));
+  }
+  const at = (k, t) => {
+    const q = [];
+    for (let j = 0; j <= d; j++) q.push(W[j + k - d].slice());
+    for (let r = 1; r <= d; r++) {
+      for (let j = d; j >= r; j--) {
+        const i = j + k - d;
+        const den = knots[i + d - r + 1] - knots[i];
+        const a = den ? (t - knots[i]) / den : 0;
+        q[j] = [q[j - 1][0] * (1 - a) + q[j][0] * a, q[j - 1][1] * (1 - a) + q[j][1] * a];
+      }
+    }
+    return q[d];
+  };
+  const out = [];
+  for (let k = d; k < W.length; k++) {
+    if (knots[k + 1] <= knots[k]) continue;
+    for (let s = 0; s < perSpan; s++) out.push(at(k, knots[k] + ((knots[k + 1] - knots[k]) * s) / perSpan));
+  }
+  out.push(closed && n > 2 ? out[0] : P[n - 1].slice());
+  return out;
+}
+
 export function sampleSpline(pts, closed = false, perSeg = 16) {
   if (pts.length < 2) return pts.slice();
   const P = closed ? pts.slice(0, samePoint(pts[0], pts[pts.length - 1]) ? -1 : undefined) : pts;
@@ -148,7 +188,8 @@ export function sampleEntity(ent, quality = 64) {
       return out;
     }
     case 'spline':
-      return ent.cache && ent.cache.length ? ent.cache : sampleSpline(ent.pts, ent.closed);
+      if (ent.cache && ent.cache.length) return ent.cache;
+      return ent.control ? controlSplinePoints(ent.pts, ent.closed) : sampleSpline(ent.pts, ent.closed);
     case 'point':
       return [ent.p];
     default:
@@ -297,7 +338,8 @@ export function trimEntity(ent, at, others) {
     const hi = Math.min(1, ...ts.filter((t) => t > tc));
     const keep = [];
     if (lo * L > 1e-6) keep.push({ ...ent, b: lerp(ent.a, ent.b, lo) });
-    if ((1 - hi) * L > 1e-6) keep.push({ ...ent, id: undefined, a: lerp(ent.a, ent.b, hi) });
+    // The new piece remembers the curve it came from (for the design history).
+    if ((1 - hi) * L > 1e-6) keep.push({ ...ent, id: undefined, src: ent.src || ent.id, a: lerp(ent.a, ent.b, hi) });
     return { keep, removed: { type: 'line', a: lerp(ent.a, ent.b, lo), b: lerp(ent.a, ent.b, hi) } };
   }
   if (ent.type === 'circle') {
@@ -330,7 +372,7 @@ export function trimEntity(ent, at, others) {
     const hi = Math.min(s, ...ts.filter((t) => t > tc));
     const keep = [];
     if (lo * ent.r > 1e-6) keep.push({ ...ent, a1: normAngle(ent.a0 + lo) });
-    if ((s - hi) * ent.r > 1e-6) keep.push({ ...ent, id: undefined, a0: normAngle(ent.a0 + hi) });
+    if ((s - hi) * ent.r > 1e-6) keep.push({ ...ent, id: undefined, src: ent.src || ent.id, a0: normAngle(ent.a0 + hi) });
     return { keep, removed: { type: 'arc', c: ent.c, r: ent.r, a0: normAngle(ent.a0 + lo), a1: normAngle(ent.a0 + hi) } };
   }
   // Splines, ellipses and points are removed whole.
@@ -459,6 +501,29 @@ export function translateEntity(ent, d) {
 
 // Offset a closed or open chain of lines/arcs is complex; this offsets single
 // entities (lines sideways, circles/arcs radially).
+// Turn a curve by `angle` radians about point c.
+export function rotateEntity(ent, c, angle) {
+  const cs = Math.cos(angle);
+  const sn = Math.sin(angle);
+  const t = (p) => [c[0] + (p[0] - c[0]) * cs - (p[1] - c[1]) * sn, c[1] + (p[0] - c[0]) * sn + (p[1] - c[1]) * cs];
+  switch (ent.type) {
+    case 'line':
+      return { ...ent, a: t(ent.a), b: t(ent.b) };
+    case 'circle':
+      return { ...ent, c: t(ent.c) };
+    case 'arc':
+      return { ...ent, c: t(ent.c), a0: normAngle(ent.a0 + angle), a1: normAngle(ent.a1 + angle) };
+    case 'ellipse':
+      return { ...ent, c: t(ent.c), rot: (ent.rot || 0) + angle };
+    case 'spline':
+      return { ...ent, cache: null, pts: ent.pts.map(t) };
+    case 'point':
+      return { ...ent, p: t(ent.p) };
+    default:
+      return ent;
+  }
+}
+
 export function offsetEntity(ent, d) {
   if (ent.type === 'line') {
     const v = sub(ent.b, ent.a);

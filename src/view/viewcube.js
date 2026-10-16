@@ -1,15 +1,17 @@
 // Navigation cube drawn with CSS 3D transforms. Click a face, edge or
 // corner to look from that direction.
 import * as THREE from 'three';
+import { t } from '../core/i18n.js';
 
 const HALF = 30;
 const FACES = [
-  { name: 'Top', n: [0, 0, 1], x: [1, 0, 0], y: [0, 1, 0] },
-  { name: 'Bottom', n: [0, 0, -1], x: [1, 0, 0], y: [0, -1, 0] },
-  { name: 'Front', n: [0, -1, 0], x: [1, 0, 0], y: [0, 0, 1] },
-  { name: 'Back', n: [0, 1, 0], x: [-1, 0, 0], y: [0, 0, 1] },
-  { name: 'Right', n: [1, 0, 0], x: [0, 1, 0], y: [0, 0, 1] },
-  { name: 'Left', n: [-1, 0, 0], x: [0, -1, 0], y: [0, 0, 1] },
+  // Short labels of their own: the cube faces are small.
+  { name: 'TOP', n: [0, 0, 1], x: [1, 0, 0], y: [0, 1, 0] },
+  { name: 'BOTTOM', n: [0, 0, -1], x: [1, 0, 0], y: [0, -1, 0] },
+  { name: 'FRONT', n: [0, -1, 0], x: [1, 0, 0], y: [0, 0, 1] },
+  { name: 'BACK', n: [0, 1, 0], x: [-1, 0, 0], y: [0, 0, 1] },
+  { name: 'RIGHT', n: [1, 0, 0], x: [0, 1, 0], y: [0, 0, 1] },
+  { name: 'LEFT', n: [-1, 0, 0], x: [0, -1, 0], y: [0, 0, 1] },
 ];
 
 const V = (a) => new THREE.Vector3(...a);
@@ -61,10 +63,14 @@ export class ViewCube {
     }
     const home = document.createElement('button');
     home.className = 'vc-home';
-    home.title = 'Home view (0)';
+    home.title = t('Home view (0)');
     home.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>';
     home.addEventListener('click', () => this.onPick({ home: true }));
     this.el.appendChild(home);
+    // Double tap on the cube: back to the home view (touch screens).
+    let touched = false;
+    this.el.addEventListener('pointerdown', (e) => (touched = e.pointerType === 'touch'), true);
+    this.el.addEventListener('dblclick', () => touched && this.onPick({ home: true }));
   }
 
   addPart(cls, w, h, n, x, y, pos, label) {
@@ -74,7 +80,7 @@ export class ViewCube {
     el.style.height = `${h}px`;
     el.style.marginLeft = `${-w / 2}px`;
     el.style.marginTop = `${-h / 2}px`;
-    if (label) el.textContent = label.toUpperCase();
+    if (label) el.textContent = t(label).toUpperCase();
     const placement = new THREE.Matrix4().makeBasis(x, y, n).setPosition(pos);
     el.addEventListener('click', (e) => {
       e.stopPropagation();

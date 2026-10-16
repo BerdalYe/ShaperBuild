@@ -2,11 +2,37 @@
 // dimension values, and the list of constraints that fit a selection.
 import { CONSTRAINT_INFO, pointOf, refsAt } from '../core/solver.js';
 import { planeFrame, to3D } from '../core/plane.js';
-import { formatLength, trimNumber, parseLength, parseAngle } from '../core/units.js';
+import { formatLength, trimNumber, parseLength, parseAngle, parseProblem } from '../core/units.js';
+import { linkedText } from '../core/variables.js';
 import { arcMidpoint } from '../core/geom2d.js';
 import { toast } from './overlays.js';
+import { t, localNumber } from '../core/i18n.js';
 
 const lerp2 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+
+// Endpoint pairs that make two lines (or two circles' centres) mirror
+// images across `axis`; picks the pairing that is closest already.
+function symmetricPairs(a, b, axis) {
+  const mirror = (p) => {
+    const d = [axis.b[0] - axis.a[0], axis.b[1] - axis.a[1]];
+    const l2 = d[0] * d[0] + d[1] * d[1] || 1;
+    const t = ((p[0] - axis.a[0]) * d[0] + (p[1] - axis.a[1]) * d[1]) / l2;
+    const f = [axis.a[0] + d[0] * t, axis.a[1] + d[1] * t];
+    return [2 * f[0] - p[0], 2 * f[1] - p[1]];
+  };
+  const gap = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
+  const S = (pa, pb) => ({ type: 'symmetric', p: pa, p2: pb, e: axis.id });
+  if (a.type === 'line' && b.type === 'line') {
+    const straight = gap(mirror(a.a), b.a) + gap(mirror(a.b), b.b);
+    const crossed = gap(mirror(a.a), b.b) + gap(mirror(a.b), b.a);
+    return straight <= crossed
+      ? [S({ e: a.id, p: 'a' }, { e: b.id, p: 'a' }), S({ e: a.id, p: 'b' }, { e: b.id, p: 'b' })]
+      : [S({ e: a.id, p: 'a' }, { e: b.id, p: 'b' }), S({ e: a.id, p: 'b' }, { e: b.id, p: 'a' })];
+  }
+  const round = (e) => e.type === 'circle' || e.type === 'arc';
+  if (round(a) && round(b)) return [S({ e: a.id, p: 'c' }, { e: b.id, p: 'c' }), { type: 'equal', e: a.id, e2: b.id }];
+  return null;
+}
 
 export class ConstraintLayer {
   constructor(app) {
@@ -59,7 +85,7 @@ export class ConstraintLayer {
             className: `${info.dimension ? 'dim-label' : 'cons-glyph'}${sel ? ' selected' : ''}${active.has(sk.id) ? '' : ' faint'}`,
             offset: [place.offset[0] + (info.dimension ? 0 : n * 17), place.offset[1]],
             interactive: true,
-            title: `${info.label}${info.dimension ? ' — click to edit' : ' — click to select, Delete to remove'}`,
+            title: `${t(info.label)} — ${t(info.dimension ? 'click to edit' : 'click to select, Delete to remove')}`,
             onClick: (e) => this.onLabelClick(sk.id, c, e),
           });
         }
@@ -69,17 +95,19 @@ export class ConstraintLayer {
     this.keys = seen;
   }
 
+  // Dimensions linked to a variable start with ƒ.
   dimText(c) {
     const u = this.app.units;
+    const f = c.expr ? 'ƒ ' : '';
     switch (c.type) {
       case 'radius':
-        return `R ${formatLength(c.value, u)}`;
+        return `${f}R ${formatLength(c.value, u)}`;
       case 'diameter':
-        return `⌀ ${formatLength(c.value, u)}`;
+        return `${f}⌀ ${formatLength(c.value, u)}`;
       case 'angle':
-        return `${trimNumber(Math.abs(c.value), 2)}°`;
+        return `${f}${localNumber(trimNumber(Math.abs(c.value), 2))}°`;
       default:
-        return formatLength(c.value, u);
+        return `${f}${formatLength(c.value, u)}`;
     }
   }
 
@@ -152,7 +180,7 @@ export class ConstraintLayer {
     const shown = isAngle ? Math.abs(c.value) : c.value;
     const input = document.createElement('input');
     input.className = 'num-input dim-edit';
-    input.value = isAngle ? trimNumber(shown, 3) : formatLength(shown, this.app.units, { suffix: false, decimals: 4 });
+    input.value = c.expr || (isAngle ? localNumber(trimNumber(shown, 3)) : formatLength(shown, this.app.units, { suffix: false, decimals: 4 }));
     el.textContent = '';
     el.append(input);
     el.classList.add('editing');
@@ -166,8 +194,9 @@ export class ConstraintLayer {
       if (save) {
         let v = isAngle ? parseAngle(input.value) : parseLength(input.value, this.app.units);
         if (isAngle && Number.isFinite(v)) v = Math.sign(c.value || 1) * Math.abs(v);
-        if (!Number.isFinite(v)) toast('Not a valid number', { type: 'error' });
-        else if (Math.abs(v - c.value) > 1e-12) this.app.cmd.setConstraintValue(sketchId, cid, v);
+        const linked = linkedText(input.value, this.app.variables);
+        if (!Number.isFinite(v)) toast(t(parseProblem(input.value, isAngle ? 'angle' : 'length', this.app.units) || 'Not a valid number'), { type: 'error' });
+        else if (Math.abs(v - c.value) > 1e-12 || (c.expr || null) !== linked) this.app.cmd.setConstraintValue(sketchId, cid, v, linked);
       }
       this.overlay.removeLabel(key);
       this.update();
@@ -182,6 +211,30 @@ export class ConstraintLayer {
 
   // Constraints that can be added for the current selection:
   // [{ label, glyph, constraint, sketchId }]
+  // Keyboard shortcut for a constraint ('hv' picks horizontal or vertical,
+  // whichever is closer).
+  shortcut(type) {
+    const opts = this.options();
+    let o = opts.find((x) => x.constraint.type === type);
+    if (type === 'hv') {
+      const h = opts.find((x) => x.constraint.type === 'horizontal');
+      const v = opts.find((x) => x.constraint.type === 'vertical');
+      o = h || v;
+      if (h && v) {
+        const sk = this.app.doc.sketch(h.sketchId);
+        const en = sk?.entities.find((e) => e.id === h.constraint.e);
+        if (en?.type === 'line' && Math.abs(en.b[1] - en.a[1]) > Math.abs(en.b[0] - en.a[0])) o = v;
+      }
+    }
+    if (type === 'fix' && !o) o = opts.find((x) => x.label === 'Unlock');
+    if (type === 'symmetric') o = opts.find((x) => x.constraint?.type === 'symmetric');
+    if (!o) {
+      toast(t('{what} does not fit what is selected', { what: t(type === 'hv' ? 'Horizontal / vertical' : CONSTRAINT_INFO[type]?.label || type) }), { ms: 1600 });
+      return false;
+    }
+    return this.apply(o);
+  }
+
   options() {
     const app = this.app;
     const list = app.selection.list;
@@ -229,8 +282,40 @@ export class ConstraintLayer {
       add('distance', { p: pts[0], p2: pts[1] });
     }
     if (pts.length === 1 && !ents.length) add('fix', { p: pts[0] });
+    // Symmetric: two points and a line, or two lines / two circles and the
+    // line selected last as the mirror line.
+    if (pts.length === 2 && lines.length === 1 && ents.length === 1) add('symmetric', { p: pts[0], p2: pts[1], e: lines[0].id });
+    const axisLine = [...list].reverse().find((it) => it.kind === 'curve' && lines.some((l) => l.id === it.entityId));
+    const axis = axisLine && lines.find((l) => l.id === axisLine.entityId);
+    if (axis && ents.length === 3 && !pts.length) {
+      const pair = ents.filter((e) => e !== axis);
+      const sym = symmetricPairs(pair[0], pair[1], axis);
+      if (sym) out.push({ label: 'Symmetric', glyph: CONSTRAINT_INFO.symmetric.glyph, constraint: sym[0], constraints: sym, sketchId });
+    }
+    const at = pts.length === 1 && !ents.length ? pts[0] : null;
+    const sameRef = (a, b) => a && b && a.e === b.e && a.p === b.p;
+    if (at) {
+      // Unlock a locked point; disconnect the constraints that join curves there.
+      const fixed = (sk.constraints || []).find((c) => c.type === 'fix' && sameRef(c.p, at));
+      if (fixed) out.push({ label: 'Unlock', glyph: '🔓', remove: [fixed.id], sketchId });
+      const where = pointOf(sk.entities, at);
+      const here = where ? refsAt(sk.entities, where) : [];
+      const joins = (sk.constraints || []).filter((c) => ['coincident', 'midpoint', 'onCurve'].includes(c.type) && here.some((r) => sameRef(r, c.p) || sameRef(r, c.p2)));
+      if (here.length > 1 || joins.length) out.push({ label: 'Disconnect', glyph: '⊸', remove: joins.map((c) => c.id), disconnect: true, sketchId });
+    }
     // Do not offer a constraint that already exists.
-    const same = (c, d) => c.type === d.type && c.e === d.e && c.e2 === d.e2 && JSON.stringify(c.p) === JSON.stringify(d.p);
-    return out.filter((o) => !(sk.constraints || []).some((c) => same(c, o.constraint)));
+    const same = (c, d) => c.type === d.type && c.e === d.e && c.e2 === d.e2 && JSON.stringify(c.p) === JSON.stringify(d.p) && JSON.stringify(c.p2) === JSON.stringify(d.p2);
+    return out.filter((o) => !o.constraint || !(sk.constraints || []).some((c) => same(c, o.constraint)));
+  }
+
+  // Use an option from options(): add its constraints or remove some.
+  apply(o) {
+    const app = this.app;
+    if (o.remove) {
+      if (o.remove.length) app.cmd.removeConstraintIds(o.sketchId, o.remove, o.label);
+      if (o.disconnect) toast('Hold Alt and drag the point to pull one curve away from the others', { ms: 3500 });
+      return true;
+    }
+    return app.cmd.addConstraint(o.sketchId, o.constraints || o.constraint);
   }
 }

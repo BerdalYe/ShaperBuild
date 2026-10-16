@@ -6,6 +6,7 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { makePickLineMaterial, makePickPointMaterial, makePickMeshMaterial, idColor, fillIdColors, biasLine } from './pick.js';
 import { sampleEntity, keyPoints, samePoint } from '../core/geom2d.js';
 import { planeFrame, to3D } from '../core/plane.js';
+import { definedEntities } from '../core/solver.js';
 
 const pointVertex = /* glsl */ `
   attribute vec3 color;
@@ -73,6 +74,8 @@ export class SketchView {
 
   // data: { regions, curves } from the kernel (null while computing).
   update(sketch, data) {
+    // Fully defined curves are drawn green (worked out once per change).
+    if (this.sketch?.entities !== sketch.entities || this.sketch?.constraints !== sketch.constraints) this.defined = definedEntities(sketch.entities, sketch.constraints || []);
     this.sketch = sketch;
     this.data = data;
     this.regions = data?.regions || [];
@@ -254,6 +257,15 @@ export class SketchView {
       col.set(dashed ? t.sketchConstruction : h.active ? t.sketchActive : t.sketch);
       for (let i = 0; i < colors.length; i += 3) colors.set([col.r, col.g, col.b], i);
       line.geometry.attributes.instanceColorStart.data.needsUpdate = true;
+    }
+    if (this.defined?.size && this.solidLines) {
+      col.set(t.sketchDefined);
+      const colors = this.solidLines.userData.colors;
+      for (const id of this.defined) {
+        const r = this.entRanges.get(id);
+        if (!r || r.construction) continue;
+        for (let s = r.start * 6; s < (r.start + r.count) * 6; s += 3) colors.set([col.r, col.g, col.b], s);
+      }
     }
     if (h.entities) {
       for (const [id, color] of h.entities) {

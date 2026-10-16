@@ -136,11 +136,16 @@ export function parseOBJ(buffer) {
   return { positions: new Float32Array(verts), indices: new Uint32Array(tris) };
 }
 
-export function writeOBJ(parts, { name = 'ShaperBuild' } = {}) {
+// mtl: name of a material file (see core/exporters.js) giving each body
+// its colour.
+export function writeOBJ(parts, { name = 'ShaperBuild', mtl = null } = {}) {
   const lines = [`# Exported from ${name}`];
+  if (mtl) lines.push(`mtllib ${mtl}`);
   let base = 1;
   parts.forEach((part, pi) => {
-    lines.push(`o ${(part.name || `body_${pi + 1}`).replace(/\s+/g, '_')}`);
+    const id = (part.name || `body_${pi + 1}`).replace(/\s+/g, '_');
+    lines.push(`o ${id}`);
+    if (mtl) lines.push(`usemtl ${id}_mat`);
     const p = part.positions;
     for (let i = 0; i < p.length; i += 3) lines.push(`v ${+p[i].toPrecision(9)} ${+p[i + 1].toPrecision(9)} ${+p[i + 2].toPrecision(9)}`);
     const idx = part.indices;

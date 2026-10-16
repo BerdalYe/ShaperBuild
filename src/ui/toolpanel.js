@@ -1,7 +1,10 @@
 // Floating panel that shows a tool's inputs and options.
 import { h, clear } from './dom.js';
 import { icon } from './icons.js';
-import { parseLength, parseAngle, parseNumber, formatLength, trimNumber, UNITS } from '../core/units.js';
+import { parseLength, parseAngle, parseNumber, parseProblem, formatLength, trimNumber, UNITS } from '../core/units.js';
+import { linkedText } from '../core/variables.js';
+import { nudgeControls } from './numfield.js';
+import { t, localNumber } from '../core/i18n.js';
 
 export class ToolPanel {
   constructor(el, app) {
@@ -18,6 +21,9 @@ export class ToolPanel {
   show(spec) {
     this.spec = spec;
     this.values = {};
+    // Typed text that uses a variable, by field key (kept in the history).
+    this.exprs = {};
+    this.exprValues = {};
     for (const f of spec.fields || []) if ('key' in f && 'value' in f) this.values[f.key] = f.value;
     this.render();
     this.el.hidden = false;
@@ -25,6 +31,7 @@ export class ToolPanel {
 
   hide() {
     this.spec = null;
+    this.exprs = {};
     this.el.hidden = true;
     clear(this.el);
   }
@@ -70,15 +77,17 @@ export class ToolPanel {
     this.values[key] = value;
     const f = this.spec?.fields.find((x) => x.key === key);
     if (f) f.value = value;
+    // A value set another way (dragging an arrow) drops the link.
+    if (this.exprs?.[key] && Math.abs(value - this.exprValues[key]) > 1e-9) delete this.exprs[key];
     const inp = this.inputs.get(key);
-    if (inp && document.activeElement !== inp) inp.value = this.format(f, value);
+    if (inp && document.activeElement !== inp) inp.value = this.exprs?.[key] || this.format(f, value);
   }
 
   format(f, v) {
     if (v === undefined || v === null || Number.isNaN(v)) return '';
     if (f.type === 'length') return formatLength(v, this.units, { suffix: false });
-    if (f.type === 'angle') return trimNumber(v, 2);
-    return String(v);
+    if (f.type === 'angle') return localNumber(trimNumber(v, 2));
+    return localNumber(String(v));
   }
 
   parse(f, text) {
@@ -91,7 +100,7 @@ export class ToolPanel {
     const s = this.spec;
     clear(this.el);
     this.inputs.clear();
-    const head = h('div.tp-head', { html: `${s.icon ? icon(s.icon) : ''}<span class="title">${s.title}</span>` });
+    const head = h('div.tp-head', { html: `${s.icon ? icon(s.icon) : ''}<span class="title">${t(s.title)}</span>` });
     const closeBtn = h('button.tb-btn', { title: 'Cancel (Esc)', html: icon('close') });
     closeBtn.style.height = closeBtn.style.minWidth = '26px';
     closeBtn.addEventListener('click', () => s.onCancel?.());
@@ -106,10 +115,10 @@ export class ToolPanel {
     this.el.append(head, body);
     if (s.onOk || s.buttons) {
       const foot = h('div.tp-foot');
-      for (const b of s.buttons || []) foot.append(h(`button.btn.grow${b.primary ? '.primary' : ''}`, { text: b.label, onClick: b.action }));
+      for (const b of s.buttons || []) foot.append(h(`button.btn.grow${b.primary ? '.primary' : ''}`, { text: b.label, title: b.title, onClick: b.action }));
       if (s.onOk) {
         const cancel = h('button.btn.grow', { text: 'Cancel', onClick: () => s.onCancel?.() });
-        const ok = h('button.btn.primary.grow', { html: `${icon('check')}<span>${s.okLabel || 'Done'}</span>`, onClick: () => s.onOk?.() });
+        const ok = h('button.btn.primary.grow', { html: `${icon('check')}<span>${t(s.okLabel || 'Done')}</span>`, onClick: () => s.onOk?.() });
         ok.querySelector('svg').style.width = '16px';
         ok.dataset.ok = '1';
         if (!this.okEnabled()) ok.disabled = true;
@@ -128,7 +137,7 @@ export class ToolPanel {
     };
     switch (f.type) {
       case 'slot': {
-        const el = h(`div.slot${f.active ? '.active' : ''}${f.count ? '.filled' : ''}`, h('span.dot'), h('span', { text: f.count ? f.summary || `${f.count} selected` : f.placeholder || f.label }));
+        const el = h(`div.slot${f.active ? '.active' : ''}${f.count ? '.filled' : ''}`, h('span.dot'), h('span', { text: f.count ? f.summary || t('{n} selected', { n: f.count }) : f.placeholder || f.label }));
         if (f.count && f.onClear) {
           const x = h('button.clear', { title: 'Clear', html: '&times;' });
           x.addEventListener('click', (e) => {
@@ -144,7 +153,7 @@ export class ToolPanel {
       case 'angle':
       case 'count':
       case 'number': {
-        const inp = h('input.num-input', { type: 'text', spellcheck: false, value: this.format(f, f.value) });
+        const inp = h('input.num-input', { type: 'text', spellcheck: false, value: this.exprs[f.key] || this.format(f, f.value) });
         inp.dataset.key = f.key;
         this.inputs.set(f.key, inp);
         let timer = 0;
@@ -152,8 +161,15 @@ export class ToolPanel {
           const v = this.parse(f, inp.value);
           const ok = Number.isFinite(v) && (f.min === undefined || v >= f.min) && (f.max === undefined || v <= f.max) && (f.type !== 'count' || Number.isInteger(v));
           inp.classList.toggle('bad', !ok && inp.value.trim() !== '');
-          if (ok && v !== f.value) change(v);
-          if (final && ok) inp.value = this.format(f, v);
+          inp.title = ok || !inp.value.trim() ? '' : t(parseProblem(inp.value, f.type, this.units) || '');
+          if (!ok) return;
+          const linked = linkedText(inp.value, this.app.variables);
+          if (linked) {
+            this.exprs[f.key] = linked;
+            this.exprValues[f.key] = v;
+          } else delete this.exprs[f.key];
+          if (v !== f.value) change(v);
+          if (final) inp.value = linked || this.format(f, v);
         };
         inp.addEventListener('input', () => {
           clearTimeout(timer);
@@ -171,27 +187,35 @@ export class ToolPanel {
             s.onCancel?.();
           } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
             e.preventDefault();
-            const cur = this.parse(f, inp.value);
-            if (!Number.isFinite(cur)) return;
             const step = (f.type === 'length' ? UNITS[this.units].factor : 1) * (e.shiftKey ? 10 : e.altKey ? 0.1 : 1) * (f.step || 1);
-            let v = cur + (e.key === 'ArrowUp' ? step : -step);
-            if (f.min !== undefined) v = Math.max(f.min, v);
-            if (f.max !== undefined) v = Math.min(f.max, v);
-            inp.value = this.format(f, v);
-            change(v);
+            nudge(e.key === 'ArrowUp' ? step : -step);
           }
         });
         inp.addEventListener('blur', () => commit(true));
         inp.addEventListener('focus', () => inp.select());
         const unit = f.type === 'length' ? this.units : f.type === 'angle' ? '°' : '';
-        const wrap = h('div.ctrl', { style: { position: 'relative' } }, inp);
-        if (unit) wrap.append(h('span', { text: unit, style: { position: 'absolute', right: '8px', top: '5px', color: 'var(--muted)', fontSize: '12px', pointerEvents: 'none' } }));
-        return h('div.tp-field', h('label', { text: f.label }), wrap);
+        const box = h('div.nf-box', { style: { position: 'relative' } }, inp);
+        if (unit) box.append(h('span', { text: unit, style: { position: 'absolute', right: '8px', top: '5px', color: 'var(--muted)', fontSize: '12px', pointerEvents: 'none' } }));
+        const label = h('label', { text: f.label, title: f.hint });
+        const base = (f.type === 'length' ? UNITS[this.units].factor : 1) * (f.step || 1);
+        const nudge = (delta) => {
+          const cur = Number.isFinite(f.value) ? f.value : this.parse(f, inp.value);
+          if (!Number.isFinite(cur)) return;
+          let v = f.type === 'count' ? Math.round(cur + Math.sign(delta) * Math.max(1, Math.round(Math.abs(delta)))) : +(cur + delta).toFixed(9);
+          if (f.min !== undefined) v = Math.max(f.min, v);
+          if (f.max !== undefined) v = Math.min(f.max, v);
+          delete this.exprs[f.key];
+          inp.value = this.format(f, v);
+          inp.classList.remove('bad');
+          if (v !== f.value) change(v);
+        };
+        const wrap = h('div.ctrl.nf', box, nudgeControls(label, base, nudge));
+        return h('div.tp-field', label, wrap);
       }
       case 'choice': {
         const chips = h('div.chips');
         for (const o of f.options) {
-          const b = h(`button.chip${o.value === f.value ? '.on' : ''}`, { html: `${o.icon ? icon(o.icon) : ''}${o.label}`, title: o.title || '' });
+          const b = h(`button.chip${o.value === f.value ? '.on' : ''}`, { html: `${o.icon ? icon(o.icon) : ''}${t(o.label)}`, title: o.title || '' });
           const svg = b.querySelector('svg');
           if (svg) {
             svg.style.width = '14px';
@@ -217,6 +241,23 @@ export class ToolPanel {
         for (const o of f.options) sel.append(h('option', { value: o.value, text: o.label, selected: o.value === f.value }));
         sel.addEventListener('change', () => change(sel.value));
         return h('div.tp-field', h('label', { text: f.label }), h('div.ctrl', sel));
+      }
+      case 'text': {
+        const inp = h('textarea.tp-text', { rows: 2, spellcheck: false, placeholder: f.placeholder || '' });
+        inp.value = f.value || '';
+        inp.dataset.key = f.key;
+        this.inputs.set(f.key, inp);
+        inp.addEventListener('input', () => change(inp.value));
+        inp.addEventListener('keydown', (e) => {
+          e.stopPropagation();
+          if (e.key === 'Escape') inp.blur();
+          // Enter places/applies; Shift+Enter starts a new line.
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            f.onEnter?.();
+          }
+        });
+        return h('div.tp-field.tp-field-text', h('label', { text: f.label }), h('div.ctrl', inp));
       }
       case 'info':
         return h('div.tp-hint', { html: f.text });

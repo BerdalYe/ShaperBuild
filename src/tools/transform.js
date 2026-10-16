@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { OpTool } from './optool.js';
 import { toast } from '../ui/overlays.js';
+import { t, tn } from '../core/i18n.js';
 
 const DEG = Math.PI / 180;
 
@@ -12,14 +13,14 @@ export class TransformTool extends OpTool {
       {
         key: 'items',
         label: 'Objects',
-        kinds: ['body', 'sketch', 'region', 'curve'],
+        kinds: ['body', 'sketch', 'region', 'curve', 'plane', 'image'],
         multiple: true,
-        placeholder: 'Click bodies or sketches',
+        placeholder: 'Click bodies, sketches, planes or images',
         accept: (it) => {
           if (it.kind === 'region' || it.kind === 'curve') return { kind: 'sketch', sketchId: it.sketchId };
           return it;
         },
-        summary: (items) => `${items.length} object${items.length === 1 ? '' : 's'}`,
+        summary: (items) => tn(items.length, '1 object', '{n} objects'),
       },
     ];
   }
@@ -78,7 +79,7 @@ export class TransformTool extends OpTool {
   }
 
   get pickKinds() {
-    return ['face', 'body', 'region', 'curve'];
+    return ['face', 'body', 'region', 'curve', 'plane', 'image'];
   }
 
   onPointerDown(e) {
@@ -159,7 +160,7 @@ export class TransformTool extends OpTool {
     const vp = this.app.vp;
     this.moved = [];
     for (const it of this.items('items')) {
-      const view = it.kind === 'body' ? vp.bodyViews.get(it.bodyId) : vp.sketchViews.get(it.sketchId);
+      const view = it.kind === 'body' ? vp.bodyViews.get(it.bodyId) : it.kind === 'plane' ? vp.planeViews.get(it.planeId) : it.kind === 'image' ? vp.imageViews.get(it.imageId) : vp.sketchViews.get(it.sketchId);
       if (!view) continue;
       for (const g of [view.group, view.pickGroup]) {
         g.matrixAutoUpdate = false;
@@ -193,7 +194,7 @@ export class TransformTool extends OpTool {
   }
 
   async apply() {
-    if (!this.ready()) return toast('Select bodies or sketches to move', { type: 'error' });
+    if (!this.ready()) return toast('Select bodies, sketches, planes or images to move', { type: 'error' });
     const m = this.matrix();
     if (m.equals(new THREE.Matrix4())) return this.done();
     const app = this.app;
@@ -203,7 +204,10 @@ export class TransformTool extends OpTool {
     if (bodies.length) {
       try {
         app.busy(true, 'Moving…');
-        result = await app.kernel.call('transform', { ids: bodies.map((b) => app.doc.body(b.bodyId).shapeId), matrix: m.elements, copy: !!this.values.copy });
+        const v = this.values;
+        // The values themselves too, so the step can be changed in History.
+        const move = { t: [v.x || 0, v.y || 0, v.z || 0], r: [v.rx || 0, v.ry || 0, v.rz || 0], pivot: this.pivot.toArray() };
+        result = await app.kernel.call('transform', { ids: bodies.map((b) => app.doc.body(b.bodyId).shapeId), matrix: m.elements, copy: !!this.values.copy, move });
       } catch (err) {
         toast(err.message, { type: 'error' });
         return;
@@ -212,8 +216,11 @@ export class TransformTool extends OpTool {
       }
     }
     this.restoreViews();
-    app.cmd.applyResult(this.values.copy ? 'Copy' : 'Move', result, {
-      sketches: sketches.map((s) => ({ id: s.sketchId, matrix: m.elements, copy: !!this.values.copy })),
+    const copy = !!this.values.copy;
+    app.cmd.applyResult(copy ? 'Copy' : 'Move', result, {
+      sketches: sketches.map((s) => ({ id: s.sketchId, matrix: m.elements, copy })),
+      planes: this.items('items').filter((it) => it.kind === 'plane').map((it) => ({ id: it.planeId, matrix: m.elements, copy })),
+      images: this.items('items').filter((it) => it.kind === 'image').map((it) => ({ id: it.imageId, matrix: m.elements, copy })),
     });
     this.done();
   }

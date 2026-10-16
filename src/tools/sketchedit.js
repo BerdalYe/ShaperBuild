@@ -1,9 +1,10 @@
 // Sketch editing: trim, offset and construction toggling.
 import { Tool } from './base.js';
 import { OpTool } from './optool.js';
-import { trimEntity, sampleEntity, offsetEntity, lineLoop, offsetPolygon } from '../core/geom2d.js';
+import { trimEntity, sampleEntity, offsetEntity, lineLoop, offsetPolygon, translateEntity, rotateEntity } from '../core/geom2d.js';
 import { planeFrame, to2D, to3D, rayPlane, makePlane, GROUND } from '../core/plane.js';
 import { toast } from '../ui/overlays.js';
+import { t, tn } from '../core/i18n.js';
 
 export class TrimTool extends Tool {
   get pickKinds() {
@@ -170,6 +171,201 @@ export class OffsetTool extends Tool {
   }
 }
 
+// Pattern for sketch curves: copies in a row (one or two directions) or
+// around a point. The copies are ordinary curves in the same sketch.
+export class SketchPatternTool extends Tool {
+  get pickKinds() {
+    return ['curve', 'spoint'];
+  }
+
+  activate() {
+    const s = this.app.settings.sketchPattern || {};
+    this.values = { kind: 'linear', count: 3, mode: 'spacing', distance: 20, angle: 0, count2: 1, distance2: 20, total: 360, rotate: true, ...s };
+    this.center = null;
+    this.items = this.app.selection.ofKind('curve');
+    this.render();
+    this.update();
+    this.setHint('Click curves to repeat · for a circular pattern, click a point to turn around');
+  }
+
+  deactivate() {
+    this.app.vp.overlay.clear('tool');
+  }
+
+  render() {
+    const v = this.values;
+    const fields = [
+      { type: 'slot', key: 'curves', label: 'Curves', count: this.items.length, active: true, placeholder: 'Click curves', onClear: () => ((this.items = []), this.render(), this.update()) },
+      {
+        type: 'choice',
+        key: 'kind',
+        label: 'Type',
+        value: v.kind,
+        options: [
+          { value: 'linear', label: 'Linear', icon: 'patternLinear' },
+          { value: 'circular', label: 'Circular', icon: 'patternCircular' },
+        ],
+      },
+      { type: 'count', key: 'count', label: 'Count', value: v.count, min: 2, max: 200 },
+    ];
+    if (v.kind === 'linear') {
+      fields.push(
+        {
+          type: 'choice',
+          key: 'mode',
+          label: 'Distance is',
+          value: v.mode,
+          options: [
+            { value: 'spacing', label: 'Between copies' },
+            { value: 'total', label: 'Total' },
+          ],
+        },
+        { type: 'length', key: 'distance', label: 'Distance', value: v.distance },
+        { type: 'angle', key: 'angle', label: 'Direction', value: v.angle },
+        { type: 'count', key: 'count2', label: 'Rows (second direction)', value: v.count2, min: 1, max: 200 },
+      );
+      if (v.count2 > 1) fields.push({ type: 'length', key: 'distance2', label: 'Row distance', value: v.distance2 });
+    } else {
+      fields.push(
+        {
+          type: 'choice',
+          key: 'mode',
+          label: 'Angle is',
+          value: v.mode,
+          options: [
+            { value: 'total', label: 'Total' },
+            { value: 'spacing', label: 'Between copies' },
+          ],
+        },
+        { type: 'angle', key: 'total', label: 'Angle', value: v.total },
+        { type: 'toggle', key: 'rotate', label: 'Turn the copies (off: they keep their direction)', value: v.rotate },
+        { type: 'info', text: this.center ? t('Turning around the point you clicked') : t('Turning around the sketch origin — click a point to change it') },
+      );
+    }
+    this.app.panel.show({
+      title: 'Sketch pattern',
+      icon: v.kind === 'circular' ? 'patternCircular' : 'patternLinear',
+      fields,
+      onChange: (k, val) => {
+        this.values[k] = val;
+        this.app.settings.sketchPattern = { ...this.values };
+        if (k === 'kind' || k === 'count2') this.render();
+        this.update();
+      },
+      onOk: () => this.apply(),
+      onCancel: () => this.done(),
+      okEnabled: this.items.length > 0,
+    });
+  }
+
+  highlights() {
+    return this.items.map((item) => ({ item, color: this.app.vp.theme.select }));
+  }
+
+  onPointerMove(e) {
+    this.app.selection.setHover(e.pick(this.pickKinds));
+  }
+
+  onPointerDown(e) {
+    const hit = e.pick(this.pickKinds);
+    if (!hit) return;
+    if (hit.kind === 'spoint') {
+      this.center = { sketchId: hit.sketchId, p: hit.point };
+      if (this.values.kind !== 'circular') this.values.kind = 'circular';
+    } else {
+      const key = `${hit.sketchId}/${hit.entityId}`;
+      const i = this.items.findIndex((it) => `${it.sketchId}/${it.entityId}` === key);
+      if (i >= 0) this.items.splice(i, 1);
+      else this.items.push({ kind: 'curve', sketchId: hit.sketchId, entityId: hit.entityId });
+    }
+    this.render();
+    this.update();
+    this.app.refreshHighlights();
+  }
+
+  // The copies, per sketch: [{ sk, created }].
+  results() {
+    const v = this.values;
+    const bySketch = new Map();
+    for (const it of this.items) {
+      const sk = this.app.doc.sketch(it.sketchId);
+      const en = sk?.entities.find((x) => x.id === it.entityId);
+      if (!en) continue;
+      if (!bySketch.has(sk.id)) bySketch.set(sk.id, { sk, ents: [] });
+      bySketch.get(sk.id).ents.push(en);
+    }
+    const n = Math.max(2, Math.round(v.count || 2));
+    const out = [];
+    for (const { sk, ents } of bySketch.values()) {
+      const created = [];
+      const strip = ({ id, ...rest }) => rest;
+      if (v.kind === 'linear') {
+        const a = ((v.angle || 0) * Math.PI) / 180;
+        const step = v.mode === 'total' ? (v.distance || 0) / (n - 1) : v.distance || 0;
+        const d1 = [Math.cos(a) * step, Math.sin(a) * step];
+        const rows = Math.max(1, Math.round(v.count2 || 1));
+        const d2 = [-Math.sin(a) * (v.distance2 || 0), Math.cos(a) * (v.distance2 || 0)];
+        for (let j = 0; j < rows; j++) {
+          for (let i = 0; i < n; i++) {
+            if (!i && !j) continue;
+            const d = [d1[0] * i + d2[0] * j, d1[1] * i + d2[1] * j];
+            for (const en of ents) created.push(strip(translateEntity(en, d)));
+          }
+        }
+      } else {
+        const c = this.center && this.center.sketchId === sk.id ? this.center.p : [0, 0];
+        const total = ((v.total || 360) * Math.PI) / 180;
+        const full = Math.abs(Math.abs(v.total || 360) - 360) < 1e-9;
+        const step = v.mode === 'spacing' ? total : full ? total / n : total / (n - 1);
+        for (let i = 1; i < n; i++) {
+          for (const en of ents) {
+            if (v.rotate !== false) created.push(strip(rotateEntity(en, c, step * i)));
+            else {
+              // Keep the direction: move the curve with its middle point.
+              const pts = sampleEntity(en, 8);
+              const mid = pts.reduce((m, p) => [m[0] + p[0] / pts.length, m[1] + p[1] / pts.length], [0, 0]);
+              const moved = rotateEntity({ type: 'point', p: mid }, c, step * i).p;
+              created.push(strip(translateEntity(en, [moved[0] - mid[0], moved[1] - mid[1]])));
+            }
+          }
+        }
+      }
+      out.push({ sk, created });
+    }
+    return out;
+  }
+
+  update() {
+    const ov = this.app.vp.overlay;
+    ov.remove('tool-pattern');
+    const lines = [];
+    for (const { sk, created } of this.results()) {
+      const f = planeFrame(sk.plane);
+      for (const en of created) lines.push(sampleEntity(en, 48).map((p) => to3D(f, p)));
+    }
+    if (lines.length) ov.lines('tool-pattern', lines, { color: this.app.vp.theme.preview, width: 2, dashed: true });
+  }
+
+  apply() {
+    const res = this.results();
+    if (!res.length) return toast('Select curves to repeat', { type: 'error' });
+    for (const { sk, created } of res) this.app.cmd.setSketchEntities(sk.id, [...sk.entities, ...created], 'Sketch pattern');
+    this.done();
+  }
+
+  onKeyDown(e) {
+    if (e.key === 'Escape') {
+      this.done();
+      return true;
+    }
+    if (e.key === 'Enter') {
+      this.apply();
+      return true;
+    }
+    return false;
+  }
+}
+
 // Toggle construction on the selected curves (an instant action).
 export function toggleConstruction(app) {
   const curves = app.selection.ofKind('curve');
@@ -196,7 +392,7 @@ export function toggleConstruction(app) {
 export class ProjectTool extends OpTool {
   inputs() {
     return [
-      { key: 'edges', label: 'Edges', kinds: ['edge'], multiple: true, placeholder: 'Click body edges', summary: (items) => `${items.length} edge${items.length === 1 ? '' : 's'}` },
+      { key: 'edges', label: 'Edges', kinds: ['edge'], multiple: true, placeholder: 'Click body edges', summary: (items) => tn(items.length, '1 edge', '{n} edges') },
       {
         key: 'onto',
         label: 'Onto',

@@ -184,6 +184,16 @@ export class OpTool extends Tool {
       this.apply();
       return true;
     }
+    // Typing a number goes straight into the first value field.
+    if (/^[0-9.,-]$/.test(e.key) && !e.ctrl && !e.alt) {
+      const inp = this.app.panel.el.querySelector('.num-input');
+      if (inp) {
+        inp.focus();
+        inp.value = e.key;
+        inp.dispatchEvent(new Event('input'));
+        return true;
+      }
+    }
     return false;
   }
 

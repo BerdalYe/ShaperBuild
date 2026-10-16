@@ -123,7 +123,8 @@ export class Grid {
   update(rig, viewportHeight, unitFactor = 1) {
     const size = Math.max(rig.dist, 1) * 12;
     const px = rig.pixelSize(rig.target, viewportHeight);
-    this.step = niceStep((px * 14) / unitFactor) * unitFactor;
+    // A locked grid keeps its size at every zoom.
+    this.step = this.locked > 0 ? this.locked : niceStep((px * 14) / unitFactor) * unitFactor;
     const u = this.material.uniforms;
     u.uStep.value = this.step;
     u.uFade.value = Math.max(rig.dist, 1) * 3.2;

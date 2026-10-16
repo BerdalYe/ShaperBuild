@@ -12,23 +12,44 @@ import { ItemsPanel } from './ui/items.js';
 import { ToolsMenu } from './ui/toolsmenu.js';
 import { ContextBar } from './ui/contextbar.js';
 import { Commands } from './commands.js';
+import { HistoryEngine } from './history.js';
 import { FileOps } from './fileops.js';
 import { Dialogs } from './ui/dialogs.js';
 import { Home } from './ui/home.js';
 import { ConstraintLayer } from './ui/constraints.js';
-import { toast, showMenu } from './ui/overlays.js';
+import { ViewControls, NavHelp } from './ui/viewcontrols.js';
+import { StarterCard, ToolHint } from './ui/starter.js';
+import { Tutorial } from './ui/tutorial.js';
+import { PrintDialog } from './ui/printdialog.js';
+import { Updates } from './ui/updates.js';
+import { DrawingDialog } from './ui/drawingdialog.js';
+import { MaterialsPanel } from './ui/materials.js';
+import { toast, showMenu, hideTooltip, modal } from './ui/overlays.js';
 import { icon } from './ui/icons.js';
-import { isTyping } from './ui/dom.js';
-import { TOOL_KEYS } from './tools/registry.js';
-import { UNITS, formatLength, formatArea, formatVolume, niceStep } from './core/units.js';
+import { h, isTyping, modKey, escapeHtml, translateStatic } from './ui/dom.js';
+import { t, language, setLanguage } from './core/i18n.js';
+import { Welcome } from './ui/welcome.js';
+import { buildKeymap, comboOf } from './core/keymap.js';
+import { UNITS, formatLength, formatArea, formatVolume, formatAngle, niceStep, setVariables } from './core/units.js';
+import { variableValues } from './core/variables.js';
 import { planeFrame, to3D, to2D, samePlane } from './core/plane.js';
-import { keyPoints, closestOnEntity, dist } from './core/geom2d.js';
+import { keyPoints, closestOnEntity, dist, intersect, sampleEntity } from './core/geom2d.js';
 
 const SETTINGS_KEY = 'shaperbuild.settings.v1';
+// What a click selects (status bar; Tab cycles in the alternative keys).
+const SELECT_FILTERS = [
+  ['all', 'Select all items'],
+  ['bodies', 'Bodies only'],
+  ['faces', 'Faces only'],
+  ['edges', 'Edges only'],
+];
 const DEFAULT_SETTINGS = {
   theme: 'dark',
   units: 'mm',
   snap: true,
+  // What snapping uses (the menu next to the Snap button).
+  snapTo: { end: true, mid: true, center: true, intersection: true, vertex: true, grid: true, guides: true, curve: true, hints: true },
+  gridLock: null,
   additiveSelect: true,
   selectFilter: 'all',
   scrollMode: 'auto',
@@ -38,6 +59,10 @@ const DEFAULT_SETTINGS = {
   stlQuality: 'fine',
   stlBinary: true,
   autoLookAt: false,
+  autoUpdate: true,
+  toolLabels: true,
+  // Keyboard shortcuts: a ready-made set plus the keys people changed.
+  keymap: { preset: 'shaperbuild', keys: {} },
 };
 
 export class App {
@@ -51,6 +76,8 @@ export class App {
     this.previewHidden = [];
 
     document.body.className = `theme-${this.settings.theme}`;
+    setLanguage(language());
+    translateStatic(document.getElementById('app'));
     this.kernel = new KernelClient();
     this.doc = new Document();
     this.selection = new Selection();
@@ -58,8 +85,9 @@ export class App {
     this.applyViewSettings();
     this.panel = new ToolPanel(document.getElementById('tool-panel'), this);
     this.dim = new DimInput(document.getElementById('viewport'), this);
-    this.status = new Status();
+    this.status = new Status(this);
     this.cmd = new Commands(this);
+    this.history = new HistoryEngine(this);
     this.files = new FileOps(this);
     this.dialogs = new Dialogs(this);
     this.tools = new ToolManager(this);
@@ -69,6 +97,14 @@ export class App {
     this.home = new Home(document.getElementById('home'), this);
     this.constraints = new ConstraintLayer(this);
     this.tools.on('change', () => this.constraints.update());
+    this.navHelp = new NavHelp(this);
+    this.tutorial = new Tutorial(this);
+    this.print = new PrintDialog(this);
+    this.updates = new Updates(this);
+    this.drawing = new DrawingDialog(this);
+    this.materials = new MaterialsPanel(document.getElementById('materials'), this);
+    this.starter = new StarterCard(document.getElementById('starter'), this);
+    this.welcome = new Welcome(this);
 
     this.doc.on('change', (ev) => this.onDocChange(ev));
     this.doc.on('saved', () => this.updateTitle());
@@ -86,7 +122,7 @@ export class App {
     try {
       await this.kernel.ready;
     } catch (err) {
-      document.querySelector('#boot .boot-card').innerHTML = `<div style="color:var(--danger)">The geometry engine failed to start.</div><div>${err.message}</div>`;
+      document.querySelector('#boot .boot-card').innerHTML = `<div style="color:var(--danger)">${t('The geometry engine failed to start.')}</div><div>${escapeHtml(t(err.message))}</div>`;
       return;
     }
     document.getElementById('boot').hidden = true;
@@ -94,6 +130,10 @@ export class App {
       window.native.onMenu((cmd, arg) => this.onMenu(cmd, arg));
       window.native.onOpenPath((p) => this.files.openPath(p));
     }
+    // First start: choose the language (reloads if it changes).
+    const info = await window.native?.info().catch(() => null);
+    if (!this.settings.language && !info?.noTutorial) await this.welcome.chooseLanguage();
+    else window.native?.setLanguage?.(language());
     // Decide on recovery and the home screen before reporting ready, so the
     // home screen never pops up over work that has already started.
     const recovered = await this.files.offerRecovery().catch(() => false);
@@ -101,10 +141,27 @@ export class App {
     this.ready = true;
     window.native?.ready();
     this.files.startAutosave();
+    this.starter.update();
+    this.updates.start();
+    // First launch: offer the interactive tutorial.
+    if (!recovered && !this.tutorial.seen && !info?.noTutorial) this.tutorial.offer();
   }
 
   get units() {
     return this.doc.state.units || 'mm';
+  }
+
+  // The language applies when the window starts (see restartWindow).
+  setLanguageSetting(id) {
+    this.settings.language = id;
+    this.saveSettings();
+    window.native?.setLanguage?.(id);
+  }
+
+  // Reload the window, keeping the open design as it is.
+  async restartWindow() {
+    await this.files.autosave({ keep: true });
+    location.reload();
   }
 
   saveSettings() {
@@ -119,16 +176,37 @@ export class App {
     this.vp.setShowEdges(s.showEdges);
     const mac = (window.native?.platform || navigator.platform || '').toLowerCase().includes('mac');
     this.vp.scrollMode = s.scrollMode === 'auto' ? (mac ? 'orbit' : 'zoom') : s.scrollMode;
+    this.vp.setLighting(s.lighting || {});
+    this.vp.setFov(s.fov || 35);
     this.vp.requestRender();
   }
 
   // ---- document sync -----------------------------------------------------
 
   onDocChange(ev) {
+    if (ev.kind === 'load') {
+      // A different design: pins and isolate belong to the old one.
+      if (this.pins?.length) this.clearPins();
+      if (this.isolated) {
+        this.isolated = null;
+        this.viewControls?.btns.isolate?.classList.remove('on');
+        document.getElementById('isolate-bar')?.setAttribute('hidden', '');
+      }
+    }
+    this.updateVariables();
     this.syncView();
-    if (ev.kind === 'undo' || ev.kind === 'redo') toast(`${ev.kind === 'undo' ? 'Undo' : 'Redo'} ${ev.label || ''}`.trim(), { ms: 1200 });
+    if (ev.kind === 'undo' || ev.kind === 'redo') toast(t(ev.kind === 'undo' ? 'Undo {label}' : 'Redo {label}', { label: t(ev.label || '') }).trim(), { ms: 1200 });
     this.updateTitle();
     this.scheduleGC();
+  }
+
+  // Number fields understand the design's variables.
+  updateVariables() {
+    const st = this.doc.state;
+    if (this.varsFor?.list === st.variables && this.varsFor.units === st.units) return;
+    this.varsFor = { list: st.variables, units: st.units };
+    this.variables = variableValues(st);
+    setVariables(this.variables);
   }
 
   syncView() {
@@ -137,6 +215,11 @@ export class App {
     this.vp.syncBodies(doc.bodies, (id) => this.meshCache.get(id));
     for (const sk of doc.sketches) this.requestRegions(sk);
     this.vp.syncSketches(doc.sketches, (sk) => this.regionDataFor(sk));
+    this.vp.syncPlanes(doc.planes);
+    this.vp.syncAxes(doc.axes);
+    this.vp.syncImages(doc.images);
+    this.vp.syncDecals(doc.decals);
+    this.applyIsolation();
     this.selection.prune((it) => this.isValidItem(it));
     this.refreshHighlights();
     this.tools.active?.onSelectionChange?.();
@@ -232,6 +315,12 @@ export class App {
         return !!doc.sketch(it.sketchId);
       case 'constraint':
         return !!doc.sketch(it.sketchId)?.constraints?.some((c) => c.id === it.cid);
+      case 'plane':
+        return !!doc.plane(it.planeId);
+      case 'axis':
+        return !!doc.axis(it.axisId);
+      case 'image':
+        return !!doc.image(it.imageId);
       default:
         return true;
     }
@@ -262,6 +351,9 @@ export class App {
     const t = this.vp.theme;
     const bodyH = new Map();
     const sketchH = new Map();
+    const planeH = new Map();
+    const axisH = new Map();
+    const imageH = new Map();
     const B = (id) => {
       if (!bodyH.has(id)) bodyH.set(id, { faces: new Map(), edges: new Map(), body: null });
       return bodyH.get(id);
@@ -296,6 +388,15 @@ export class App {
           if (sk) for (const e of sk.entities) S(it.sketchId).entities.set(e.id, color);
           break;
         }
+        case 'plane':
+          planeH.set(it.planeId, color);
+          break;
+        case 'axis':
+          axisH.set(it.axisId, color);
+          break;
+        case 'image':
+          imageH.set(it.imageId, color);
+          break;
         default:
       }
     };
@@ -309,6 +410,9 @@ export class App {
       const h = sketchH.get(id) || {};
       view.setHighlight(h);
     }
+    for (const [id, view] of this.vp.planeViews) view.setHighlight(planeH.get(id) || null);
+    for (const [id, view] of this.vp.axisViews) view.setHighlight(axisH.get(id) || null);
+    for (const [id, view] of this.vp.imageViews) view.setHighlight(imageH.get(id) || null);
     this.constraints?.update();
     this.vp.requestRender();
   }
@@ -341,6 +445,14 @@ export class App {
     if (it.kind === 'sketch') {
       const v = this.vp.sketchViews.get(it.sketchId);
       return v ? new THREE.Box3().setFromObject(v.group) : null;
+    }
+    if (it.kind === 'plane' || it.kind === 'image') {
+      const v = it.kind === 'plane' ? this.vp.planeViews.get(it.planeId) : this.vp.imageViews.get(it.imageId);
+      return v ? new THREE.Box3().setFromObject(v.group) : null;
+    }
+    if (it.kind === 'axis') {
+      const v = this.vp.axisViews.get(it.axisId);
+      return v ? new THREE.Box3().setFromPoints(v.ends().map((p) => new THREE.Vector3(...p))) : null;
     }
     return null;
   }
@@ -425,6 +537,10 @@ export class App {
   // A straight axis from a sketch line or body edge. With circles: true,
   // circular edges give their centre axis.
   axisOf(it, { circles = false } = {}) {
+    if (it.kind === 'axis') {
+      const ax = this.doc.axis(it.axisId);
+      return ax ? { origin: ax.origin, dir: ax.dir } : null;
+    }
     if (it.kind === 'curve') {
       const sk = this.doc.sketch(it.sketchId);
       const en = sk?.entities.find((e) => e.id === it.entityId);
@@ -453,12 +569,56 @@ export class App {
     return null;
   }
 
+  // 3D point of a pick: a body corner, a sketch point, or where a face was hit.
+  pointOf(hit) {
+    if (!hit) return null;
+    if (hit.kind === 'vertex') {
+      const v = this.bodyMesh(hit.bodyId)?.vertices;
+      return v ? [v[hit.index * 3], v[hit.index * 3 + 1], v[hit.index * 3 + 2]] : null;
+    }
+    if (hit.kind === 'spoint') {
+      const sk = this.doc.sketch(hit.sketchId);
+      return sk ? to3D(planeFrame(sk.plane), hit.point) : null;
+    }
+    return hit.point ? [...hit.point] : null;
+  }
+
+  // Polyline (3D points) along a body edge or a sketch curve.
+  curvePoints(it) {
+    if (it.kind === 'curve') {
+      const sk = this.doc.sketch(it.sketchId);
+      const en = sk?.entities.find((e) => e.id === it.entityId);
+      if (!en) return null;
+      const f = planeFrame(sk.plane);
+      return sampleEntity(en, 128).map((p) => to3D(f, p));
+    }
+    if (it.kind === 'edge') {
+      const view = this.vp.bodyViews.get(it.bodyId);
+      const seg = view?.data?.edgeSegments;
+      if (!seg) return null;
+      const out = [];
+      for (const [start, count] of view.edgeSegRanges?.[it.index] || []) {
+        for (let s = start; s < start + count; s++) {
+          const a = [seg[s * 6], seg[s * 6 + 1], seg[s * 6 + 2]];
+          if (!out.length) out.push(a);
+          out.push([seg[s * 6 + 3], seg[s * 6 + 4], seg[s * 6 + 5]]);
+        }
+      }
+      return out.length > 1 ? out : null;
+    }
+    if (it.kind === 'axis') {
+      const v = this.vp.axisViews.get(it.axisId);
+      return v ? v.ends() : null;
+    }
+    return null;
+  }
+
   pathRef(it) {
     if (it.kind === 'edge') return { type: 'edge', id: this.doc.body(it.bodyId).shapeId, edge: it.index };
     if (it.kind === 'curve') {
       const sk = this.doc.sketch(it.sketchId);
       const en = sk?.entities.find((e) => e.id === it.entityId);
-      return en ? { type: 'curve', plane: sk.plane, entity: en } : null;
+      return en ? { type: 'curve', plane: sk.plane, entity: en, sketchId: sk.id } : null;
     }
     return null;
   }
@@ -479,6 +639,7 @@ export class App {
       return s ? Math.hypot(s[0] - e.x, s[1] - e.y) : Infinity;
     };
     if (!this.settings.snap || e.alt) return { p, snap: null };
+    const use = { ...DEFAULT_SETTINGS.snapTo, ...this.settings.snapTo };
     // Candidate points.
     const cands = [];
     const sketches = this.doc.sketches.filter((s) => s.visible !== false && (s.id === sketchId || samePlane(s.plane, plane)));
@@ -494,8 +655,21 @@ export class App {
       }
     }
     for (const q of extra) cands.push({ p: q, kind: 'end' });
+    // Where two lines meet or cross.
+    if (use.intersection) {
+      const lines = ents.filter(({ en }) => en.type === 'line').slice(0, 300);
+      const pt = ({ en, sf }, q) => (sf === f ? q : to2D(f, to3D(sf, q)));
+      for (let i = 0; i < lines.length; i++) {
+        const a0 = pt(lines[i], lines[i].en.a);
+        const a1 = pt(lines[i], lines[i].en.b);
+        for (let j = i + 1; j < lines.length; j++) {
+          for (const x of intersect({ type: 'line', a: a0, b: a1 }, { type: 'line', a: pt(lines[j], lines[j].en.a), b: pt(lines[j], lines[j].en.b) })) cands.push({ p: x, kind: 'intersection' });
+        }
+      }
+    }
     // Body vertices that lie on the plane.
     for (const view of vp.bodyViews.values()) {
+      if (!use.vertex) break;
       if (!view.group.visible || view.data.kind !== 'solid') continue;
       const v = view.data.vertices;
       for (let i = 0; i < v.length; i += 3) {
@@ -506,28 +680,30 @@ export class App {
     }
     const originOnPlane = Math.abs(f.o[0] * f.n[0] + f.o[1] * f.n[1] + f.o[2] * f.n[2]) < 1e-6;
     if (originOnPlane) cands.push({ p: to2D(f, [0, 0, 0]), kind: 'origin' });
-    const valid = cands.filter((c) => !exclude || dist(c.p, exclude) > 1e-9);
-    const LABELS = { end: 'Endpoint', mid: 'Midpoint', center: 'Center', quadrant: 'Quadrant', vertex: 'Vertex', origin: 'Origin', point: 'Point' };
+    const GROUP = { end: 'end', point: 'end', origin: 'end', mid: 'mid', center: 'center', quadrant: 'center', intersection: 'intersection', vertex: 'vertex' };
+    const valid = cands.filter((c) => (!exclude || dist(c.p, exclude) > 1e-9) && use[GROUP[c.kind] || 'end'] !== false);
+    const LABELS = { end: 'Endpoint', mid: 'Midpoint', center: 'Center', quadrant: 'Quadrant', vertex: 'Vertex', origin: 'Origin', point: 'Point', intersection: 'Intersection' };
+    const hint = (label) => (use.hints ? label : null);
     let best = null;
     for (const c of valid) {
       const d = screenDist(c.p);
       const r = c.kind === 'mid' || c.kind === 'quadrant' ? 8 : 11;
       if (d <= r && (!best || d < best.d)) best = { ...c, d };
     }
-    if (best) return { p: best.p, snap: { kind: best.kind, label: LABELS[best.kind] } };
+    if (best) return { p: best.p, snap: { kind: best.kind, label: hint(LABELS[best.kind]) } };
 
     const px = vp.rig.pixelSize(new THREE.Vector3(...to3D(f, p)), vp.height);
     const gs = this.gridStep(px * 14);
     // A grid point right under the cursor wins over alignments.
     const gridPoint = [Math.round(p[0] / gs) * gs, Math.round(p[1] / gs) * gs];
-    if (near(gridPoint, 4)) return { p: gridPoint, snap: { kind: 'grid' } };
+    if (use.grid && near(gridPoint, 4)) return { p: gridPoint, snap: { kind: 'grid' } };
 
     // Alignment with the previous point and other points (horizontal/vertical).
     let q = [...p];
     const guides = [];
     let label = null;
     const tol = px * 6;
-    const refs = from ? [{ p: from }, ...valid.slice(0, 400)] : valid.slice(0, 400);
+    const refs = !use.guides ? [] : from ? [{ p: from }, ...valid.slice(0, 400)] : valid.slice(0, 400);
     let snappedX = false;
     let snappedY = false;
     for (const r of refs) {
@@ -547,7 +723,7 @@ export class App {
     // Fix guide end points after both coordinates are known.
     for (const g of guides) g[1] = [...q];
     // On-curve snap.
-    if (!snappedX && !snappedY) {
+    if (!snappedX && !snappedY && use.curve) {
       let bc = null;
       for (const { en, sf } of ents) {
         if (en.type === 'point') continue;
@@ -557,17 +733,17 @@ export class App {
         const d = screenDist(cp);
         if (d < 7 && (!bc || d < bc.d)) bc = { p: cp, d };
       }
-      if (bc) return { p: bc.p, snap: { kind: 'on', label: 'On curve' } };
+      if (bc) return { p: bc.p, snap: { kind: 'on', label: hint('On curve') } };
     }
     // Grid, for any coordinate that did not align with something.
     const g = [snappedX ? q[0] : Math.round(p[0] / gs) * gs, snappedY ? q[1] : Math.round(p[1] / gs) * gs];
-    const onGrid = near(g, 8);
+    const onGrid = use.grid && near(g, 8);
     if (snappedX || snappedY) {
       if (onGrid) {
         q = g;
         for (const gd of guides) gd[1] = [...q];
       }
-      return { p: q, snap: { kind: 'align', label, guides } };
+      return { p: q, snap: { kind: 'align', label: hint(label), guides } };
     }
     if (onGrid) return { p: g, snap: { kind: 'grid' } };
     return { p, snap: null };
@@ -580,6 +756,7 @@ export class App {
 
   // Grid step in mm that matches the display unit.
   gridStep(mmStep) {
+    if (this.settings.gridLock > 0) return this.settings.gridLock;
     const u = UNITS[this.units];
     return niceStep(mmStep / u.factor) * u.factor;
   }
@@ -656,7 +833,7 @@ export class App {
 
   busy(on, text = 'Working…') {
     this.busyManual = on;
-    document.getElementById('busy-text').textContent = text;
+    document.getElementById('busy-text').textContent = t(text);
     this.onKernelBusy(on);
   }
 
@@ -666,7 +843,7 @@ export class App {
     if (b || this.busyManual) this.busyTimer = setTimeout(() => (el.hidden = false), 350);
     else {
       el.hidden = true;
-      document.getElementById('busy-text').textContent = 'Working…';
+      document.getElementById('busy-text').textContent = t('Working…');
     }
   }
 
@@ -690,6 +867,8 @@ export class App {
       if (!this.tools.isSelect) return this.scheduleGC();
       const keep = new Set(this.doc.referencedShapes());
       for (const id of this.tools.active?.heldShapes() || []) keep.add(id);
+      for (const id of this.history.heldShapes()) keep.add(id);
+      if (this.history.busy) return this.scheduleGC();
       for (const id of this.meshCache.keys()) if (!keep.has(id)) this.meshCache.delete(id);
       this.kernel.call('retainOnly', [...keep]).catch(() => {});
     }, 4000);
@@ -700,7 +879,7 @@ export class App {
     const items = this.selection.list;
     const token = (this.measureToken = (this.measureToken || 0) + 1);
     if (!items.length || items.length > 2) {
-      info.textContent = items.length ? `${items.length} selected` : '';
+      info.textContent = items.length ? t('{n} selected', { n: items.length }) : '';
       return;
     }
     const kitems = [];
@@ -713,14 +892,14 @@ export class App {
       if (items.length === 1 && it.kind === 'curve') {
         const sk = this.doc.sketch(it.sketchId);
         const en = sk?.entities.find((e) => e.id === it.entityId);
-        if (en?.type === 'line') info.textContent = `Line · ${formatLength(dist(en.a, en.b), this.units)}`;
-        else if (en?.type === 'circle') info.textContent = `Circle · ⌀ ${formatLength(en.r * 2, this.units)}`;
-        else if (en?.type === 'arc') info.textContent = `Arc · R ${formatLength(en.r, this.units)}`;
-        else info.textContent = en ? en.type : '';
+        if (en?.type === 'line') info.textContent = `${t('Line')} · ${formatLength(dist(en.a, en.b), this.units)}`;
+        else if (en?.type === 'circle') info.textContent = `${t('Circle')} · ⌀ ${formatLength(en.r * 2, this.units)}`;
+        else if (en?.type === 'arc') info.textContent = `${t('Arc')} · R ${formatLength(en.r, this.units)}`;
+        else info.textContent = en ? t(en.type[0].toUpperCase() + en.type.slice(1)) : '';
       } else if (items.length === 1 && it.kind === 'region') {
         const r = this.regionCache.get(it.sketchId)?.data?.regions[it.index];
-        info.textContent = r ? `Region · ${formatArea(r.area, this.units)}` : '';
-      } else info.textContent = `${items.length} selected`;
+        info.textContent = r ? `${t('Region')} · ${formatArea(r.area, this.units)}` : '';
+      } else info.textContent = t('{n} selected', { n: items.length });
       return;
     }
     try {
@@ -728,13 +907,13 @@ export class App {
       if (token !== this.measureToken) return;
       const u = this.units;
       const parts = res.items.map((r) => {
-        if (r.kind === 'body') return `Volume ${formatVolume(r.volume, u)}`;
-        if (r.kind === 'face') return `Area ${formatArea(r.area, u)}${r.radius ? ` · R ${formatLength(r.radius, u)}` : ''}`;
-        if (r.kind === 'edge') return `Length ${formatLength(r.length, u)}${r.radius ? ` · R ${formatLength(r.radius, u)}` : ''}`;
+        if (r.kind === 'body') return `${t('Volume')} ${formatVolume(r.volume, u)}`;
+        if (r.kind === 'face') return `${t('Area')} ${formatArea(r.area, u)}${r.radius ? ` · R ${formatLength(r.radius, u)}` : ''}`;
+        if (r.kind === 'edge') return `${t('Length')} ${formatLength(r.length, u)}${r.radius ? ` · R ${formatLength(r.radius, u)}` : ''}`;
         return '';
       });
-      if (res.pair?.distance !== undefined) parts.push(`Distance ${formatLength(res.pair.distance, u)}`);
-      if (res.pair?.angle !== undefined) parts.push(`Angle ${res.pair.angle.toFixed(2)}°`);
+      if (res.pair?.distance !== undefined) parts.push(`${t('Distance')} ${formatLength(res.pair.distance, u)}`);
+      if (res.pair?.angle !== undefined) parts.push(`${t('Angle')} ${formatAngle(res.pair.angle)}`);
       info.textContent = items.length === 2 && res.pair ? parts.slice(-2).join(' · ') : parts.join(' · ');
     } catch {
       info.textContent = '';
@@ -752,6 +931,8 @@ export class App {
     const list = sel.list;
     const bodies = [...new Set(list.map((it) => it.bodyId).filter(Boolean))];
     const ne = e.native;
+    // Faces hidden behind the one under the pointer can be picked too.
+    if (this.vp.hitsUnder(e.x, e.y).length > 1) items.push({ label: 'Select through…', icon: 'select', kbd: this.keyFor('select-through'), action: () => this.selectThrough({ x: e.x, y: e.y }) });
     if (list.length) {
       const suggestions = this.context.suggestions();
       for (const s of suggestions.slice(0, 6)) items.push({ label: s.label, icon: s.icon, action: s.action });
@@ -765,10 +946,12 @@ export class App {
         const info = this.faceInfo(faces[0].bodyId, faces[0].index);
         if (info?.type === 'plane') items.push({ label: 'Look at face', icon: 'lookAt', action: () => this.vp.lookAtPlane({ origin: info.center, normal: info.normal }) });
       }
+      if (bodies.length || list.some((it) => it.sketchId)) items.push({ label: 'Show in Items', icon: 'items', action: () => this.revealInItems() });
+      items.push({ label: this.isolated ? 'Show all (end isolate)' : 'Isolate', icon: 'isolate', kbd: this.keyFor('toggle-isolate'), action: () => this.toggleIsolate() });
       items.push({ label: 'Delete', icon: 'trash', kbd: 'Del', danger: true, action: () => this.cmd.deleteSelection() });
     } else {
       items.push({ label: 'Zoom to fit', icon: 'fit', kbd: 'Z', action: () => this.vp.fit() });
-      items.push({ label: 'Show all', icon: 'eye', action: () => this.cmd.showAll() });
+      items.push({ label: 'Show all', icon: 'eye', action: () => (this.isolated ? this.toggleIsolate() : this.cmd.showAll()) });
     }
     showMenu(ne.clientX, ne.clientY, items);
   }
@@ -778,11 +961,17 @@ export class App {
   setupChrome() {
     const $ = (id) => document.getElementById(id);
     $('btn-home').innerHTML = icon('logo');
+    $('btn-items').innerHTML = icon('items');
+    $('btn-help').innerHTML = icon('help');
+    $('btn-items').addEventListener('click', () => this.toggleItems());
+    $('btn-help').addEventListener('click', (e) => this.helpMenu(e));
     $('btn-undo').innerHTML = icon('undo');
     $('btn-redo').innerHTML = icon('redo');
     $('btn-settings').innerHTML = icon('settings');
     $('btn-import').querySelector('.ic').innerHTML = icon('import');
     $('btn-export').querySelector('.ic').innerHTML = icon('export');
+    $('btn-print').querySelector('.ic').innerHTML = icon('printer');
+    $('btn-print').addEventListener('click', () => this.print.open());
     $('btn-home').addEventListener('click', () => this.home.show());
     $('btn-undo').addEventListener('click', () => this.cmd.undo());
     $('btn-redo').addEventListener('click', () => this.cmd.redo());
@@ -800,23 +989,52 @@ export class App {
     const snapBtn = $('btn-snap');
     snapBtn.classList.toggle('on', this.settings.snap);
     snapBtn.addEventListener('click', () => this.toggleSnap());
-
-    const vc = $('view-controls');
-    const add = (name, title, action, key) => {
-      const b = document.createElement('button');
-      b.className = 'vc-btn';
-      b.title = title;
-      b.dataset.vc = key || name;
-      b.innerHTML = icon(name);
-      b.addEventListener('click', action);
-      vc.append(b);
-      return b;
+    snapBtn.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      this.snapMenu(snapBtn);
+    });
+    $('btn-snap-more').addEventListener('click', (e) => this.snapMenu(e.currentTarget));
+    // Grid size (changes with zoom); click to lock it at this size.
+    const gridBtn = $('btn-grid-size');
+    this.vp.grid.locked = this.settings.gridLock || null;
+    const showGrid = (step) => {
+      gridBtn.textContent = `${t('Grid')} ${formatLength(step, this.units)}${this.settings.gridLock ? ' 🔒' : ''}`;
+      gridBtn.classList.toggle('on', !!this.settings.gridLock);
     };
-    add('fit', 'Zoom to fit (Z)', () => this.vp.fit(this.selectionBox()));
-    this.orthoBtn = add('ortho', 'Perspective / orthographic (O)', () => this.toggleOrtho());
-    add('grid', 'Grid (G)', () => this.toggleGrid()).classList.toggle('on', this.settings.showGrid);
-    add('section', 'Section view (X)', () => this.toggleSection(), 'section');
-    add('sidebar', 'Items panel (Tab)', () => this.toggleItems());
+    this.vp.on('gridstep', showGrid);
+    this.vp.on('doubletap', () => this.onDoubleTap());
+    showGrid(this.vp.grid.step);
+    gridBtn.addEventListener('click', () => {
+      this.settings.gridLock = this.settings.gridLock ? null : this.vp.grid.step;
+      this.vp.grid.locked = this.settings.gridLock;
+      this.saveSettings();
+      showGrid(this.vp.grid.step);
+      toast(this.settings.gridLock ? 'Grid size locked' : 'Grid size follows the zoom', { ms: 1200 });
+    });
+    const filterSel = $('filter-select');
+    for (const [k, label] of SELECT_FILTERS) filterSel.append(new Option(t(label), k));
+    filterSel.value = this.settings.selectFilter;
+    filterSel.addEventListener('change', () => this.setSelectFilter(filterSel.value));
+
+    this.viewControls = new ViewControls($('view-controls'), this);
+    $('isolate-show-all').addEventListener('click', () => this.isolated && this.toggleIsolate());
+    this.toolHint = new ToolHint($('tool-hint'), this);
+  }
+
+  helpMenu(e) {
+    const r = e.currentTarget.getBoundingClientRect();
+    const m = modKey();
+    showMenu(r.left, r.bottom + 6, [
+      { label: 'Interactive tutorial', icon: 'learn', action: () => this.tutorial.start() },
+      { label: 'How to move around', icon: 'mouse', action: () => this.navHelp.toggle(true) },
+      { label: 'Find a tool', icon: 'search', kbd: `${m}K`, action: () => this.toolsMenu.focusSearch() },
+      { label: 'Keyboard shortcuts', icon: 'keyboard', kbd: `${m}/`, action: () => this.dialogs.shortcuts() },
+      { label: 'Getting started', icon: 'help', action: () => this.dialogs.gettingStarted() },
+      '-',
+      { label: 'Open-source licences', icon: 'file', action: () => this.dialogs.licences() },
+      { label: 'Privacy', icon: 'eye', action: () => this.dialogs.privacy() },
+      { label: 'About ShaperBuild', icon: 'logo', action: () => this.dialogs.about() },
+    ]);
   }
 
   renameDesign() {
@@ -849,14 +1067,17 @@ export class App {
     for (const b of document.querySelectorAll('#mode-seg button')) b.classList.toggle('on', (b.dataset.mode === 'visual') === on);
     if (on) this.tools.activate('select');
     document.getElementById('tools').style.display = on ? 'none' : '';
+    this.materials.show(on);
     this.vp.setVisualization(on);
+    this.applyIsolation();
+    setTimeout(() => this.vp.resize(), 30);
     this.refreshHighlights();
+    this.starter?.update();
   }
 
   toggleOrtho() {
     this.vp.setOrtho(!this.vp.rig.useOrtho);
-    this.orthoBtn.innerHTML = icon(this.vp.rig.useOrtho ? 'persp' : 'ortho');
-    this.orthoBtn.classList.toggle('on', this.vp.rig.useOrtho);
+    this.viewControls.setOrtho(this.vp.rig.useOrtho);
     toast(this.vp.rig.useOrtho ? 'Orthographic view' : 'Perspective view', { ms: 1000 });
   }
 
@@ -867,6 +1088,137 @@ export class App {
     document.querySelector('[data-vc="grid"]').classList.toggle('on', this.settings.showGrid);
   }
 
+  toggleXray() {
+    const on = !this.vp.xray;
+    this.vp.setXray(on);
+    this.viewControls.btns.xray.classList.toggle('on', on);
+    toast(on ? 'X-ray on: bodies are see-through' : 'X-ray off', { ms: 1200 });
+  }
+
+  // ---- display modes, isolate, saved views, pins -------------------------
+
+  setDisplay(mode, { hiddenEdges = this.vp.hiddenEdges } = {}) {
+    this.vp.setDisplay(mode, hiddenEdges);
+    this.viewControls?.btns.display?.classList.toggle('on', mode !== 'shaded' || !!hiddenEdges);
+  }
+
+  displayMenu(anchor) {
+    const vp = this.vp;
+    const r = anchor.getBoundingClientRect();
+    const mode = vp.display || 'shaded';
+    const pick = (value, label, desc) => ({ label: `${mode === value ? '● ' : '○ '}${t(label)}`, raw: true, action: () => this.setDisplay(value), desc });
+    const check = (on, label, change) => {
+      const cb = h('input', { type: 'checkbox', checked: !!on });
+      cb.addEventListener('change', () => change(cb.checked));
+      return { custom: h('label.menu-check', cb, h('span', { text: label })) };
+    };
+    const menu = showMenu(r.left, r.top, [
+      { custom: h('div.menu-title', { text: 'Display' }) },
+      pick('shaded', 'Shaded'),
+      pick('wireframe', 'Wireframe (edges only)'),
+      pick('zebra', 'Zebra stripes (check smoothness)'),
+      '-',
+      check(vp.hiddenEdges, 'Show hidden edges', (on) => this.setDisplay(vp.display || 'shaded', { hiddenEdges: on })),
+      check(this.settings.showEdges, 'Show edges', () => this.onMenu('toggle-edges')),
+      check(vp.xray, 'X-ray', () => this.toggleXray()),
+    ]);
+    const mr = menu.getBoundingClientRect();
+    menu.style.left = `${r.left - mr.width - 8}px`;
+  }
+
+  // Isolate: show only the selected items (and their steps in History).
+  toggleIsolate() {
+    if (this.isolated) {
+      this.isolated = null;
+    } else {
+      const keep = new Map();
+      for (const it of this.selection.list) {
+        const k = it.bodyId ? `body:${it.bodyId}` : it.sketchId ? `sketch:${it.sketchId}` : it.planeId ? `plane:${it.planeId}` : it.axisId ? `axis:${it.axisId}` : it.imageId ? `image:${it.imageId}` : null;
+        if (k) keep.set(k, it.bodyId ? { kind: 'body', bodyId: it.bodyId } : it.sketchId ? { kind: 'sketch', sketchId: it.sketchId } : it);
+      }
+      if (!keep.size) return toast('Select what to isolate first', { ms: 1600 });
+      this.isolated = keep;
+      this.vp.fit(this.selectionBox());
+    }
+    this.viewControls?.btns.isolate?.classList.toggle('on', !!this.isolated);
+    document.getElementById('isolate-bar')?.toggleAttribute('hidden', !this.isolated);
+    this.syncView();
+    this.items?.render();
+  }
+
+  // Hide what isolate leaves out (after the views are in step). After
+  // isolate ends, everything gets its own visibility back once.
+  applyIsolation() {
+    const keep = this.isolated;
+    if (!keep && !this.wasIsolated) return;
+    this.wasIsolated = !!keep;
+    const show = (key, view, visible, inVisual = false) => {
+      const on = visible !== false && (!keep || keep.has(key)) && (inVisual || !this.visual);
+      view.group.visible = on;
+      if (view.pickGroup) view.pickGroup.visible = on;
+    };
+    for (const [id, v] of this.vp.bodyViews) show(`body:${id}`, v, this.doc.body(id)?.visible, true);
+    for (const [id, v] of this.vp.sketchViews) show(`sketch:${id}`, v, this.doc.sketch(id)?.visible);
+    for (const [id, v] of this.vp.planeViews) show(`plane:${id}`, v, this.doc.plane(id)?.visible);
+    for (const [id, v] of this.vp.axisViews) show(`axis:${id}`, v, this.doc.axis(id)?.visible);
+    for (const [id, v] of this.vp.imageViews) show(`image:${id}`, v, this.doc.image(id)?.visible);
+    this.vp.requestRender();
+  }
+
+  // Saved views: the camera and the section, by name.
+  async saveView() {
+    const input = h('input', { type: 'text', value: t('View {n}', { n: (this.doc.state.views || []).length + 1 }) });
+    const ok = await modal({ title: 'Save this view', body: h('div.form-row', h('label', { text: 'Name' }), input), buttons: [{ label: 'Cancel', value: false }, { label: 'Save', value: true, primary: true }] });
+    if (!ok || !input.value.trim()) return;
+    const view = { name: input.value.trim(), camera: this.vp.rig.toJSON(), section: { ...this.section } };
+    this.doc.apply('Save view', (d) => {
+      d.views = [...(d.views || []), { id: d.nextId('view'), ...view }];
+    });
+    toast(t('Saved view "{name}"', { name: view.name }), { ms: 1600 });
+  }
+
+  showSavedView(id) {
+    const v = (this.doc.state.views || []).find((x) => x.id === id);
+    if (!v) return;
+    const c = v.camera;
+    const ortho = !!c.ortho;
+    this.vp.rig.animateTo({ az: c.az, el: c.el, dist: c.dist, target: new THREE.Vector3(...c.target) });
+    if (ortho !== this.vp.rig.useOrtho) {
+      this.vp.setOrtho(ortho);
+      this.viewControls.setOrtho(ortho);
+    }
+    this.vp.requestRender();
+    if (v.section) this.setSection({ ...v.section });
+  }
+
+  deleteSavedView(id) {
+    this.doc.apply('Delete view', (d) => {
+      d.views = (d.views || []).filter((x) => x.id !== id);
+    });
+  }
+
+  // Pinned measurements stay on screen until cleared.
+  pinMeasurement(pin) {
+    this.pins = [...(this.pins || []), pin];
+    this.drawPins();
+  }
+
+  clearPins() {
+    this.pins = [];
+    this.drawPins();
+  }
+
+  drawPins() {
+    const ov = this.vp.overlay;
+    ov.clear('pin');
+    (this.pins || []).forEach((p, i) => {
+      ov.lines(`pin-line-${i}`, [[p.p1, p.p2]], { color: this.vp.theme.inference, width: 2, depthTest: false });
+      ov.dots(`pin-ends-${i}`, [p.p1, p.p2], { color: this.vp.theme.inference, size: 7 });
+      ov.label(`pin-label-${i}`, p.p1.map((v, k) => (v + p.p2[k]) / 2), p.text, { className: 'accent' });
+    });
+    this.vp.requestRender();
+  }
+
   toggleSnap() {
     this.settings.snap = !this.settings.snap;
     this.saveSettings();
@@ -874,14 +1226,58 @@ export class App {
     toast(this.settings.snap ? 'Snapping on' : 'Snapping off (hold Alt to skip snapping)', { ms: 1200 });
   }
 
+  // What snapping uses: ticks that keep the menu open.
+  snapMenu(anchor) {
+    const r = anchor.getBoundingClientRect();
+    const use = (this.settings.snapTo = { ...DEFAULT_SETTINGS.snapTo, ...this.settings.snapTo });
+    const row = (key, label) => {
+      const cb = h('input', { type: 'checkbox', checked: use[key] !== false });
+      cb.addEventListener('change', () => {
+        use[key] = cb.checked;
+        this.saveSettings();
+      });
+      return { custom: h('label.menu-check', cb, h('span', { text: label })) };
+    };
+    const menu = showMenu(r.left, r.top, [
+      { custom: h('div.menu-title', { text: 'Snap to' }) },
+      row('end', 'Endpoints'),
+      row('mid', 'Midpoints'),
+      row('center', 'Centers'),
+      row('intersection', 'Intersections'),
+      row('vertex', 'Body corners'),
+      row('curve', 'Points on curves'),
+      row('guides', 'Alignment guides'),
+      row('grid', 'Grid'),
+      '-',
+      row('hints', 'Show what it snaps to'),
+    ]);
+    menu.style.top = `${r.top - menu.getBoundingClientRect().height - 6}px`;
+  }
+
   toggleSection() {
     if (this.section.enabled && !(this.tools.activeId === 'section')) this.setSection({ enabled: false });
     else this.tools.activate('section');
   }
 
+  // Show the History tab (or go back to Items if it is already showing).
+  showHistory() {
+    const el = document.getElementById('items');
+    if (el.classList.contains('collapsed')) this.toggleItems();
+    else if (this.items.tab === 'history') return this.items.setTab('items');
+    this.items.setTab('history');
+  }
+
   toggleItems() {
-    document.getElementById('items').classList.toggle('collapsed');
+    const collapsed = document.getElementById('items').classList.toggle('collapsed');
+    document.getElementById('btn-items').classList.toggle('on', !collapsed);
     setTimeout(() => this.vp.resize(), 200);
+  }
+
+  toggleToolLabels() {
+    this.settings.toolLabels = this.settings.toolLabels === false;
+    this.saveSettings();
+    this.toolsMenu.setLabels(this.settings.toolLabels);
+    setTimeout(() => this.vp.resize(), 50);
   }
 
   toggleTheme() {
@@ -895,13 +1291,34 @@ export class App {
 
   // ---- keyboard --------------------------------------------------------------
 
+  // The keys in use (Settings > Keyboard shortcuts can change them).
+  reloadKeymap() {
+    const k = this.settings.keymap || {};
+    this.keymap = buildKeymap(k.preset, k.keys);
+    this.toolsMenu?.render();
+  }
+
+  // The key for an action, like tool:extrude or view-top (for menus and tips).
+  keyFor(action) {
+    return this.keymap?.keys[action] || '';
+  }
+
   setupKeys() {
+    this.reloadKeymap();
     window.addEventListener('keydown', (e) => {
       if (!this.ready) return;
       if (document.querySelector('.modal-backdrop')) return;
       if (!this.home.el.hidden) return;
       const typing = isTyping();
       const mod = e.ctrlKey || e.metaKey;
+      const combo = comboOf(e);
+      const action = combo && this.keymap.byCombo.get(combo);
+      // Shortcuts with Ctrl that the chosen set gives to an action.
+      if (action && mod && !typing) {
+        e.preventDefault();
+        this.runAction(action);
+        return;
+      }
       // Menu shortcuts (the native menu only displays them).
       if (mod && !e.altKey) {
         const k = e.key.toLowerCase();
@@ -917,6 +1334,8 @@ export class App {
           w: 'close-design',
           ',': 'settings',
           '/': 'shortcuts',
+          k: 'find-tool',
+          p: 'print',
         };
         const textEdit = typing && (k === 'z' || k === 'y');
         if (map[k] && !textEdit) {
@@ -926,13 +1345,35 @@ export class App {
         }
       }
       if (typing) return;
+      // Hold Space and drag to orbit (Shift+Space to pan); a quick tap over
+      // a face looks straight at it.
+      if (e.key === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        if (!e.repeat) {
+          document.activeElement?.blur?.();
+          this.vp.setSpaceHeld(true);
+          this.spaceTap = { at: performance.now(), view: this.vp.rig.toJSON() };
+        }
+        return;
+      }
+      // Esc first closes the navigation card and leaves orbit/pan mode.
+      if (e.key === 'Escape' && (this.navHelp.open || this.vp.navMode)) {
+        if (this.navHelp.open) this.navHelp.close();
+        else this.vp.setNavMode(null);
+        return;
+      }
       const ev = { key: e.key, shift: e.shiftKey, ctrl: mod, alt: e.altKey, native: e };
       if (this.tools.active?.onKeyDown(ev)) {
         e.preventDefault();
         return;
       }
+      if (action) {
+        e.preventDefault();
+        this.runAction(action);
+        return;
+      }
       if (mod) {
-        if (e.key.toLowerCase() === 'a') {
+        if (e.key.toLowerCase() === 'a' && !e.shiftKey) {
           e.preventDefault();
           this.cmd.selectAll();
         }
@@ -940,44 +1381,129 @@ export class App {
       }
       const k = e.key;
       if (k === 'Escape') {
+        hideTooltip();
         if (!this.tools.isSelect) this.tools.cancel();
         else this.selection.clear();
         return;
       }
+      // Arrow keys orbit, Shift+arrows pan, + and - zoom.
+      const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] };
+      if (arrows[k]) {
+        e.preventDefault();
+        const [ax, ay] = arrows[k];
+        if (e.shiftKey) this.vp.stepPan(-ax * 0.12, ay * 0.12);
+        else this.vp.stepOrbit((-ax * Math.PI) / 12, (ay * Math.PI) / 12);
+        return;
+      }
+      if (k === '+' || k === '=') return this.vp.stepZoom(1 / 1.25);
+      if (k === '-' || k === '_') return this.vp.stepZoom(1.25);
       if (k === 'Delete' || k === 'Backspace') {
         e.preventDefault();
         this.cmd.deleteSelection();
         return;
       }
-      if (k === 'Tab') {
-        e.preventDefault();
-        this.toggleItems();
-        return;
-      }
-      const lower = k.toLowerCase();
-      const views = { 0: 'iso', 1: 'front', 2: 'back', 3: 'right', 4: 'left', 7: 'top', 8: 'bottom' };
-      if (k in views) return this.vp.setView(views[k]);
-      if (e.shiftKey) return;
-      switch (lower) {
-        case 'z':
-        case 'home':
-          return this.vp.fit(this.selectionBox());
-        case 'o':
-          return this.toggleOrtho();
-        case 'g':
-          return this.toggleGrid();
-        case 'v':
-          return this.setVisualization(!this.visual);
-        case 's':
-          return this.toggleSnap();
-        case 'n':
-          return this.lookAtSelection();
-        case 'x':
-          return this.toggleSection();
-        default:
-      }
-      if (TOOL_KEYS[lower] && !this.visual) this.tools.activate(TOOL_KEYS[lower]);
+      if (k === 'Tab') e.preventDefault();
+      if (k.toLowerCase() === 'home') return this.vp.fit(this.selectionBox());
     });
+    const release = () => {
+      this.vp.setSpaceHeld(false);
+      // A tap (no drag, short) over a face: look straight at it.
+      const tap = this.spaceTap;
+      this.spaceTap = null;
+      if (tap && performance.now() - tap.at < 250 && JSON.stringify(this.vp.rig.toJSON()) === JSON.stringify(tap.view)) this.lookAtPointer();
+    };
+    window.addEventListener('keyup', (e) => {
+      if (e.key === ' ' || e.code === 'Space') release();
+    });
+    window.addEventListener('blur', () => {
+      this.spaceTap = null;
+      this.vp.setSpaceHeld(false);
+    });
+  }
+
+  runAction(action) {
+    hideTooltip();
+    if (action.startsWith('tool:')) {
+      if (!this.visual) this.tools.activate(action.slice(5));
+      return;
+    }
+    if (action.startsWith('view-') && action !== 'view-fit' && action !== 'view-normal') return this.vp.setView(action.slice(5));
+    if (action.startsWith('filter-')) {
+      if (action === 'filter-cycle') {
+        const ids = SELECT_FILTERS.map((f) => f[0]);
+        return this.setSelectFilter(ids[(ids.indexOf(this.settings.selectFilter) + 1) % ids.length]);
+      }
+      return this.setSelectFilter(action.slice(7));
+    }
+    if (action.startsWith('constrain-')) return this.constraints.shortcut(action.slice(10));
+    switch (action) {
+      case 'view-fit':
+        return this.vp.fit(this.selectionBox());
+      case 'toggle-snap':
+        return this.toggleSnap();
+      case 'select-through':
+        return this.selectThrough();
+      default:
+        return this.onMenu(action);
+    }
+  }
+
+  setSelectFilter(f) {
+    if (!SELECT_FILTERS.some(([k]) => k === f)) return;
+    this.settings.selectFilter = f;
+    this.saveSettings();
+    const sel = document.getElementById('filter-select');
+    if (sel) sel.value = f;
+    toast(SELECT_FILTERS.find(([k]) => k === f)[1], { ms: 1000 });
+  }
+
+  // Everything under the pointer, also behind other faces: pick one.
+  selectThrough(at = this.vp.pointer) {
+    if (!at) return;
+    const hits = this.vp.hitsUnder(at.x, at.y);
+    if (!hits.length) return toast('Nothing under the pointer', { ms: 1200 });
+    const r = this.vp.canvas.getBoundingClientRect();
+    const name = (id) => this.doc.body(id)?.name || '';
+    showMenu(
+      r.left + at.x,
+      r.top + at.y,
+      hits.slice(0, 16).map((hit, i) => {
+        const info = hit.kind === 'face' ? this.faceInfo(hit.bodyId, hit.index) : null;
+        const what = hit.kind === 'face' ? `${t('Face')}${info ? ` (${t(info.type)})` : ''}` : t('Mesh');
+        return {
+          label: `${i + 1}. ${name(hit.bodyId)} · ${what}`,
+          raw: true,
+          icon: hit.kind === 'face' ? 'solid' : 'mesh',
+          action: () => this.selection.set([hit.kind === 'face' ? { kind: 'face', bodyId: hit.bodyId, index: hit.index } : { kind: 'body', bodyId: hit.bodyId }]),
+        };
+      }),
+    );
+  }
+
+  // Open Items and scroll to the selected item.
+  revealInItems() {
+    if (document.getElementById('items').classList.contains('collapsed')) this.toggleItems();
+    this.items.query = '';
+    this.items.setTab('items');
+    this.items.render();
+    this.items.el.querySelector('.item.selected')?.scrollIntoView({ block: 'center' });
+  }
+
+  // Look straight at the face under the pointer.
+  // Double tap (touch): look straight at the flat face under the finger.
+  onDoubleTap() {
+    const at = this.vp.pointer;
+    const hit = at && this.vp.hitsUnder(at.x, at.y)[0];
+    if (hit?.kind === 'face') this.lookAtPointer();
+    else this.vp.fit(this.selectionBox());
+  }
+
+  lookAtPointer() {
+    const at = this.vp.pointer;
+    const hit = at && this.vp.hitsUnder(at.x, at.y)[0];
+    if (!hit || hit.kind !== 'face') return;
+    const info = this.faceInfo(hit.bodyId, hit.index);
+    if (info?.type === 'plane') this.vp.lookAtPlane({ origin: info.center, normal: info.normal });
   }
 
   selectionBox() {
@@ -997,6 +1523,8 @@ export class App {
     }
     const sk = it?.sketchId ? this.doc.sketch(it.sketchId) : null;
     if (sk) return this.vp.lookAtPlane(sk.plane);
+    const pl = it?.kind === 'plane' ? this.doc.plane(it.planeId) : it?.kind === 'image' ? this.doc.image(it.imageId) : null;
+    if (pl) return this.vp.lookAtPlane(pl.plane);
     const tp = this.tools.active?.plane;
     if (tp) return this.vp.lookAtPlane(tp);
     toast('Select a flat face or sketch to look at', { ms: 1600 });
@@ -1011,7 +1539,7 @@ export class App {
       if (!hint) {
         hint = document.createElement('div');
         hint.className = 'drop-hint';
-        hint.textContent = 'Drop STL, OBJ, 3MF, STEP or ShaperBuild files to open them';
+        hint.textContent = t('Drop STL, OBJ, 3MF, STEP, DXF or ShaperBuild files to open them');
         document.body.append(hint);
       }
     });
@@ -1055,6 +1583,8 @@ export class App {
         return this.files.save().then((ok) => ok && window.native?.closeConfirmed());
       case 'import':
         return this.files.importDialog();
+      case 'print':
+        return this.print.open();
       case 'export-stl':
         return this.files.exportDialog('stl');
       case 'export-3mf':
@@ -1063,8 +1593,18 @@ export class App {
         return this.files.exportDialog('obj');
       case 'export-step':
         return this.files.exportDialog('step');
+      case 'versions':
+        return this.files.showVersions();
+      case 'export-glb':
+        return this.files.exportDialog('glb');
+      case 'export-usdz':
+        return this.files.exportDialog('usdz');
+      case 'export-dxf':
+        return this.files.exportDXF();
+      case 'drawing':
+        return this.drawing.open();
       case 'export-png':
-        return this.files.exportPNG();
+        return this.dialogs.screenshot();
       case 'close-design':
         return this.files.closeDesign();
       case 'undo':
@@ -1093,12 +1633,18 @@ export class App {
         return this.toggleSection();
       case 'toggle-grid':
         return this.toggleGrid();
+      case 'toggle-xray':
+        return this.toggleXray();
+      case 'toggle-isolate':
+        return this.toggleIsolate();
       case 'toggle-edges':
         this.settings.showEdges = !this.settings.showEdges;
         this.saveSettings();
         return this.applyViewSettings();
       case 'toggle-theme':
         return this.toggleTheme();
+      case 'show-history':
+        return this.showHistory();
       case 'toggle-items':
         return this.toggleItems();
       case 'settings':
@@ -1107,17 +1653,39 @@ export class App {
         return this.dialogs.shortcuts();
       case 'getting-started':
         return this.dialogs.gettingStarted();
+      case 'check-updates':
+        return this.updates.check(true);
+      case 'tutorial':
+        return this.tutorial.start();
+      case 'navigation-help':
+        return this.navHelp.toggle(true);
+      case 'find-tool':
+        return this.toolsMenu.focusSearch();
+      case 'toggle-tool-labels':
+        return this.toggleToolLabels();
       case 'about':
         return this.dialogs.about();
+      case 'licences':
+        return this.dialogs.licences();
+      case 'privacy':
+        return this.dialogs.privacy();
       default:
         if (cmd.startsWith('view-')) return this.vp.setView(cmd.slice(5));
     }
   }
 }
 
+// Hints for the current tool: in the view while a tool is active, in the
+// status bar otherwise.
 class Status {
+  constructor(app) {
+    this.app = app;
+  }
+
   hint(html) {
-    document.getElementById('status-hint').innerHTML = html || '';
+    html = t(html);
+    const inView = this.app.toolHint?.set(html);
+    document.getElementById('status-hint').innerHTML = inView ? '' : html || '';
   }
 }
 

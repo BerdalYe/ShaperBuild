@@ -1,6 +1,7 @@
 // Toasts, tooltips, context menus and modal dialogs.
-import { h, clear } from './dom.js';
+import { h, clear, escapeHtml } from './dom.js';
 import { icon } from './icons.js';
+import { t } from '../core/i18n.js';
 
 // ---- toasts ----------------------------------------------------------------
 export function toast(message, { type = 'info', ms = 2600 } = {}) {
@@ -25,7 +26,7 @@ export function attachTooltip(el, content) {
     tipTimer = setTimeout(() => {
       hideTooltip();
       const c = typeof content === 'function' ? content() : content;
-      tipEl = h('div.tooltip', { html: c });
+      tipEl = h('div.tooltip', { html: t(c) });
       document.body.append(tipEl);
       const r = el.getBoundingClientRect();
       const t = tipEl.getBoundingClientRect();
@@ -58,7 +59,8 @@ export function closeMenu() {
   openMenu = null;
 }
 
-// items: [{ label, icon?, kbd?, action, danger? } | '-' | { custom: Element }]
+// items: [{ label, icon?, kbd?, action, danger?, raw? } | '-' | { custom: Element }]
+// Labels are translated unless `raw` (names the user typed).
 export function showMenu(x, y, items) {
   closeMenu();
   const menu = h('div.menu');
@@ -71,7 +73,8 @@ export function showMenu(x, y, items) {
       menu.append(it.custom);
       continue;
     }
-    const b = h('button', { html: `${it.icon ? icon(it.icon) : ''}<span>${it.label}</span>${it.kbd ? `<span class="kbd">${it.kbd}</span>` : ''}` });
+    const label = it.raw ? escapeHtml(it.label) : t(it.label);
+    const b = h('button', { html: `${it.icon ? icon(it.icon) : ''}<span>${label}</span>${it.kbd ? `<span class="kbd">${it.kbd}</span>` : ''}` });
     if (it.danger) b.style.color = 'var(--danger)';
     b.addEventListener('click', () => {
       closeMenu();
@@ -97,7 +100,8 @@ export function showMenu(x, y, items) {
 }
 
 // ---- modals ------------------------------------------------------------------
-export function modal({ title, body, buttons = [{ label: 'Close', primary: true }], width, onClose }) {
+// bind(close) receives a function that closes the dialog with a value.
+export function modal({ title, body, buttons = [{ label: 'Close', primary: true }], width, onClose, bind, className }) {
   return new Promise((resolve) => {
     const root = document.getElementById('modal-root');
     const foot = h('div.modal-foot');
@@ -113,7 +117,10 @@ export function modal({ title, body, buttons = [{ label: 'Close', primary: true 
       foot.append(btn);
     }
     const m = h('div.modal', h('div.modal-head', { text: title }), h('div.modal-body', body), foot);
+    if (className) m.classList.add(className);
+    if (!buttons.length) foot.hidden = true;
     if (width) m.style.width = `min(${width}px, calc(100vw - 40px))`;
+    bind?.(close);
     const backdrop = h('div.modal-backdrop', m);
     backdrop.addEventListener('pointerdown', (e) => {
       if (e.target === backdrop) close(null);

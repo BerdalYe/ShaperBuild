@@ -1,6 +1,8 @@
 // Solid modelling tools.
 import { OpTool } from './optool.js';
 import { formatLength, niceStep } from '../core/units.js';
+import { scaleMatrix } from '../core/replay.js';
+import { tn } from '../core/i18n.js';
 
 const AXES = {
   x: { origin: [0, 0, 0], dir: [1, 0, 0] },
@@ -34,7 +36,7 @@ function profileSlot(app, { multiple = true, label = 'Profiles' } = {}) {
       if (it.kind === 'face') return app.faceInfo(it.bodyId, it.index)?.type === 'plane' ? it : null;
       return null;
     },
-    summary: (items) => `${items.length} profile${items.length === 1 ? '' : 's'}`,
+    summary: (items) => tn(items.length, '1 profile', '{n} profiles'),
   };
 }
 
@@ -45,14 +47,19 @@ function bodySlot(key = 'bodies', label = 'Bodies', extra = {}) {
     kinds: ['body'],
     multiple: true,
     placeholder: 'Click bodies',
-    summary: (items) => `${items.length} bod${items.length === 1 ? 'y' : 'ies'}`,
+    summary: (items) => tn(items.length, '1 body', '{n} bodies'),
     ...extra,
   };
 }
 
+// A plane taken from a body face, as the history records it.
+function planeSource(app, it) {
+  return { kind: 'face', id: app.doc.body(it.bodyId).shapeId, index: it.index };
+}
+
 // Combine several kernel results into one.
 function merge(results) {
-  return { bodies: results.flatMap((r) => r.bodies), removed: results.flatMap((r) => r.removed) };
+  return { bodies: results.flatMap((r) => r.bodies), removed: results.flatMap((r) => r.removed), calls: results.flatMap((r) => r.calls || []) };
 }
 
 // Closest point parameter along an axis line for a view ray.
@@ -71,16 +78,69 @@ function axisParam(ray, origin, dir) {
 
 export class ExtrudeTool extends OpTool {
   inputs() {
-    return [profileSlot(this.app)];
+    return [
+      profileSlot(this.app),
+      {
+        key: 'until',
+        label: 'Up to',
+        kinds: ['face', 'plane'],
+        multiple: false,
+        optional: true,
+        fromSelection: false,
+        placeholder: 'Click a flat face to stop at (optional)',
+        reject: 'Pick a flat face or a plane to stop at',
+        accept: (it) => (this.planeOf(it) ? it : null),
+      },
+    ];
   }
 
   params() {
     const v = this.values || {};
+    const until = this.slots && this.items('until').length;
     return [
-      { type: 'length', key: 'distance', label: 'Distance', value: v.distance ?? this.app.settings.extrudeDistance ?? 10 },
+      ...(until ? [] : [{ type: 'length', key: 'distance', label: 'Distance', value: v.distance ?? this.app.settings.extrudeDistance ?? 10 }]),
+      ...(until ? [] : [{ type: 'toggle', key: 'through', label: 'Through everything', value: v.through ?? false }]),
       { type: 'select', key: 'mode', label: 'Result', value: v.mode ?? 'auto', options: MODE_OPTIONS },
       { type: 'toggle', key: 'symmetric', label: 'Symmetric (both directions)', value: v.symmetric ?? false },
+      { type: 'angle', key: 'taper', label: 'Taper (lean the sides in)', value: v.taper ?? 0 },
+      { type: 'length', key: 'start', label: 'Start offset', value: v.start ?? 0 },
     ];
+  }
+
+  planeOf(it) {
+    if (it.kind === 'plane') return this.app.doc.plane(it.planeId)?.plane || null;
+    if (it.kind === 'face') {
+      const info = this.app.faceInfo(it.bodyId, it.index);
+      return info?.type === 'plane' ? { origin: info.center, normal: info.normal } : null;
+    }
+    return null;
+  }
+
+  // The distance to extrude: typed, up to a face, or through everything.
+  length() {
+    const v = this.values;
+    const a = this.anchor();
+    const until = this.items('until')[0];
+    if (until && a) {
+      const pl = this.planeOf(until);
+      const den = a.normal.reduce((s, x, i) => s + x * pl.normal[i], 0);
+      if (Math.abs(den) < 1e-9) throw new Error('That face is parallel to the extrude direction');
+      const t = pl.origin.reduce((s, x, i) => s + (x - a.origin[i]) * pl.normal[i], 0) / den;
+      return t - (Math.sign(t) || 1) * (v.start || 0);
+    }
+    if (v.through && a) {
+      // Past the far side of every visible body.
+      const sign = Math.sign(v.distance || 1);
+      let far = 0;
+      for (const b of this.app.doc.bodies) {
+        if (b.visible === false) continue;
+        const bb = this.app.bodyBox(b.id);
+        if (!bb) continue;
+        for (const x of [bb.min.x, bb.max.x]) for (const y of [bb.min.y, bb.max.y]) for (const z of [bb.min.z, bb.max.z]) far = Math.max(far, sign * ([x, y, z].reduce((s, c, i) => s + (c - a.origin[i]) * a.normal[i], 0)));
+      }
+      return sign * (Math.max(far, Math.abs(v.distance || 1)) + 1);
+    }
+    return v.distance;
   }
 
   hint() {
@@ -97,6 +157,7 @@ export class ExtrudeTool extends OpTool {
 
   onParam(k, v) {
     if (k === 'distance') this.app.settings.extrudeDistance = v;
+    if (k === 'through') this.render();
   }
 
   // Where the arrow sits and which way it points.
@@ -110,7 +171,10 @@ export class ExtrudeTool extends OpTool {
     ov.remove('tool-arrow');
     ov.removeLabel('tool-dist');
     if (!a) return;
-    const d = this.values.distance || 0;
+    let d = this.values.distance || 0;
+    try {
+      d = this.length() || 0;
+    } catch {}
     const tip = a.origin.map((o, i) => o + a.normal[i] * d);
     ov.arrow('tool-arrow', tip, a.normal, { color: this.app.vp.theme.select, length: 64 });
     ov.label('tool-dist', tip, formatLength(d, this.app.units), { className: 'accent', offset: [0, 26] });
@@ -149,7 +213,10 @@ export class ExtrudeTool extends OpTool {
   resolve() {
     const app = this.app;
     const profiles = this.items('profiles');
-    const d = this.values.distance;
+    let d = this.values.distance;
+    try {
+      d = this.length();
+    } catch {}
     let mode = this.values.mode;
     const source = app.profileSourceBody(profiles);
     if (mode === 'auto') {
@@ -173,16 +240,19 @@ export class ExtrudeTool extends OpTool {
   async compute() {
     const app = this.app;
     const profiles = this.items('profiles');
-    const d = this.values.distance;
+    const d = this.length();
     if (!d || Math.abs(d) < 1e-6) return null;
     await app.ensureRegions(profiles);
     const { mode, targets } = this.resolve();
+    const v = this.values;
     return app.kernel.call('extrude', {
       profiles: profiles.map((p) => app.profileRef(p)),
       distance: d,
-      symmetric: !!this.values.symmetric,
+      symmetric: !!v.symmetric,
       mode,
       targets: targets.map((id) => app.doc.body(id).shapeId),
+      ...(v.taper ? { taper: v.taper } : {}),
+      ...(v.start ? { start: v.start } : {}),
     });
   }
 }
@@ -196,11 +266,11 @@ export class RevolveTool extends OpTool {
       {
         key: 'axis',
         label: 'Axis',
-        kinds: ['curve', 'edge'],
+        kinds: ['curve', 'edge', 'axis'],
         multiple: false,
         optional: true,
         fromSelection: false,
-        placeholder: 'Click a line or straight edge',
+        placeholder: 'Click a line, straight edge or axis',
         reject: 'Pick a straight line or edge as the axis',
         accept: (it) => (this.app.axisOf(it) ? it : null),
       },
@@ -223,6 +293,7 @@ export class RevolveTool extends OpTool {
         ],
       },
       { type: 'angle', key: 'angle', label: 'Angle', value: v.angle ?? 360 },
+      { type: 'length', key: 'pitch', label: 'Rise per turn (helix, springs)', value: v.pitch ?? 0 },
       { type: 'select', key: 'mode', label: 'Result', value: v.mode ?? 'auto', options: MODE_OPTIONS },
     ];
   }
@@ -271,6 +342,7 @@ export class RevolveTool extends OpTool {
       angle: this.values.angle,
       mode,
       targets: targets.map((id) => app.doc.body(id).shapeId),
+      ...(this.values.pitch ? { pitch: this.values.pitch } : {}),
     });
   }
 }
@@ -286,11 +358,16 @@ export class SweepTool extends OpTool {
   }
 
   params() {
-    return [{ type: 'select', key: 'mode', label: 'Result', value: this.values?.mode ?? 'new', options: MODE_OPTIONS.filter((o) => o.value !== 'auto') }];
+    const v = this.values || {};
+    return [
+      { type: 'select', key: 'mode', label: 'Result', value: v.mode ?? 'new', options: MODE_OPTIONS.filter((o) => o.value !== 'auto') },
+      { type: 'angle', key: 'twist', label: 'Twist', value: v.twist ?? 0, hint: 'How far the profile turns from start to end (e.g. 360 for one full turn)' },
+      { type: 'number', key: 'endScale', label: 'Size at the end', value: v.endScale ?? 1, min: 0.01, hint: '1 keeps the size; 0.5 ends at half size, 2 at double' },
+    ];
   }
 
   hint() {
-    return 'Pick a profile, then the path it should follow. The path should start at the profile.';
+    return 'Pick a profile, then the path it should follow. The path should start at the profile. Twist turns the profile along the way.';
   }
 
   async compute() {
@@ -300,7 +377,68 @@ export class SweepTool extends OpTool {
     const path = this.items('path').map((it) => app.pathRef(it)).filter(Boolean);
     const mode = this.values.mode;
     const targets = mode === 'new' ? [] : app.doc.bodies.filter((b) => b.visible !== false).map((b) => b.shapeId);
-    return app.kernel.call('sweep', { profiles: profiles.map((p) => app.profileRef(p)), path, mode, targets });
+    const twist = this.values.twist || 0;
+    const endScale = this.values.endScale ?? 1;
+    return app.kernel.call('sweep', { profiles: profiles.map((p) => app.profileRef(p)), path, mode, targets, twist, endScale });
+  }
+}
+
+// ---- Wrap & Emboss -------------------------------------------------------------
+
+export class EmbossTool extends OpTool {
+  inputs() {
+    return [
+      {
+        key: 'profiles',
+        label: 'Shapes',
+        kinds: ['region'],
+        multiple: true,
+        placeholder: 'Click sketch shapes or letters',
+        summary: (items) => tn(items.length, '1 shape', '{n} shapes'),
+      },
+      {
+        key: 'face',
+        label: 'Onto face',
+        kinds: ['face'],
+        multiple: false,
+        fromSelection: false,
+        placeholder: 'Click the face to put them on',
+        reject: 'Pick a face of a solid body',
+        accept: (it) => (this.app.faceInfo(it.bodyId, it.index) ? it : null),
+      },
+    ];
+  }
+
+  params() {
+    const v = this.values || {};
+    return [
+      { type: 'length', key: 'height', label: 'Height', value: v.height ?? 1, hint: 'Positive raises the shapes, negative engraves them' },
+      {
+        type: 'choice',
+        key: 'mode',
+        label: 'Result',
+        value: v.mode ?? 'auto',
+        options: [
+          { value: 'auto', label: 'Join / cut' },
+          { value: 'new', label: 'New body' },
+        ],
+      },
+    ];
+  }
+
+  hint() {
+    return 'Pick sketch shapes (text works well), then a face: flat, round, a ball, a cone or a free-form surface. Draw on a plane facing the face: the shapes are wrapped on keeping their size where the plane touches it. A negative height engraves.';
+  }
+
+  async compute() {
+    const app = this.app;
+    const profiles = this.items('profiles');
+    const f = this.items('face')[0];
+    const height = this.values.height;
+    if (!f || !profiles.length || !height) return null;
+    await app.ensureRegions(profiles);
+    const body = app.doc.body(f.bodyId);
+    return app.kernel.call('emboss', { profiles: profiles.map((p) => app.profileRef(p)), target: { id: body.shapeId, face: f.index }, height, mode: this.values.mode || 'auto' });
   }
 }
 
@@ -342,7 +480,7 @@ class EdgeTool extends OpTool {
         placeholder: 'Click edges',
         reject: 'Pick edges of solid bodies',
         accept: (it) => (this.app.doc.body(it.bodyId)?.kind === 'solid' ? it : null),
-        summary: (items) => `${items.length} edge${items.length === 1 ? '' : 's'}`,
+        summary: (items) => tn(items.length, '1 edge', '{n} edges'),
       },
     ];
   }
@@ -391,15 +529,22 @@ export class ChamferTool extends EdgeTool {
   }
 
   params() {
-    return [{ type: 'length', key: 'distance', label: 'Distance', value: this.values?.distance ?? this.app.settings.chamferDistance ?? 1, min: 0 }];
+    const v = this.values || {};
+    return [
+      { type: 'length', key: 'distance', label: 'Distance', value: v.distance ?? this.app.settings.chamferDistance ?? 1, min: 0 },
+      { type: 'toggle', key: 'two', label: 'Two distances', value: v.two ?? false },
+      ...(v.two ? [{ type: 'length', key: 'distance2', label: 'Second distance', value: v.distance2 ?? (v.distance ?? 1) * 2, min: 0 }] : []),
+    ];
   }
 
   onParam(k, v) {
-    this.app.settings.chamferDistance = v;
+    if (k === 'distance') this.app.settings.chamferDistance = v;
+    if (k === 'two') this.render();
   }
 
   kernelParams() {
-    return { distance: this.values.distance };
+    const v = this.values;
+    return v.two ? { distance: v.distance, distance2: v.distance2 ?? v.distance * 2 } : { distance: v.distance };
   }
 }
 
@@ -415,7 +560,7 @@ export class ShellTool extends OpTool {
         multiple: true,
         placeholder: 'Click faces to remove',
         accept: (it) => (this.app.doc.body(it.bodyId)?.kind === 'solid' ? it : null),
-        summary: (items) => `${items.length} face${items.length === 1 ? '' : 's'}`,
+        summary: (items) => tn(items.length, '1 face', '{n} faces'),
       },
     ];
   }
@@ -462,7 +607,7 @@ export class UnionTool extends OpTool {
   }
 
   params() {
-    return [];
+    return [{ type: 'toggle', key: 'keepTargets', label: 'Keep the originals', value: this.values?.keepTargets ?? false }];
   }
 
   hint() {
@@ -471,7 +616,7 @@ export class UnionTool extends OpTool {
 
   async compute() {
     const ids = this.items('bodies').map((it) => this.app.doc.body(it.bodyId).shapeId);
-    return this.app.kernel.call('boolean', { op: 'union', targets: ids.slice(0, 1), tools: ids.slice(1) });
+    return this.app.kernel.call('boolean', { op: 'union', targets: ids.slice(0, 1), tools: ids.slice(1), ...(this.values.keepTargets ? { keepTargets: true } : {}) });
   }
 }
 
@@ -481,7 +626,10 @@ class TargetToolBoolean extends OpTool {
   }
 
   params() {
-    return [{ type: 'toggle', key: 'keepTools', label: `Keep the ${this.toolLabel.toLowerCase()} bodies`, value: this.values?.keepTools ?? false }];
+    return [
+      { type: 'toggle', key: 'keepTargets', label: 'Keep the bodies it changes', value: this.values?.keepTargets ?? false },
+      { type: 'toggle', key: 'keepTools', label: this.keepLabel, value: this.values?.keepTools ?? false },
+    ];
   }
 
   fillFromSelection() {
@@ -500,7 +648,7 @@ class TargetToolBoolean extends OpTool {
     const targets = this.items('targets').map(sid);
     const tools = this.items('tools').map(sid);
     if (targets.some((t) => tools.includes(t))) throw new Error('A body cannot be both kept and used as a tool');
-    return this.app.kernel.call('boolean', { op: this.op, targets, tools, keepTools: !!this.values.keepTools });
+    return this.app.kernel.call('boolean', { op: this.op, targets, tools, keepTools: !!this.values.keepTools, ...(this.values.keepTargets ? { keepTargets: true } : {}) });
   }
 }
 
@@ -510,6 +658,9 @@ export class SubtractTool extends TargetToolBoolean {
   }
   get toolLabel() {
     return 'Remove';
+  }
+  get keepLabel() {
+    return 'Keep the bodies used to cut';
   }
   hint() {
     return 'Cut the second set of bodies out of the first.';
@@ -522,6 +673,9 @@ export class IntersectTool extends TargetToolBoolean {
   }
   get toolLabel() {
     return 'With';
+  }
+  get keepLabel() {
+    return 'Keep the second set of bodies';
   }
   hint() {
     return 'Keep only the volume the bodies share.';
@@ -537,12 +691,12 @@ export class SplitTool extends OpTool {
       {
         key: 'face',
         label: 'Cut with',
-        kinds: ['face'],
+        kinds: ['face', 'plane'],
         multiple: false,
         optional: true,
         fromSelection: false,
-        placeholder: 'Click a flat face (optional)',
-        accept: (it) => (this.app.faceInfo(it.bodyId, it.index)?.type === 'plane' ? it : null),
+        placeholder: 'Click a flat face or plane (optional)',
+        accept: (it) => (it.kind === 'plane' || this.app.faceInfo(it.bodyId, it.index)?.type === 'plane' ? it : null),
       },
     ];
   }
@@ -571,6 +725,10 @@ export class SplitTool extends OpTool {
 
   plane() {
     const f = this.items('face')[0];
+    if (f?.kind === 'plane') {
+      const pl = this.app.doc.plane(f.planeId).plane;
+      return { origin: pl.origin, normal: pl.normal };
+    }
     if (f) {
       const info = this.app.faceInfo(f.bodyId, f.index);
       return { origin: info.center, normal: info.normal };
@@ -580,13 +738,22 @@ export class SplitTool extends OpTool {
     return { origin: p.normal.map((n) => n * o), normal: p.normal };
   }
 
+  // For the history: where the plane came from.
+  planeFrom() {
+    const f = this.items('face')[0];
+    if (f && f.kind !== 'plane') return planeSource(this.app, f);
+    if (f) return { kind: 'fixed', plane: this.plane() };
+    const p = PLANES[this.values.plane || 'xy'];
+    return { kind: 'fixed', plane: { origin: [0, 0, 0], normal: p.normal }, offset: this.values.offset || 0 };
+  }
+
   updateHandles() {
     this.app.showPlaneOverlay('tool-plane', this.plane());
   }
 
   async compute() {
     const body = this.app.doc.body(this.items('body')[0].bodyId);
-    return this.app.kernel.call('split', { id: body.shapeId, plane: this.plane() });
+    return this.app.kernel.call('split', { id: body.shapeId, plane: this.plane(), planeFrom: this.planeFrom() });
   }
 }
 
@@ -599,12 +766,12 @@ export class MirrorTool extends OpTool {
       {
         key: 'face',
         label: 'Mirror plane',
-        kinds: ['face'],
+        kinds: ['face', 'plane'],
         multiple: false,
         optional: true,
         fromSelection: false,
-        placeholder: 'Click a flat face (optional)',
-        accept: (it) => (this.app.faceInfo(it.bodyId, it.index)?.type === 'plane' ? it : null),
+        placeholder: 'Click a flat face or plane (optional)',
+        accept: (it) => (it.kind === 'plane' || this.app.faceInfo(it.bodyId, it.index)?.type === 'plane' ? it : null),
       },
     ];
   }
@@ -630,11 +797,21 @@ export class MirrorTool extends OpTool {
 
   plane() {
     const f = this.items('face')[0];
+    if (f?.kind === 'plane') {
+      const pl = this.app.doc.plane(f.planeId).plane;
+      return { origin: pl.origin, normal: pl.normal };
+    }
     if (f) {
       const info = this.app.faceInfo(f.bodyId, f.index);
       return { origin: info.center, normal: info.normal };
     }
     return PLANES[this.values.plane || 'yz'];
+  }
+
+  planeFrom() {
+    const f = this.items('face')[0];
+    if (f && f.kind !== 'plane') return planeSource(this.app, f);
+    return { kind: 'fixed', plane: this.plane() };
   }
 
   updateHandles() {
@@ -643,7 +820,7 @@ export class MirrorTool extends OpTool {
 
   async compute() {
     const ids = this.items('bodies').map((it) => this.app.doc.body(it.bodyId).shapeId);
-    return this.app.kernel.call('mirror', { ids, plane: this.plane(), copy: this.values.copy !== false, union: !!this.values.union });
+    return this.app.kernel.call('mirror', { ids, plane: this.plane(), planeFrom: this.planeFrom(), copy: this.values.copy !== false, union: !!this.values.union });
   }
 }
 
@@ -653,7 +830,7 @@ export class LinearPatternTool extends OpTool {
   inputs() {
     return [
       bodySlot(),
-      { key: 'edge', label: 'Direction', kinds: ['edge', 'curve'], multiple: false, optional: true, fromSelection: false, placeholder: 'Click a straight edge (optional)', accept: (it) => (this.app.axisOf(it) ? it : null) },
+      { key: 'edge', label: 'Direction', kinds: ['edge', 'curve', 'axis'], multiple: false, optional: true, fromSelection: false, placeholder: 'Click a straight edge or axis (optional)', accept: (it) => (this.app.axisOf(it) ? it : null) },
     ];
   }
 
@@ -672,9 +849,47 @@ export class LinearPatternTool extends OpTool {
         ],
       },
       { type: 'count', key: 'count', label: 'Count', value: v.count ?? 3, min: 2, max: 500 },
-      { type: 'length', key: 'spacing', label: 'Spacing', value: v.spacing ?? this.app.settings.patternSpacing ?? 20 },
+      {
+        type: 'choice',
+        key: 'mode',
+        label: 'Distance is',
+        value: v.mode ?? 'spacing',
+        options: [
+          { value: 'spacing', label: 'Between copies' },
+          { value: 'total', label: 'Total' },
+        ],
+      },
+      { type: 'length', key: 'spacing', label: 'Distance', value: v.spacing ?? this.app.settings.patternSpacing ?? 20 },
+      ...this.moreFields(2, v),
+      ...this.moreFields(3, v),
       { type: 'toggle', key: 'union', label: 'Join copies into one body', value: v.union ?? false },
     ];
+  }
+
+  // A second and third direction (grid patterns).
+  moreFields(k, v) {
+    const on = (v[`dir${k}`] ?? 'none') !== 'none';
+    if (k === 3 && (v.dir2 ?? 'none') === 'none') return [];
+    const out = [
+      {
+        type: 'choice',
+        key: `dir${k}`,
+        label: k === 2 ? 'Second direction' : 'Third direction',
+        value: v[`dir${k}`] ?? 'none',
+        options: [
+          { value: 'none', label: 'None' },
+          { value: 'x', label: 'X' },
+          { value: 'y', label: 'Y' },
+          { value: 'z', label: 'Z' },
+        ],
+      },
+    ];
+    if (on) out.push({ type: 'count', key: `count${k}`, label: 'Count', value: v[`count${k}`] ?? 2, min: 2, max: 500 }, { type: 'length', key: `spacing${k}`, label: 'Distance', value: v[`spacing${k}`] ?? 20 });
+    return out;
+  }
+
+  onParam(k) {
+    if (k === 'dir2' || k === 'dir3') this.render();
   }
 
   direction() {
@@ -683,9 +898,18 @@ export class LinearPatternTool extends OpTool {
     return AXES[this.values.axis || 'x'].dir;
   }
 
+  // Distance between neighbouring copies.
+  step(total, count) {
+    return this.values.mode === 'total' ? total / Math.max(1, count - 1) : total;
+  }
+
   async compute() {
+    const v = this.values;
     const ids = this.items('bodies').map((it) => this.app.doc.body(it.bodyId).shapeId);
-    return this.app.kernel.call('pattern', { ids, kind: 'linear', count: this.values.count, spacing: this.values.spacing, direction: this.direction(), union: !!this.values.union });
+    const more = [2, 3]
+      .filter((k) => (v[`dir${k}`] ?? 'none') !== 'none' && (k === 2 || (v.dir2 ?? 'none') !== 'none'))
+      .map((k) => ({ direction: AXES[v[`dir${k}`]].dir, count: v[`count${k}`] ?? 2, spacing: this.step(v[`spacing${k}`] ?? 20, v[`count${k}`] ?? 2) }));
+    return this.app.kernel.call('pattern', { ids, kind: 'linear', count: v.count, spacing: this.step(v.spacing, v.count), direction: this.direction(), ...(more.length ? { more } : {}), union: !!v.union });
   }
 }
 
@@ -693,7 +917,7 @@ export class CircularPatternTool extends OpTool {
   inputs() {
     return [
       bodySlot(),
-      { key: 'edge', label: 'Axis', kinds: ['edge', 'curve'], multiple: false, optional: true, fromSelection: false, placeholder: 'Click an edge (optional)', accept: (it) => (this.app.axisOf(it, { circles: true }) ? it : null) },
+      { key: 'edge', label: 'Axis', kinds: ['edge', 'curve', 'axis'], multiple: false, optional: true, fromSelection: false, placeholder: 'Click an edge or axis (optional)', accept: (it) => (this.app.axisOf(it, { circles: true }) ? it : null) },
     ];
   }
 
@@ -713,6 +937,7 @@ export class CircularPatternTool extends OpTool {
       },
       { type: 'count', key: 'count', label: 'Count', value: v.count ?? 6, min: 2, max: 500 },
       { type: 'angle', key: 'angle', label: 'Total angle', value: v.angle ?? 360 },
+      { type: 'toggle', key: 'keepTurn', label: 'Keep the direction (copies are not turned)', value: v.keepTurn ?? false },
       { type: 'toggle', key: 'union', label: 'Join copies into one body', value: v.union ?? false },
     ];
   }
@@ -732,7 +957,7 @@ export class CircularPatternTool extends OpTool {
 
   async compute() {
     const ids = this.items('bodies').map((it) => this.app.doc.body(it.bodyId).shapeId);
-    return this.app.kernel.call('pattern', { ids, kind: 'circular', count: this.values.count, angle: this.values.angle, axis: this.axis(), union: !!this.values.union });
+    return this.app.kernel.call('pattern', { ids, kind: 'circular', count: this.values.count, angle: this.values.angle, axis: this.axis(), union: !!this.values.union, ...(this.values.keepTurn ? { keepTurn: true } : {}) });
   }
 }
 
@@ -745,8 +970,25 @@ export class ScaleTool extends OpTool {
 
   params() {
     const v = this.values || {};
+    const stretch = v.type === 'stretch';
     return [
-      { type: 'number', key: 'factor', label: 'Scale factor', value: v.factor ?? 2, min: 0.0001 },
+      {
+        type: 'choice',
+        key: 'type',
+        label: 'Type',
+        value: v.type ?? 'uniform',
+        options: [
+          { value: 'uniform', label: 'Uniform' },
+          { value: 'stretch', label: 'X, Y and Z', title: 'Stretch each direction on its own (meshes only)' },
+        ],
+      },
+      ...(stretch
+        ? [
+            { type: 'number', key: 'fx', label: 'Scale X', value: v.fx ?? 1, min: 0.0001 },
+            { type: 'number', key: 'fy', label: 'Scale Y', value: v.fy ?? 1, min: 0.0001 },
+            { type: 'number', key: 'fz', label: 'Scale Z', value: v.fz ?? 2, min: 0.0001 },
+          ]
+        : [{ type: 'number', key: 'factor', label: 'Scale factor', value: v.factor ?? 2, min: 0.0001 }]),
       {
         type: 'choice',
         key: 'about',
@@ -758,25 +1000,38 @@ export class ScaleTool extends OpTool {
           { value: 'base', label: 'Base' },
         ],
       },
+      { type: 'toggle', key: 'copy', label: 'Make a copy', value: v.copy ?? false },
       { type: 'info', text: 'Tip: imported STL files in inches or meters can be fixed with 25.4 or 1000.' },
     ];
   }
 
+  get label() {
+    return this.values?.copy ? 'Copy' : this.def.label;
+  }
+
+  onParam(k) {
+    if (k === 'type') this.render();
+  }
+
   async compute() {
     const app = this.app;
-    const f = this.values.factor;
-    if (!(f > 0)) throw new Error('Scale factor must be greater than zero');
+    const v = this.values;
+    const stretch = v.type === 'stretch';
+    const f = v.factor;
+    const fs = [v.fx ?? 1, v.fy ?? 1, v.fz ?? 2];
+    if (stretch ? !fs.every((x) => x > 0) : !(f > 0)) throw new Error('Scale factor must be greater than zero');
     const out = [];
     for (const it of this.items('bodies')) {
       const body = app.doc.body(it.bodyId);
+      if (stretch && body.kind !== 'mesh') throw new Error('Stretching X, Y and Z separately works on meshes only. Use Uniform for solids.');
       const bb = app.bodyBox(body.id);
       let c = [0, 0, 0];
       if (this.values.about !== 'origin' && bb) {
         c = [(bb.min.x + bb.max.x) / 2, (bb.min.y + bb.max.y) / 2, (bb.min.z + bb.max.z) / 2];
         if (this.values.about === 'base') c[2] = bb.min.z;
       }
-      const m = [f, 0, 0, 0, 0, f, 0, 0, 0, 0, f, 0, c[0] * (1 - f), c[1] * (1 - f), c[2] * (1 - f), 1];
-      out.push(await app.kernel.call('transform', { ids: [body.shapeId], matrix: m }));
+      const scale = stretch ? { factors: fs, center: c } : { factor: f, center: c };
+      out.push(await app.kernel.call('transform', { ids: [body.shapeId], matrix: scaleMatrix(scale), scale, copy: !!v.copy }));
     }
     return merge(out);
   }
@@ -795,7 +1050,7 @@ export class DraftTool extends OpTool {
         multiple: true,
         placeholder: 'Click the side faces to tilt',
         accept: (it) => (this.app.doc.body(it.bodyId)?.kind === 'solid' ? it : null),
-        summary: (items) => `${items.length} face${items.length === 1 ? '' : 's'}`,
+        summary: (items) => tn(items.length, '1 face', '{n} faces'),
       },
       {
         key: 'neutral',
@@ -853,6 +1108,8 @@ export class DraftTool extends OpTool {
     const bodyId = faces[0].bodyId;
     if (faces.some((f) => f.bodyId !== bodyId)) throw new Error('Pick faces from a single body');
     const body = this.app.doc.body(bodyId);
-    return this.app.kernel.call('draft', { id: body.shapeId, faces: faces.map((f) => f.index), angle: this.values.angle, plane: this.plane() });
+    const n = this.items('neutral')[0];
+    const planeFrom = n ? planeSource(this.app, n) : { kind: 'fixed', plane: this.plane() };
+    return this.app.kernel.call('draft', { id: body.shapeId, faces: faces.map((f) => f.index), angle: this.values.angle, plane: this.plane(), planeFrom });
   }
 }
