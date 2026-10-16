@@ -280,3 +280,38 @@ test('linear patterns in two and three directions; circular copies that keep the
     assert.ok(Math.abs(s[0] - 10) < 1e-6 && Math.abs(s[1] - 2) < 1e-6, `kept its turn: ${s}`);
   }
 });
+
+test('extrude with a taper and a start offset; helical revolve; two-distance chamfer; keep originals', () => {
+  const sq = square('tp', 10);
+  k.sketchRegions(sq);
+  const region = [{ type: 'region', sketchId: 'tp', index: 0, normal: [0, 0, 1] }];
+  // A positive taper leans the walls in: a frustum 20 → 20 − 2·10·tan 10°.
+  const tapered = k.extrude({ profiles: region, distance: 10, taper: 10, mode: 'new' }).bodies[0];
+  const top = 20 - 2 * 10 * Math.tan((10 * Math.PI) / 180);
+  const frustum = (10 / 3) * (400 + top * top + 20 * top);
+  assert.ok(Math.abs(volume(tapered.id) - frustum) < 0.5, `taper volume ${volume(tapered.id)} vs ${frustum}`);
+  assert.ok(valid(tapered.id));
+  // Both directions: each half narrows away from the sketch.
+  const both = k.extrude({ profiles: region, distance: 10, symmetric: true, taper: 10, mode: 'new' }).bodies[0];
+  assert.ok(Math.abs(volume(both.id) - 2 * frustum) < 1, `symmetric taper volume ${volume(both.id)} vs ${2 * frustum}`);
+  assert.ok(Math.abs(both.mesh.bbox.min[2] + 10) < 1e-6 && Math.abs(both.mesh.bbox.max[2] - 10) < 1e-6);
+  assert.ok(valid(both.id));
+  const lifted = k.extrude({ profiles: region, distance: 10, start: 5, mode: 'new' }).bodies[0];
+  assert.ok(Math.abs(lifted.mesh.bbox.min[2] - 5) < 1e-6 && Math.abs(lifted.mesh.bbox.max[2] - 15) < 1e-6);
+  // Two turns of a 2 × 2 square, 5 apart: the volume of a ring (Pappus).
+  const XZ = { origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, -1, 0] };
+  const prof = { id: 'hx', plane: XZ, entities: [[8, 0, 10, 0], [10, 0, 10, 2], [10, 2, 8, 2], [8, 2, 8, 0]].map((q, i) => ({ id: `h${i}`, type: 'line', a: [q[0], q[1]], b: [q[2], q[3]] })) };
+  k.sketchRegions(prof);
+  const spring = k.revolve({ profiles: [{ type: 'region', sketchId: 'hx', index: 0, normal: [0, -1, 0] }], axis: { origin: [0, 0, 0], dir: [0, 0, 1] }, angle: 720, pitch: 5, mode: 'new' }).bodies[0];
+  assert.ok(Math.abs(volume(spring.id) - 2 * Math.PI * 9 * 4 * 2) < 2, `helix volume ${volume(spring.id)}`);
+  assert.ok(Math.abs(spring.mesh.bbox.max[2] - 12) < 0.01);
+  assert.ok(valid(spring.id));
+  const box = k.primitive({ type: 'box', params: { width: 20, depth: 20, height: 10 } }).bodies[0];
+  const e = box.mesh.edgeInfo.findIndex((x) => x.type === 'line' && Math.abs(x.a[2] - 10) < 1e-6 && Math.abs(x.b[2] - 10) < 1e-6);
+  const ch = k.chamfer({ id: box.id, edges: [e], distance: 2, distance2: 4 }).bodies[0];
+  assert.ok(Math.abs(4000 - volume(ch.id) - 80) < 1e-3);
+  const other = k.primitive({ type: 'box', params: { width: 10, depth: 10, height: 30 } }).bodies[0];
+  const kept = k.boolean({ op: 'union', targets: [box.id], tools: [other.id], keepTargets: true });
+  assert.equal(kept.removed.length, 0);
+  assert.ok(kept.bodies.every((b) => !b.replaces));
+});

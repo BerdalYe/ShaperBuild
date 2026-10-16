@@ -101,12 +101,19 @@ export class HistoryEngine extends Emitter {
       });
       const step = { id, label, op: 'op', calls };
       const exprs = this.typedLinks(step);
-      d.history.push(exprs ? { ...step, exprs } : step);
+      this.insert(d, exprs ? { ...step, exprs } : step);
     } else {
       const shapeToBody = new Map(this.app.doc.bodies.map((b) => [b.shapeId, b.id]));
       const removed = (result.removed || []).map((s) => shapeToBody.get(s)).filter(Boolean);
-      d.history.push({ id, label, op: 'base', bodies: result.bodies.map((r, i) => ({ b: outIds[i], s: r.id })), removed });
+      this.insert(d, { id, label, op: 'base', bodies: result.bodies.map((r, i) => ({ b: outIds[i], s: r.id })), removed });
     }
+  }
+
+  // New steps go at the rollback bar (before the steps that are rolled back).
+  insert(d, step) {
+    const at = d.history.findIndex((f) => f.rolledBack);
+    if (at >= 0) d.history.splice(at, 0, step);
+    else d.history.push(step);
   }
 
   // Values typed with a variable in the tool panel stay linked to it.
@@ -122,7 +129,7 @@ export class HistoryEngine extends Emitter {
   }
 
   recordDelete(d, bodyIds) {
-    if (bodyIds.length) d.history.push({ id: d.nextId('feature'), label: 'Delete', op: 'delete', bodies: bodyIds });
+    if (bodyIds.length) this.insert(d, { id: d.nextId('feature'), label: 'Delete', op: 'delete', bodies: bodyIds });
   }
 
   // Before sketches or curves are deleted: steps that use them keep the
@@ -247,7 +254,7 @@ export class HistoryEngine extends Emitter {
     try {
       for (let i = start; i < feats.length; i++) {
         const f = feats[i];
-        if (!f.suppressed) {
+        if (!f.suppressed && !f.rolledBack) {
           try {
             await runFeature(f, rc);
           } catch (err) {
@@ -322,6 +329,55 @@ export class HistoryEngine extends Emitter {
     this.app.doc.apply(`Delete ${f.label}`, (d) => {
       d.history = d.history.filter((x) => x.id !== id);
     });
+  }
+
+  // Roll back: steps after `id` are skipped until rolled forward again
+  // (id = null rolls forward to the end).
+  rollTo(id) {
+    const feats = this.features;
+    const i = id ? feats.findIndex((f) => f.id === id) : feats.length - 1;
+    if (i < 0) return;
+    this.app.doc.apply(i === feats.length - 1 ? 'Roll forward' : 'Roll back', (d) => {
+      d.history = d.history.map((f, k) => {
+        const back = k > i;
+        if (!!f.rolledBack === back) return f;
+        const { rolledBack, ...rest } = f;
+        return back ? { ...rest, rolledBack: true } : rest;
+      });
+    });
+  }
+
+  get rolledBack() {
+    return this.features.some((f) => f.rolledBack);
+  }
+
+  renameStep(id, name) {
+    const f = this.features.find((x) => x.id === id);
+    if (!f) return;
+    this.app.doc.apply('Rename', (d) => {
+      d.history = d.history.map((x) => {
+        if (x.id !== id) return x;
+        const { name: _old, ...rest } = x;
+        return name ? { ...rest, name } : rest;
+      });
+    });
+  }
+
+  // Merge the history into one fixed step (the bodies as they are now).
+  // Sketches and variables can stay or go; nothing links to them any more.
+  merge({ keepSketches = true, keepVariables = true } = {}) {
+    this.app.doc.apply('Merge history', (d) => {
+      d.history = [{ id: d.nextId('feature'), label: 'Design', op: 'base', bodies: d.bodies.map((b) => ({ b: b.id, s: b.shapeId })), removed: [] }];
+      if (!keepSketches) d.sketches = [];
+      if (!keepVariables) {
+        d.variables = [];
+        for (const sk of d.sketches) {
+          if ((sk.constraints || []).some((c) => c.expr)) d.updateSketch(sk.id, { constraints: sk.constraints.map(({ expr, ...c }) => c) });
+        }
+      }
+    });
+    this.trustDocument();
+    this.emit('change');
   }
 
   toggleSuppress(id) {

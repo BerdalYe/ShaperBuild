@@ -823,10 +823,13 @@ export class Kernel {
 
   // ---- modelling operations ---------------------------------------------
 
-  extrude({ profiles, distance, symmetric = false, mode = 'new', targets = [] }) {
+  // start: begin this far from the profile (along the extrude direction).
+  // taper: side walls lean in (positive) or out by this many degrees.
+  extrude({ profiles, distance, symmetric = false, mode = 'new', targets = [], start = 0, taper = 0 }) {
     const oc = this.oc;
     if (!profiles.length) throw new Error('Select a sketch region or a flat face');
     if (Math.abs(distance) < 1e-6) throw new Error('Distance must not be zero');
+    if (Math.abs(taper) >= 89) throw new Error('The taper must be less than 89°');
     const tool = this.guard('Extrude', () => {
       const r = this.scope();
       try {
@@ -834,15 +837,29 @@ export class Kernel {
         for (const ref of profiles) {
           const { face, normal } = this.profile(ref);
           const n = norm(normal);
-          let base = face;
+          const dir = Math.sign(distance) || 1;
+          let shift = start * dir;
           let len = distance;
           if (symmetric) {
-            const tr = r(new oc.gp_Trsf());
-            tr.SetTranslation(this.vec(r, scale3(n, -Math.abs(distance))));
-            base = r(new oc.BRepBuilderAPI_Transform(face, tr, true)).Shape();
+            shift -= Math.abs(distance);
             len = Math.abs(distance) * 2;
           }
-          const prism = r(new oc.BRepPrimAPI_MakePrism(base, this.vec(r, scale3(n, len)), false, true)).Shape();
+          const moved = (by) => {
+            if (!by) return face;
+            const tr = r(new oc.gp_Trsf());
+            tr.SetTranslation(this.vec(r, scale3(n, by)));
+            return r(new oc.BRepBuilderAPI_Transform(face, tr, true)).Shape();
+          };
+          if (symmetric && Math.abs(taper) > 1e-9) {
+            // Both halves lean in, away from the middle.
+            const mid = moved(start * dir);
+            const half = (sign) => this.taperSides(r(new oc.BRepPrimAPI_MakePrism(mid, this.vec(r, scale3(n, sign * Math.abs(distance))), false, true)).Shape(), mid, n, sign * Math.abs(distance), taper, r);
+            parts.push(this.boolOp('fuse', half(1), half(-1), 'Extrude'));
+            continue;
+          }
+          const base = moved(shift);
+          let prism = r(new oc.BRepPrimAPI_MakePrism(base, this.vec(r, scale3(n, len)), false, true)).Shape();
+          if (Math.abs(taper) > 1e-9) prism = this.taperSides(prism, base, n, len, taper, r);
           parts.push(prism);
         }
         return parts;
@@ -853,9 +870,45 @@ export class Kernel {
     return this.applyTool(tool, mode, targets, 'Extrude');
   }
 
-  revolve({ profiles, axis, angle = 360, mode = 'new', targets = [] }) {
+  // Lean the side walls of an extruded prism: they stay put at the profile
+  // and lean in by `taper` degrees.
+  taperSides(prism, base, n, len, taper, r) {
+    const oc = this.oc;
+    const props = r(new oc.GProp_GProps());
+    oc.BRepGProp.SurfaceProperties(base, props, false, false);
+    const c = r(props.CentreOfMass());
+    const origin = [c.X(), c.Y(), c.Z()];
+    const pull = norm(scale3(n, Math.sign(len) || 1));
+    const b = r(new oc.BRepOffsetAPI_DraftAngle(prism));
+    const dir = this.dir(r, pull);
+    const pln = r(new oc.gp_Pln(this.pnt(r, origin), dir));
+    let added = 0;
+    for (const ex of this.explore(prism, this.T.TopAbs_FACE)) {
+      const f = oc.TopoDS.Face(ex);
+      const ad = r(new oc.BRepAdaptor_Surface(f, true));
+      if (ad.GetType() === oc.GeomAbs_SurfaceType.GeomAbs_Plane) {
+        const pl = r(ad.Plane());
+        const ax = r(pl.Axis());
+        const d = r(ax.Direction());
+        // Caps (parallel to the profile) keep their place.
+        if (Math.abs(d.X() * pull[0] + d.Y() * pull[1] + d.Z() * pull[2]) > 1 - 1e-6) continue;
+      }
+      b.Add(f, dir, (taper * Math.PI) / 180, pln, true);
+      if (!b.AddDone()) throw new Error('the sides cannot be tapered');
+      added++;
+    }
+    if (!added) return prism;
+    b.Build(r(new oc.Message_ProgressRange()));
+    if (!b.IsDone()) throw new Error('the sides cannot be tapered');
+    return b.Shape();
+  }
+
+  // pitch: rise along the axis per full turn, for a helix (springs,
+  // threads); the angle may then be more than 360°.
+  revolve({ profiles, axis, angle = 360, mode = 'new', targets = [], pitch = 0 }) {
     const oc = this.oc;
     if (!profiles.length) throw new Error('Select a sketch region or a flat face');
+    if (Math.abs(pitch) > 1e-9) return this.applyTool(this.guard('Revolve', () => this.helixParts(profiles, axis, angle, pitch)), mode, targets, 'Revolve');
     const tool = this.guard('Revolve', () => {
       const r = this.scope();
       try {
@@ -874,6 +927,45 @@ export class Kernel {
       }
     });
     return this.applyTool(tool, mode, targets, 'Revolve');
+  }
+
+  // Helical revolve: copies of the profile turned and raised step by step,
+  // joined by a smooth loft (holes in the profile are cut the same way).
+  helixParts(profiles, axis, angle, pitch) {
+    const oc = this.oc;
+    const r = this.scope();
+    try {
+      const d = norm(axis.dir);
+      const turns = Math.abs(angle) / 360;
+      const steps = Math.max(8, Math.ceil(Math.abs(angle) / 22.5));
+      const parts = [];
+      for (const ref of profiles) {
+        const { face } = this.profile(ref);
+        const outer = r(oc.BRepTools.OuterWire(face));
+        const wires = [outer, ...this.explore(face, this.T.TopAbs_WIRE).map((w) => oc.TopoDS.Wire(w)).filter((w) => !w.IsSame(outer))];
+        const solids = wires.map((w) => {
+          const loft = r(new oc.BRepOffsetAPI_ThruSections(true, false, 1e-6));
+          for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            const m = rotationMatrix(axis.origin, d, ((angle * Math.PI) / 180) * t);
+            const rise = scale3(d, pitch * turns * t * Math.sign(angle || 1));
+            for (const k of [0, 1, 2]) m[12 + k] += rise[k];
+            const moved = r(new oc.BRepBuilderAPI_Transform(w, this.trsf(r, m), true)).Shape();
+            loft.AddWire(oc.TopoDS.Wire(moved));
+          }
+          loft.CheckCompatibility(false);
+          loft.Build(r(new oc.Message_ProgressRange()));
+          if (!loft.IsDone()) throw new Error('could not make the helix');
+          return loft.Shape();
+        });
+        let solid = solids[0];
+        for (const hole of solids.slice(1)) solid = this.boolOp('cut', solid, hole, 'Revolve');
+        parts.push(solid);
+      }
+      return parts;
+    } finally {
+      r.free();
+    }
   }
 
   // Wire from a list of path references (sketch curves or body edges).
@@ -1311,15 +1403,21 @@ export class Kernel {
     return this.result(ids.map((nid, i) => (i === 0 ? { id: nid, replaces: id } : { id: nid, from: id })));
   }
 
-  chamfer({ id, edges, distance }) {
+  // distance2: a different size on the second face (two-distance chamfer).
+  chamfer({ id, edges, distance, distance2 = null }) {
     const oc = this.oc;
     if (!(distance > 0)) throw new Error('Distance must be greater than zero');
+    if (distance2 !== null && !(distance2 > 0)) throw new Error('Distance must be greater than zero');
     const shape = this.solid(id);
     const res = this.guard('Chamfer', () => {
       const r = this.scope();
       try {
         const b = r(new oc.BRepFilletAPI_MakeChamfer(shape));
-        for (const i of edges) b.Add(distance, this.edge(id, i));
+        for (const i of edges) {
+          const edge = this.edge(id, i);
+          if (distance2 === null || Math.abs(distance2 - distance) < 1e-9) b.Add(distance, edge);
+          else b.Add(distance, distance2, edge, this.faceOfEdge(shape, edge));
+        }
         b.Build(r(new oc.Message_ProgressRange()));
         if (!b.IsDone()) throw new Error('distance too large for the selected edges');
         return b.Shape();
@@ -1329,6 +1427,16 @@ export class Kernel {
     });
     const ids = this.storeSolids(res);
     return this.result(ids.map((nid, i) => (i === 0 ? { id: nid, replaces: id } : { id: nid, from: id })));
+  }
+
+  // A face of `shape` that has `edge` on its border.
+  faceOfEdge(shape, edge) {
+    const oc = this.oc;
+    for (const ex of this.explore(shape, this.T.TopAbs_FACE)) {
+      const f = oc.TopoDS.Face(ex);
+      for (const e of this.explore(f, this.T.TopAbs_EDGE)) if (e.IsSame(edge)) return f;
+    }
+    throw new Error('Edge not found');
   }
 
   shell({ id, faces, thickness, outward = false }) {
@@ -1380,7 +1488,9 @@ export class Kernel {
 
   // Boolean between bodies. `targets` keep their identity; `tools` are
   // consumed unless keepTools is set.
-  boolean({ op, targets, tools = [], keepTools = false }) {
+  // keepTargets: the result is a new body and the originals stay
+  // (Keep originals).
+  boolean({ op, targets, tools = [], keepTools = false, keepTargets = false }) {
     if (op === 'union') {
       const all = [...targets, ...tools];
       if (all.length < 2) throw new Error('Select at least two bodies to combine');
@@ -1389,8 +1499,8 @@ export class Kernel {
       for (const id of all.slice(1)) acc = this.boolOp('fuse', acc, this.solid(id), 'Union');
       const ids = this.storeSolids(acc);
       return this.result(
-        ids.map((id, i) => (i === 0 ? { id, replaces: all[0] } : { id, from: all[0] })),
-        all.slice(1),
+        ids.map((id, i) => (i === 0 && !keepTargets ? { id, replaces: all[0] } : { id, from: all[0] })),
+        keepTargets ? [] : all.slice(1),
       );
     }
     if (!targets.length || !tools.length) throw new Error('Select the bodies to keep and the bodies to use as tools');
@@ -1402,8 +1512,8 @@ export class Kernel {
     for (const t of targets) {
       const res = this.boolOp(op === 'subtract' ? 'cut' : 'common', this.solid(t), tool, op === 'subtract' ? 'Subtract' : 'Intersect');
       const ids = this.storeSolids(res);
-      if (!ids.length) removed.push(t);
-      ids.forEach((id, i) => created.push(i === 0 ? { id, replaces: t } : { id, from: t }));
+      if (!ids.length && !keepTargets) removed.push(t);
+      ids.forEach((id, i) => created.push(i === 0 && !keepTargets ? { id, replaces: t } : { id, from: t }));
     }
     return this.result(created, removed);
   }

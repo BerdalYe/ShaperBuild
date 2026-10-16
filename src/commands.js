@@ -473,6 +473,23 @@ export class Commands {
     });
   }
 
+  // Hidden items show and shown items hide.
+  invertVisibility() {
+    const doc = this.doc;
+    const kinds = [['body', doc.bodies], ['sketch', doc.sketches], ['plane', doc.planes], ['axis', doc.axes], ['image', doc.images]];
+    const shown = [];
+    this.doc.apply('Invert visibility', (d) => {
+      for (const [kind, list] of kinds) {
+        for (const x of list) {
+          updateItem(d, kind, x.id, { visible: x.visible === false });
+          if (x.visible !== false) shown.push(x.id);
+        }
+      }
+    });
+    const gone = new Set(shown);
+    this.app.selection.prune((it) => !gone.has(it.bodyId) && !gone.has(it.sketchId) && !gone.has(it.planeId) && !gone.has(it.axisId) && !gone.has(it.imageId));
+  }
+
   setMaterial(ids, material) {
     this.doc.apply('Material', (d) => ids.forEach((id) => d.updateBody(id, { material })));
   }

@@ -1,7 +1,7 @@
 // Buttons for moving around the view, and the "how to move around" card.
 import { h, isMac } from './dom.js';
 import { icon } from './icons.js';
-import { attachTooltip, hideTooltip, showMenu, toast } from './overlays.js';
+import { attachTooltip, hideTooltip, showMenu, closeMenu, toast } from './overlays.js';
 import { t } from '../core/i18n.js';
 
 const DEG = Math.PI / 180;
@@ -38,6 +38,8 @@ export class ViewControls {
       add('grid', 'grid', 'Grid', 'G', () => app.toggleGrid()),
       add('section', 'section', 'Section view', 'X', () => app.toggleSection(), 'Cut through the design to look inside.'),
       add('xray', 'xray', 'X-ray', 'Shift+X', () => app.toggleXray(), 'See through bodies to check inside shapes and hidden edges.'),
+      add('display', 'display', 'Display', '', (e, b) => app.displayMenu(b), 'Shaded, wireframe or zebra stripes, and hidden edges.'),
+      add('isolate', 'isolate', 'Isolate', 'Shift+I', () => app.toggleIsolate(), 'Show only the selected items. Click again to show everything.'),
       sep(),
       add('help', 'mouse', 'How to move around', '', () => app.navHelp.toggle(), 'Mouse, trackpad and keyboard controls.'),
     );
@@ -75,11 +77,32 @@ export class ViewControls {
       '-',
       { label: 'Look at selected face', icon: 'lookAt', kbd: 'N', action: () => app.lookAtSelection() },
       { label: 'Turn 90° left', icon: 'rotate', kbd: '←', action: () => vp.stepOrbit(90 * DEG, 0) },
+      '-',
+      ...(app.doc.state.views || []).map((sv) => ({ custom: this.savedViewRow(sv) })),
+      { label: 'Save this view…', icon: 'save', action: () => app.saveView() },
     ]);
     const mr = menu.getBoundingClientRect();
     menu.style.left = `${r.left - mr.width - 8}px`;
   }
 }
+
+// A saved view in the views menu: click to go there, × to delete it.
+ViewControls.prototype.savedViewRow = function (sv) {
+  const app = this.app;
+  const del = h('button.icon-btn.small', { html: icon('trash'), title: 'Delete this view', 'aria-label': 'Delete this view' });
+  const go = h('button.saved-view', { html: `${icon('views')}<span></span>` });
+  go.querySelector('span').textContent = sv.name;
+  go.addEventListener('click', () => {
+    closeMenu();
+    app.showSavedView(sv.id);
+  });
+  del.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeMenu();
+    app.deleteSavedView(sv.id);
+  });
+  return h('div.saved-view-row', go, del);
+};
 
 // Card that explains every way to orbit, pan and zoom.
 export class NavHelp {

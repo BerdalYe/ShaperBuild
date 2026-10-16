@@ -27,11 +27,19 @@ export class ItemsPanel {
     const app = this.app;
     const doc = app.doc;
     const searching = this.el.contains(document.activeElement) && document.activeElement?.classList.contains('items-filter');
+    // Keep the list where it was scrolled to (per tab).
+    const old = this.el.querySelector('.items-scroll');
+    if (old) (this.scrolls ||= {})[this.shownTab] = old.scrollTop;
+    this.shownTab = this.tab;
     clear(this.el);
     const anyHidden = [...doc.bodies, ...doc.sketches, ...doc.planes, ...doc.axes, ...doc.images].some((x) => x.visible === false);
     const showAll = h('button.ih-btn', { title: 'Show all items', html: icon('eye') });
     showAll.hidden = !anyHidden;
     showAll.addEventListener('click', () => app.cmd.showAll());
+    const invert = h('button.ih-btn', { title: 'Invert visibility (show what is hidden, hide what is shown)', html: icon('eyeOff') });
+    invert.dataset.action = 'invert-visibility';
+    invert.hidden = !anyHidden && !doc.bodies.length;
+    invert.addEventListener('click', () => app.cmd.invertVisibility());
     const hide = h('button.ih-btn', { title: 'Hide this panel (Tab)', html: icon('sidebar') });
     hide.addEventListener('click', () => app.toggleItems());
     const tabs = h('span.items-tabs');
@@ -55,15 +63,15 @@ export class ItemsPanel {
       this.renaming = id;
       this.render();
     });
-    if (this.tab === 'history') showAll.hidden = newFolder.hidden = true;
-    const head = h('div.items-head', tabs, h('span.ih-actions', newFolder, showAll, hide));
+    if (this.tab === 'history') showAll.hidden = newFolder.hidden = invert.hidden = true;
+    const head = h('div.items-head', tabs, h('span.ih-actions', newFolder, invert, showAll, hide));
     const scroll = h('div.items-scroll');
     if (this.tab === 'history') {
       this.variablesList.render(scroll);
-      if (this.historyList.steps.length) scroll.append(h('div.items-group-head.steps-head', h('span.ig-chev', { html: icon('history') }), h('span', { text: 'Steps' }), h('span.count', { text: String(this.historyList.steps.length) })));
       this.historyList.render(scroll);
       const foot = h('div.items-foot', { text: this.historyList.footText() });
       this.el.append(head, scroll, foot);
+      scroll.scrollTop = this.scrolls?.history || 0;
       scroll.querySelector('.step.selected')?.scrollIntoView({ block: 'nearest' });
       return;
     }
@@ -124,6 +132,7 @@ export class ItemsPanel {
       str: total ? `${n(nSolids, 'body', 'bodies')} · ${nMeshes ? `${n(nMeshes, 'mesh', 'meshes')} · ` : ''}${n(doc.sketches.length, 'sketch', 'sketches')}${doc.planes.length ? ` · ${n(doc.planes.length, 'plane', 'planes')}` : ''}${doc.axes.length ? ` · ${n(doc.axes.length, 'axis', 'axes')}` : ''}${doc.images.length ? ` · ${n(doc.images.length, 'image', 'images')}` : ''} — ${t('double-click a name to rename, drag items into folders')}` : t('Tip: right-click an item for more options'),
     });
     this.el.append(head, scroll, foot);
+    scroll.scrollTop = this.scrolls?.items || 0;
     scroll.querySelector('.item.selected')?.scrollIntoView({ block: 'nearest' });
   }
 

@@ -65,9 +65,13 @@ export class MeasureTool extends Tool {
     ov.clear('tool');
     const u = app.units;
     const rows = [];
+    this.pair = null;
+    const ticket = (this.ticket = (this.ticket || 0) + 1);
     if (this.items.length) {
       try {
         const res = await app.kernel.call('measure', { items: this.items.map((it) => this.kernelItem(it)) });
+        // Closed (or measuring something else) while the kernel worked.
+        if (app.tools.active !== this || ticket !== this.ticket) return;
         for (const r of res.items) rows.push(...describe(r, u));
         if (res.pair) {
           if (res.pair.distance !== undefined) {
@@ -80,6 +84,7 @@ export class MeasureTool extends Tool {
               rows.push({ label: 'ΔX / ΔY / ΔZ', value: d.map((v) => formatLength(Math.abs(v), u, { suffix: false })).join(' / ') });
             }
             ov.label('tool-dlabel', p1.map((v, i) => (v + p2[i]) / 2), formatLength(res.pair.distance, u), { className: 'accent' });
+            if (res.pair.distance > 1e-9) this.pair = { p1, p2, text: formatLength(res.pair.distance, u) };
           }
           if (res.pair.angle !== undefined) rows.push({ label: 'Angle', value: formatAngle(res.pair.angle), strong: true });
         }
@@ -87,13 +92,18 @@ export class MeasureTool extends Tool {
         rows.push({ label: 'Error', value: err.message });
       }
     }
+    if (app.tools.active !== this || ticket !== this.ticket) return;
     this.app.panel.show({
       title: 'Measure',
       icon: 'measure',
       hint: rows.length ? '' : 'Click a face, edge, point or body. Click a second one to measure between them.',
       fields: rows.map((r) => ({ type: 'info', text: `<div style="display:flex;justify-content:space-between;gap:12px"><span>${t(r.label)}</span><b style="color:var(--text);font-weight:${r.strong ? 700 : 500}">${escapeHtml(t(String(r.value)))}</b></div>` })),
       onCancel: () => this.done(),
-      buttons: this.items.length ? [{ label: 'Clear', action: () => ((this.items = []), this.app.refreshHighlights(), this.measure()) }] : [],
+      buttons: [
+        this.items.length && { label: 'Clear', action: () => ((this.items = []), this.app.refreshHighlights(), this.measure()) },
+        this.pair && { label: 'Pin', title: 'Keep this distance on screen after the tool closes', action: () => (app.pinMeasurement(this.pair), this.measure()) },
+        app.pins?.length && { label: 'Clear pins', action: () => (app.clearPins(), this.measure()) },
+      ].filter(Boolean),
     });
   }
 

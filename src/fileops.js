@@ -302,7 +302,7 @@ export class FileOps {
       app: (await this.native?.info())?.version || 'dev',
       saved: new Date().toISOString(),
       camera: app.vp.rig.toJSON(),
-      state: { bodies: state.bodies, sketches: state.sketches, planes: state.planes || [], axes: state.axes || [], images: state.images || [], folders: state.folders || [], history: state.history || [], variables: state.variables || [], seq: state.seq, units: state.units },
+      state: { bodies: state.bodies, sketches: state.sketches, planes: state.planes || [], axes: state.axes || [], images: state.images || [], folders: state.folders || [], history: state.history || [], variables: state.variables || [], views: state.views || [], seq: state.seq, units: state.units },
       shapes,
       thumbnail,
     };

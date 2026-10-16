@@ -291,12 +291,38 @@ export class BodyView {
     if (this.edges) this.edges.visible = v;
   }
 
+  // Display: 'shaded', 'wireframe' (edges only) or 'zebra' (stripes that
+  // show how smoothly faces join). Hidden edges: dashed through faces.
+  setDisplay(mode, hiddenEdges = false) {
+    this.display = mode;
+    this.mesh.visible = mode !== 'wireframe';
+    if (mode === 'zebra') {
+      this.zebraMat ||= zebraMaterial(this.ctx.clippingPlanes);
+      this.mesh.material = this.zebraMat;
+    } else this.mesh.material = this.material;
+    const showHidden = (hiddenEdges || mode === 'wireframe') && this.edgeGeometry;
+    if (showHidden && !this.hiddenEdges) {
+      this.hiddenMat = new LineMaterial({ color: this.ctx.theme.edge, linewidth: 1, worldUnits: false, dashed: true, dashSize: 4, gapSize: 3, transparent: true, opacity: 0.45, depthTest: false, clippingPlanes: this.ctx.clippingPlanes });
+      this.ctx.lineMaterials.add(this.hiddenMat);
+      this.hiddenEdges = new LineSegments2(this.edgeGeometry, this.hiddenMat);
+      this.hiddenEdges.computeLineDistances();
+      this.hiddenEdges.renderOrder = -1;
+      this.group.add(this.hiddenEdges);
+    }
+    if (this.hiddenEdges) this.hiddenEdges.visible = !!showHidden;
+  }
+
   // Where is face `index` (for handles): centre and normal from kernel info.
   faceInfo(index) {
     return this.data.kind === 'solid' ? this.data.faceInfo[index] : null;
   }
 
   dispose() {
+    this.zebraMat?.dispose();
+    if (this.hiddenMat) {
+      this.hiddenMat.dispose();
+      this.ctx.lineMaterials.delete(this.hiddenMat);
+    }
     this.ctx.registry.free(this.pickBase, this.faceCount + this.edgeCount + this.vertexCount);
     this.geometry.dispose();
     this.material.dispose();
@@ -315,4 +341,37 @@ export class BodyView {
     this.group.removeFromParent();
     this.pickGroup.removeFromParent();
   }
+}
+
+// Black and white stripes reflected in the surface: smooth joins show as
+// unbroken stripes, kinks as jumps.
+function zebraMaterial(clippingPlanes) {
+  return new THREE.ShaderMaterial({
+    side: THREE.DoubleSide,
+    clipping: true,
+    clippingPlanes,
+    vertexShader: `
+      #include <clipping_planes_pars_vertex>
+      varying vec3 vN;
+      varying vec3 vV;
+      void main() {
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        vN = normalize(normalMatrix * normal);
+        vV = normalize(-mvPosition.xyz);
+        gl_Position = projectionMatrix * mvPosition;
+        #include <clipping_planes_vertex>
+      }`,
+    fragmentShader: `
+      #include <clipping_planes_pars_fragment>
+      varying vec3 vN;
+      varying vec3 vV;
+      void main() {
+        #include <clipping_planes_fragment>
+        vec3 n = normalize(vN);
+        if (!gl_FrontFacing) n = -n;
+        vec3 r = reflect(-normalize(vV), n);
+        float s = smoothstep(0.45, 0.55, fract(r.y * 10.0));
+        gl_FragColor = vec4(vec3(mix(0.08, 0.96, s)), 1.0);
+      }`,
+  });
 }

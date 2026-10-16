@@ -78,16 +78,69 @@ function axisParam(ray, origin, dir) {
 
 export class ExtrudeTool extends OpTool {
   inputs() {
-    return [profileSlot(this.app)];
+    return [
+      profileSlot(this.app),
+      {
+        key: 'until',
+        label: 'Up to',
+        kinds: ['face', 'plane'],
+        multiple: false,
+        optional: true,
+        fromSelection: false,
+        placeholder: 'Click a flat face to stop at (optional)',
+        reject: 'Pick a flat face or a plane to stop at',
+        accept: (it) => (this.planeOf(it) ? it : null),
+      },
+    ];
   }
 
   params() {
     const v = this.values || {};
+    const until = this.slots && this.items('until').length;
     return [
-      { type: 'length', key: 'distance', label: 'Distance', value: v.distance ?? this.app.settings.extrudeDistance ?? 10 },
+      ...(until ? [] : [{ type: 'length', key: 'distance', label: 'Distance', value: v.distance ?? this.app.settings.extrudeDistance ?? 10 }]),
+      ...(until ? [] : [{ type: 'toggle', key: 'through', label: 'Through everything', value: v.through ?? false }]),
       { type: 'select', key: 'mode', label: 'Result', value: v.mode ?? 'auto', options: MODE_OPTIONS },
       { type: 'toggle', key: 'symmetric', label: 'Symmetric (both directions)', value: v.symmetric ?? false },
+      { type: 'angle', key: 'taper', label: 'Taper (lean the sides in)', value: v.taper ?? 0 },
+      { type: 'length', key: 'start', label: 'Start offset', value: v.start ?? 0 },
     ];
+  }
+
+  planeOf(it) {
+    if (it.kind === 'plane') return this.app.doc.plane(it.planeId)?.plane || null;
+    if (it.kind === 'face') {
+      const info = this.app.faceInfo(it.bodyId, it.index);
+      return info?.type === 'plane' ? { origin: info.center, normal: info.normal } : null;
+    }
+    return null;
+  }
+
+  // The distance to extrude: typed, up to a face, or through everything.
+  length() {
+    const v = this.values;
+    const a = this.anchor();
+    const until = this.items('until')[0];
+    if (until && a) {
+      const pl = this.planeOf(until);
+      const den = a.normal.reduce((s, x, i) => s + x * pl.normal[i], 0);
+      if (Math.abs(den) < 1e-9) throw new Error('That face is parallel to the extrude direction');
+      const t = pl.origin.reduce((s, x, i) => s + (x - a.origin[i]) * pl.normal[i], 0) / den;
+      return t - (Math.sign(t) || 1) * (v.start || 0);
+    }
+    if (v.through && a) {
+      // Past the far side of every visible body.
+      const sign = Math.sign(v.distance || 1);
+      let far = 0;
+      for (const b of this.app.doc.bodies) {
+        if (b.visible === false) continue;
+        const bb = this.app.bodyBox(b.id);
+        if (!bb) continue;
+        for (const x of [bb.min.x, bb.max.x]) for (const y of [bb.min.y, bb.max.y]) for (const z of [bb.min.z, bb.max.z]) far = Math.max(far, sign * ([x, y, z].reduce((s, c, i) => s + (c - a.origin[i]) * a.normal[i], 0)));
+      }
+      return sign * (Math.max(far, Math.abs(v.distance || 1)) + 1);
+    }
+    return v.distance;
   }
 
   hint() {
@@ -104,6 +157,7 @@ export class ExtrudeTool extends OpTool {
 
   onParam(k, v) {
     if (k === 'distance') this.app.settings.extrudeDistance = v;
+    if (k === 'through') this.render();
   }
 
   // Where the arrow sits and which way it points.
@@ -117,7 +171,10 @@ export class ExtrudeTool extends OpTool {
     ov.remove('tool-arrow');
     ov.removeLabel('tool-dist');
     if (!a) return;
-    const d = this.values.distance || 0;
+    let d = this.values.distance || 0;
+    try {
+      d = this.length() || 0;
+    } catch {}
     const tip = a.origin.map((o, i) => o + a.normal[i] * d);
     ov.arrow('tool-arrow', tip, a.normal, { color: this.app.vp.theme.select, length: 64 });
     ov.label('tool-dist', tip, formatLength(d, this.app.units), { className: 'accent', offset: [0, 26] });
@@ -156,7 +213,10 @@ export class ExtrudeTool extends OpTool {
   resolve() {
     const app = this.app;
     const profiles = this.items('profiles');
-    const d = this.values.distance;
+    let d = this.values.distance;
+    try {
+      d = this.length();
+    } catch {}
     let mode = this.values.mode;
     const source = app.profileSourceBody(profiles);
     if (mode === 'auto') {
@@ -180,16 +240,19 @@ export class ExtrudeTool extends OpTool {
   async compute() {
     const app = this.app;
     const profiles = this.items('profiles');
-    const d = this.values.distance;
+    const d = this.length();
     if (!d || Math.abs(d) < 1e-6) return null;
     await app.ensureRegions(profiles);
     const { mode, targets } = this.resolve();
+    const v = this.values;
     return app.kernel.call('extrude', {
       profiles: profiles.map((p) => app.profileRef(p)),
       distance: d,
-      symmetric: !!this.values.symmetric,
+      symmetric: !!v.symmetric,
       mode,
       targets: targets.map((id) => app.doc.body(id).shapeId),
+      ...(v.taper ? { taper: v.taper } : {}),
+      ...(v.start ? { start: v.start } : {}),
     });
   }
 }
@@ -230,6 +293,7 @@ export class RevolveTool extends OpTool {
         ],
       },
       { type: 'angle', key: 'angle', label: 'Angle', value: v.angle ?? 360 },
+      { type: 'length', key: 'pitch', label: 'Rise per turn (helix, springs)', value: v.pitch ?? 0 },
       { type: 'select', key: 'mode', label: 'Result', value: v.mode ?? 'auto', options: MODE_OPTIONS },
     ];
   }
@@ -278,6 +342,7 @@ export class RevolveTool extends OpTool {
       angle: this.values.angle,
       mode,
       targets: targets.map((id) => app.doc.body(id).shapeId),
+      ...(this.values.pitch ? { pitch: this.values.pitch } : {}),
     });
   }
 }
@@ -464,15 +529,22 @@ export class ChamferTool extends EdgeTool {
   }
 
   params() {
-    return [{ type: 'length', key: 'distance', label: 'Distance', value: this.values?.distance ?? this.app.settings.chamferDistance ?? 1, min: 0 }];
+    const v = this.values || {};
+    return [
+      { type: 'length', key: 'distance', label: 'Distance', value: v.distance ?? this.app.settings.chamferDistance ?? 1, min: 0 },
+      { type: 'toggle', key: 'two', label: 'Two distances', value: v.two ?? false },
+      ...(v.two ? [{ type: 'length', key: 'distance2', label: 'Second distance', value: v.distance2 ?? (v.distance ?? 1) * 2, min: 0 }] : []),
+    ];
   }
 
   onParam(k, v) {
-    this.app.settings.chamferDistance = v;
+    if (k === 'distance') this.app.settings.chamferDistance = v;
+    if (k === 'two') this.render();
   }
 
   kernelParams() {
-    return { distance: this.values.distance };
+    const v = this.values;
+    return v.two ? { distance: v.distance, distance2: v.distance2 ?? v.distance * 2 } : { distance: v.distance };
   }
 }
 
@@ -535,7 +607,7 @@ export class UnionTool extends OpTool {
   }
 
   params() {
-    return [];
+    return [{ type: 'toggle', key: 'keepTargets', label: 'Keep the originals', value: this.values?.keepTargets ?? false }];
   }
 
   hint() {
@@ -544,7 +616,7 @@ export class UnionTool extends OpTool {
 
   async compute() {
     const ids = this.items('bodies').map((it) => this.app.doc.body(it.bodyId).shapeId);
-    return this.app.kernel.call('boolean', { op: 'union', targets: ids.slice(0, 1), tools: ids.slice(1) });
+    return this.app.kernel.call('boolean', { op: 'union', targets: ids.slice(0, 1), tools: ids.slice(1), ...(this.values.keepTargets ? { keepTargets: true } : {}) });
   }
 }
 
@@ -554,7 +626,10 @@ class TargetToolBoolean extends OpTool {
   }
 
   params() {
-    return [{ type: 'toggle', key: 'keepTools', label: this.keepLabel, value: this.values?.keepTools ?? false }];
+    return [
+      { type: 'toggle', key: 'keepTargets', label: 'Keep the bodies it changes', value: this.values?.keepTargets ?? false },
+      { type: 'toggle', key: 'keepTools', label: this.keepLabel, value: this.values?.keepTools ?? false },
+    ];
   }
 
   fillFromSelection() {
@@ -573,7 +648,7 @@ class TargetToolBoolean extends OpTool {
     const targets = this.items('targets').map(sid);
     const tools = this.items('tools').map(sid);
     if (targets.some((t) => tools.includes(t))) throw new Error('A body cannot be both kept and used as a tool');
-    return this.app.kernel.call('boolean', { op: this.op, targets, tools, keepTools: !!this.values.keepTools });
+    return this.app.kernel.call('boolean', { op: this.op, targets, tools, keepTools: !!this.values.keepTools, ...(this.values.keepTargets ? { keepTargets: true } : {}) });
   }
 }
 

@@ -21,6 +21,8 @@ export function emptyState() {
     history: [],
     // Variables ({ id, name, kind: 'length' | 'angle' | 'number', expr }).
     variables: [],
+    // Saved views ({ id, name, camera, section }).
+    views: [],
     seq: { body: 0, sketch: 0, entity: 0, constraint: 0, plane: 0, axis: 0, image: 0, feature: 0, folder: 0, variable: 0 },
     units: 'mm',
   };
@@ -44,13 +46,14 @@ export class Draft {
     this.folders = (state.folders || []).slice();
     this.history = (state.history || []).slice();
     this.variables = (state.variables || []).slice();
+    this.views = (state.views || []).slice();
     this.seq = { ...state.seq };
     this.units = state.units;
   }
 
   nextId(kind) {
     this.seq[kind] = (this.seq[kind] || 0) + 1;
-    const prefix = { body: 'b', sketch: 's', entity: 'e', constraint: 'k', plane: 'p', axis: 'x', image: 'i', feature: 'f', folder: 'g', variable: 'v' }[kind] || kind;
+    const prefix = { body: 'b', sketch: 's', entity: 'e', constraint: 'k', plane: 'p', axis: 'x', image: 'i', feature: 'f', folder: 'g', variable: 'v', view: 'w' }[kind] || kind;
     return `${prefix}${this.seq[kind]}`;
   }
 
@@ -216,7 +219,7 @@ export class Draft {
   }
 
   toState() {
-    return { bodies: this.bodies, sketches: this.sketches, planes: this.planes, axes: this.axes, images: this.images, folders: this.folders, history: this.history, variables: this.variables, seq: this.seq, units: this.units };
+    return { bodies: this.bodies, sketches: this.sketches, planes: this.planes, axes: this.axes, images: this.images, folders: this.folders, history: this.history, variables: this.variables, views: this.views, seq: this.seq, units: this.units };
   }
 }
 

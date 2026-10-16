@@ -172,7 +172,7 @@ function refDeps(ref, sketches) {
   return [sk.entities.filter((e) => !e.construction), ref.snap || []];
 }
 
-const STRIP = new Set(['error', 'snap', 'label']);
+const STRIP = new Set(['error', 'snap', 'label', 'name', 'exprs']);
 
 // Key of a step: everything that decides its result, chained to the key
 // before it. Sketch edits change the key of steps that use the sketch.
@@ -406,14 +406,26 @@ const PARAMS = {
   extrude: [
     ['distance', 'length', 'Distance', 'nonzero'],
     ['symmetric', 'toggle', 'Both directions'],
+    ['taper', 'angle', 'Taper', 'any'],
+    ['start', 'length', 'Start offset', 'any'],
   ],
-  revolve: [['angle', 'angle', 'Angle', 'nonzero']],
+  revolve: [
+    ['angle', 'angle', 'Angle', 'nonzero'],
+    ['pitch', 'length', 'Rise per turn', 'any'],
+  ],
   sweep: [
     ['twist', 'angle', 'Twist', 'any'],
     ['endScale', 'number', 'Size at the end', 'positive'],
   ],
   fillet: [['radius', 'length', 'Radius', 'positive']],
-  chamfer: [['distance', 'length', 'Distance', 'positive']],
+  chamfer: [
+    ['distance', 'length', 'Distance', 'positive'],
+    ['distance2', 'length', 'Second distance', 'positive'],
+  ],
+  boolean: [
+    ['keepTargets', 'toggle', 'Keep the originals'],
+    ['keepTools', 'toggle', 'Keep the tool bodies'],
+  ],
   shell: [['thickness', 'length', 'Wall thickness', 'positive']],
   draft: [
     ['angle', 'angle', 'Angle', 'nonzero'],

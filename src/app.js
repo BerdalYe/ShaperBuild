@@ -24,7 +24,7 @@ import { PrintDialog } from './ui/printdialog.js';
 import { Updates } from './ui/updates.js';
 import { DrawingDialog } from './ui/drawingdialog.js';
 import { MaterialsPanel } from './ui/materials.js';
-import { toast, showMenu, hideTooltip } from './ui/overlays.js';
+import { toast, showMenu, hideTooltip, modal } from './ui/overlays.js';
 import { icon } from './ui/icons.js';
 import { h, isTyping, modKey, escapeHtml, translateStatic } from './ui/dom.js';
 import { t, language, setLanguage } from './core/i18n.js';
@@ -182,6 +182,15 @@ export class App {
   // ---- document sync -----------------------------------------------------
 
   onDocChange(ev) {
+    if (ev.kind === 'load') {
+      // A different design: pins and isolate belong to the old one.
+      if (this.pins?.length) this.clearPins();
+      if (this.isolated) {
+        this.isolated = null;
+        this.viewControls?.btns.isolate?.classList.remove('on');
+        document.getElementById('isolate-bar')?.setAttribute('hidden', '');
+      }
+    }
     this.updateVariables();
     this.syncView();
     if (ev.kind === 'undo' || ev.kind === 'redo') toast(t(ev.kind === 'undo' ? 'Undo {label}' : 'Redo {label}', { label: t(ev.label || '') }).trim(), { ms: 1200 });
@@ -207,6 +216,7 @@ export class App {
     this.vp.syncPlanes(doc.planes);
     this.vp.syncAxes(doc.axes);
     this.vp.syncImages(doc.images);
+    this.applyIsolation();
     this.selection.prune((it) => this.isValidItem(it));
     this.refreshHighlights();
     this.tools.active?.onSelectionChange?.();
@@ -934,10 +944,11 @@ export class App {
         if (info?.type === 'plane') items.push({ label: 'Look at face', icon: 'lookAt', action: () => this.vp.lookAtPlane({ origin: info.center, normal: info.normal }) });
       }
       if (bodies.length || list.some((it) => it.sketchId)) items.push({ label: 'Show in Items', icon: 'items', action: () => this.revealInItems() });
+      items.push({ label: this.isolated ? 'Show all (end isolate)' : 'Isolate', icon: 'isolate', kbd: this.keyFor('toggle-isolate'), action: () => this.toggleIsolate() });
       items.push({ label: 'Delete', icon: 'trash', kbd: 'Del', danger: true, action: () => this.cmd.deleteSelection() });
     } else {
       items.push({ label: 'Zoom to fit', icon: 'fit', kbd: 'Z', action: () => this.vp.fit() });
-      items.push({ label: 'Show all', icon: 'eye', action: () => this.cmd.showAll() });
+      items.push({ label: 'Show all', icon: 'eye', action: () => (this.isolated ? this.toggleIsolate() : this.cmd.showAll()) });
     }
     showMenu(ne.clientX, ne.clientY, items);
   }
@@ -1002,6 +1013,7 @@ export class App {
     filterSel.addEventListener('change', () => this.setSelectFilter(filterSel.value));
 
     this.viewControls = new ViewControls($('view-controls'), this);
+    $('isolate-show-all').addEventListener('click', () => this.isolated && this.toggleIsolate());
     this.toolHint = new ToolHint($('tool-hint'), this);
   }
 
@@ -1051,6 +1063,7 @@ export class App {
     document.getElementById('tools').style.display = on ? 'none' : '';
     this.materials.show(on);
     this.vp.setVisualization(on);
+    this.applyIsolation();
     setTimeout(() => this.vp.resize(), 30);
     this.refreshHighlights();
     this.starter?.update();
@@ -1074,6 +1087,130 @@ export class App {
     this.vp.setXray(on);
     this.viewControls.btns.xray.classList.toggle('on', on);
     toast(on ? 'X-ray on: bodies are see-through' : 'X-ray off', { ms: 1200 });
+  }
+
+  // ---- display modes, isolate, saved views, pins -------------------------
+
+  setDisplay(mode, { hiddenEdges = this.vp.hiddenEdges } = {}) {
+    this.vp.setDisplay(mode, hiddenEdges);
+    this.viewControls?.btns.display?.classList.toggle('on', mode !== 'shaded' || !!hiddenEdges);
+  }
+
+  displayMenu(anchor) {
+    const vp = this.vp;
+    const r = anchor.getBoundingClientRect();
+    const mode = vp.display || 'shaded';
+    const pick = (value, label, desc) => ({ label: `${mode === value ? '● ' : '○ '}${t(label)}`, raw: true, action: () => this.setDisplay(value), desc });
+    const check = (on, label, change) => {
+      const cb = h('input', { type: 'checkbox', checked: !!on });
+      cb.addEventListener('change', () => change(cb.checked));
+      return { custom: h('label.menu-check', cb, h('span', { text: label })) };
+    };
+    const menu = showMenu(r.left, r.top, [
+      { custom: h('div.menu-title', { text: 'Display' }) },
+      pick('shaded', 'Shaded'),
+      pick('wireframe', 'Wireframe (edges only)'),
+      pick('zebra', 'Zebra stripes (check smoothness)'),
+      '-',
+      check(vp.hiddenEdges, 'Show hidden edges', (on) => this.setDisplay(vp.display || 'shaded', { hiddenEdges: on })),
+      check(this.settings.showEdges, 'Show edges', () => this.onMenu('toggle-edges')),
+      check(vp.xray, 'X-ray', () => this.toggleXray()),
+    ]);
+    const mr = menu.getBoundingClientRect();
+    menu.style.left = `${r.left - mr.width - 8}px`;
+  }
+
+  // Isolate: show only the selected items (and their steps in History).
+  toggleIsolate() {
+    if (this.isolated) {
+      this.isolated = null;
+    } else {
+      const keep = new Map();
+      for (const it of this.selection.list) {
+        const k = it.bodyId ? `body:${it.bodyId}` : it.sketchId ? `sketch:${it.sketchId}` : it.planeId ? `plane:${it.planeId}` : it.axisId ? `axis:${it.axisId}` : it.imageId ? `image:${it.imageId}` : null;
+        if (k) keep.set(k, it.bodyId ? { kind: 'body', bodyId: it.bodyId } : it.sketchId ? { kind: 'sketch', sketchId: it.sketchId } : it);
+      }
+      if (!keep.size) return toast('Select what to isolate first', { ms: 1600 });
+      this.isolated = keep;
+      this.vp.fit(this.selectionBox());
+    }
+    this.viewControls?.btns.isolate?.classList.toggle('on', !!this.isolated);
+    document.getElementById('isolate-bar')?.toggleAttribute('hidden', !this.isolated);
+    this.syncView();
+    this.items?.render();
+  }
+
+  // Hide what isolate leaves out (after the views are in step). After
+  // isolate ends, everything gets its own visibility back once.
+  applyIsolation() {
+    const keep = this.isolated;
+    if (!keep && !this.wasIsolated) return;
+    this.wasIsolated = !!keep;
+    const show = (key, view, visible, inVisual = false) => {
+      const on = visible !== false && (!keep || keep.has(key)) && (inVisual || !this.visual);
+      view.group.visible = on;
+      if (view.pickGroup) view.pickGroup.visible = on;
+    };
+    for (const [id, v] of this.vp.bodyViews) show(`body:${id}`, v, this.doc.body(id)?.visible, true);
+    for (const [id, v] of this.vp.sketchViews) show(`sketch:${id}`, v, this.doc.sketch(id)?.visible);
+    for (const [id, v] of this.vp.planeViews) show(`plane:${id}`, v, this.doc.plane(id)?.visible);
+    for (const [id, v] of this.vp.axisViews) show(`axis:${id}`, v, this.doc.axis(id)?.visible);
+    for (const [id, v] of this.vp.imageViews) show(`image:${id}`, v, this.doc.image(id)?.visible);
+    this.vp.requestRender();
+  }
+
+  // Saved views: the camera and the section, by name.
+  async saveView() {
+    const input = h('input', { type: 'text', value: t('View {n}', { n: (this.doc.state.views || []).length + 1 }) });
+    const ok = await modal({ title: 'Save this view', body: h('div.form-row', h('label', { text: 'Name' }), input), buttons: [{ label: 'Cancel', value: false }, { label: 'Save', value: true, primary: true }] });
+    if (!ok || !input.value.trim()) return;
+    const view = { name: input.value.trim(), camera: this.vp.rig.toJSON(), section: { ...this.section } };
+    this.doc.apply('Save view', (d) => {
+      d.views = [...(d.views || []), { id: d.nextId('view'), ...view }];
+    });
+    toast(t('Saved view "{name}"', { name: view.name }), { ms: 1600 });
+  }
+
+  showSavedView(id) {
+    const v = (this.doc.state.views || []).find((x) => x.id === id);
+    if (!v) return;
+    const c = v.camera;
+    const ortho = !!c.ortho;
+    this.vp.rig.animateTo({ az: c.az, el: c.el, dist: c.dist, target: new THREE.Vector3(...c.target) });
+    if (ortho !== this.vp.rig.useOrtho) {
+      this.vp.setOrtho(ortho);
+      this.viewControls.setOrtho(ortho);
+    }
+    this.vp.requestRender();
+    if (v.section) this.setSection({ ...v.section });
+  }
+
+  deleteSavedView(id) {
+    this.doc.apply('Delete view', (d) => {
+      d.views = (d.views || []).filter((x) => x.id !== id);
+    });
+  }
+
+  // Pinned measurements stay on screen until cleared.
+  pinMeasurement(pin) {
+    this.pins = [...(this.pins || []), pin];
+    this.drawPins();
+  }
+
+  clearPins() {
+    this.pins = [];
+    this.drawPins();
+  }
+
+  drawPins() {
+    const ov = this.vp.overlay;
+    ov.clear('pin');
+    (this.pins || []).forEach((p, i) => {
+      ov.lines(`pin-line-${i}`, [[p.p1, p.p2]], { color: this.vp.theme.inference, width: 2, depthTest: false });
+      ov.dots(`pin-ends-${i}`, [p.p1, p.p2], { color: this.vp.theme.inference, size: 7 });
+      ov.label(`pin-label-${i}`, p.p1.map((v, k) => (v + p.p2[k]) / 2), p.text, { className: 'accent' });
+    });
+    this.vp.requestRender();
   }
 
   toggleSnap() {
@@ -1478,6 +1615,8 @@ export class App {
         return this.toggleGrid();
       case 'toggle-xray':
         return this.toggleXray();
+      case 'toggle-isolate':
+        return this.toggleIsolate();
       case 'toggle-edges':
         this.settings.showEdges = !this.settings.showEdges;
         this.saveSettings();

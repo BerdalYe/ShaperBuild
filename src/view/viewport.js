@@ -232,6 +232,10 @@ export class Viewport extends Emitter {
         view.setEdgesVisible(this.showEdges && !this.visualization);
         if (this.visualization) view.setVisualization?.(true);
         if (this.xray) view.setXray(true);
+        if (((this.display && this.display !== 'shaded') || this.hiddenEdges) && !this.visualization) {
+          view.setDisplay(this.display || 'shaded', this.hiddenEdges);
+          view.setEdgesVisible((this.showEdges || this.display === 'wireframe') && !this.visualization);
+        }
       }
       view.setBody(body);
     }
@@ -273,6 +277,17 @@ export class Viewport extends Emitter {
   setXray(on) {
     this.xray = on;
     for (const view of this.bodyViews.values()) view.setXray(on);
+    this.requestRender();
+  }
+
+  // 'shaded', 'wireframe' or 'zebra'; hidden edges drawn dashed.
+  setDisplay(mode = this.display, hiddenEdges = this.hiddenEdges) {
+    this.display = mode;
+    this.hiddenEdges = hiddenEdges;
+    for (const view of this.bodyViews.values()) {
+      view.setDisplay(mode, hiddenEdges);
+      view.setEdgesVisible((this.showEdges || mode === 'wireframe') && !this.visualization);
+    }
     this.requestRender();
   }
 
@@ -344,7 +359,7 @@ export class Viewport extends Emitter {
 
   setShowEdges(v) {
     this.showEdges = v;
-    for (const view of this.bodyViews.values()) view.setEdgesVisible(v && !this.visualization);
+    for (const view of this.bodyViews.values()) view.setEdgesVisible((v || this.display === 'wireframe') && !this.visualization);
     this.requestRender();
   }
 
@@ -728,7 +743,9 @@ export class Viewport extends Emitter {
       this.ground.scale.setScalar(r0 * 12);
     }
     for (const v of this.bodyViews.values()) {
-      v.setEdgesVisible(this.showEdges && !on);
+      // Visualization always shows shaded bodies.
+      v.setDisplay(on ? 'shaded' : this.display || 'shaded', on ? false : this.hiddenEdges);
+      v.setEdgesVisible((this.showEdges || (!on && this.display === 'wireframe')) && !on);
       v.setVisualization?.(on);
     }
     for (const v of this.sketchViews.values()) v.group.visible = !on && v.sketch.visible !== false;

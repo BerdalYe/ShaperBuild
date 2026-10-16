@@ -150,3 +150,58 @@ works differently on purpose, the choice is written down here.
   (no binding for it), so this works on meshes only; solids get a message.
   Scale can also make a copy.
 - Copies made by transforms are independent bodies (no linked copies).
+
+## 3D tool options
+
+- **Taper** leans an extrusion's side walls in (positive) or out
+  (negative) by an angle; it uses the geometry engine's draft on the side
+  faces. In both directions, each half narrows away from the sketch.
+- **Start offset** begins the extrusion that far from the sketch.
+- **Up to** a face or plane and **Through everything** are worked out
+  when the extrusion is made and stored as a plain distance in History
+  (they do not follow the face later). "Through everything" goes just past
+  the far side of all visible bodies.
+- **Helix**: Revolve with a *rise per turn* makes a helical sweep (springs,
+  threads). It is built as a loft through turned and raised copies of the
+  profile, 16 per turn, so it is a very close approximation, not an exact
+  helix.
+- **Keep the originals**: Union makes a new body and leaves the bodies it
+  joined; Subtract and Intersect can keep the bodies they change, the
+  tool bodies, or both.
+- Chamfer with **two distances** measures the first along the face next to
+  the edge that the geometry engine lists first.
+
+## History
+
+- **Roll back** turns off every step after the chosen one (they are kept,
+  marked "rolled back"); new steps go in at the bar. Rolling back is saved
+  with the design and can be undone.
+- **Rename** changes only the name shown; the original step type is kept.
+- **Merge history** replaces all steps with one fixed step holding the
+  bodies as they are now. Sketches and variables can be kept or removed.
+  Undo brings the steps back while the design is open.
+- The filter button in the Steps heading shows only the steps that made or
+  changed the selected items (or the isolated ones).
+
+## Display and views
+
+- Display modes: shaded, wireframe (edges only), zebra stripes (a
+  reflection of horizontal stripes, to check how smoothly faces join).
+  Hidden edges can be shown dashed in any mode. Visualization always shows
+  shaded bodies.
+- A curvature map (spec: curvature analysis) is not included yet.
+- **Isolate** shows only the selected items; it is not saved and does not
+  change the items' own Show/Hide state. Invert visibility does.
+- **Saved views** keep the camera, perspective/orthographic and the section
+  cut, and are saved in the design file.
+- **Pinned measurements** stay on screen until cleared or another design is
+  opened. They are not saved and do not follow the body if it changes.
+
+## Not included yet (3D tools)
+
+- **Offset Face** works on flat faces only, through push/pull (Extrude on a
+  face). **Replace Face** and offsetting round faces are missing: the
+  geometry engine build used here has no binding for per-face offsets.
+- Fillet options other than the radius (chord width, setback corners, G2,
+  profile, overflow) and Loft guide curves and tangency are not there.
+- Extrude **From Plane** and an end offset are not there; Start offset is.

@@ -115,7 +115,7 @@ export class ToolPanel {
     this.el.append(head, body);
     if (s.onOk || s.buttons) {
       const foot = h('div.tp-foot');
-      for (const b of s.buttons || []) foot.append(h(`button.btn.grow${b.primary ? '.primary' : ''}`, { text: b.label, onClick: b.action }));
+      for (const b of s.buttons || []) foot.append(h(`button.btn.grow${b.primary ? '.primary' : ''}`, { text: b.label, title: b.title, onClick: b.action }));
       if (s.onOk) {
         const cancel = h('button.btn.grow', { text: 'Cancel', onClick: () => s.onCancel?.() });
         const ok = h('button.btn.primary.grow', { html: `${icon('check')}<span>${t(s.okLabel || 'Done')}</span>`, onClick: () => s.onOk?.() });
