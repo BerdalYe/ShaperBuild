@@ -1,0 +1,30 @@
+{
+  "name": "shaperbuild",
+  "productName": "ShaperBuild",
+  "version": "1.0.0",
+  "description": "A desktop 3D CAD app for sketching, solid modelling and STL work.",
+  "author": "BerdalYe",
+  "license": "LGPL-2.1-only",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test \"tests/unit/*.test.mjs\" \"tests/kernel/*.test.mjs\"",
+    "test:e2e": "node tests/e2e/run.mjs",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux"
+  },
+  "dependencies": {
+    "manifold-3d": "3.5.3",
+    "replicad-opencascadejs": "1.1.0",
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "electron": "44.5.0",
+    "electron-builder": "26.16.1",
+    "playwright": "1.56.1"
+  }
+}

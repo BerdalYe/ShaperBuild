@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ShaperBuild</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-adW9Sf+5osNvppUM8wELjiFVRowznslSGpF4/lX1Lgs='; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'" />
+    <link rel="stylesheet" href="./styles/app.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "/node_modules/three/build/three.module.js",
+          "three/addons/": "/node_modules/three/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body class="theme-dark">
+    <div id="app" class="app">
+      <header class="topbar">
+        <div class="tb-group">
+          <button id="btn-home" class="tb-btn" title="Home – your designs"></button>
+          <div class="doc-title" id="doc-title" title="Rename design">
+            <span id="doc-name">Untitled</span><span id="doc-dirty" class="dirty-dot" hidden></span>
+          </div>
+        </div>
+        <div class="tb-group">
+          <button id="btn-undo" class="tb-btn" title="Undo (Ctrl+Z)"></button>
+          <button id="btn-redo" class="tb-btn" title="Redo (Ctrl+Y)"></button>
+        </div>
+        <div class="tb-spacer"></div>
+        <div class="tb-group">
+          <div class="seg" id="mode-seg">
+            <button data-mode="model" class="on">Modeling</button>
+            <button data-mode="visual">Visualization</button>
+          </div>
+        </div>
+        <div class="tb-group">
+          <button id="btn-import" class="tb-btn wide" title="Import STL, OBJ, 3MF or STEP (Ctrl+I)"><span class="ic"></span><span>Import</span></button>
+          <button id="btn-export" class="tb-btn wide primary" title="Export (Ctrl+E)"><span class="ic"></span><span>Export</span></button>
+          <button id="btn-settings" class="tb-btn" title="Settings"></button>
+        </div>
+      </header>
+      <main class="workspace">
+        <aside id="items" class="items-panel"></aside>
+        <section id="viewport" class="viewport">
+          <div id="tool-panel" class="tool-panel" hidden></div>
+          <div id="context-bar" class="context-bar" hidden></div>
+          <div id="view-controls" class="view-controls"></div>
+          <div id="busy" class="busy" hidden><span class="spinner"></span><span id="busy-text">Working…</span></div>
+          <div id="toasts" class="toasts"></div>
+          <div id="boot" class="boot"><div class="boot-card"><div class="spinner big"></div><div>Starting the geometry engine…</div></div></div>
+        </section>
+        <nav id="tools" class="tools-menu"></nav>
+      </main>
+      <footer class="statusbar">
+        <div id="status-hint" class="status-hint"></div>
+        <div id="status-info" class="status-info"></div>
+        <div class="status-right">
+          <button id="btn-snap" class="sb-btn on" title="Snap to grid and geometry (S)">Snap</button>
+          <select id="unit-select" class="sb-select" title="Units"></select>
+        </div>
+      </footer>
+    </div>
+    <div id="home" class="home" hidden></div>
+    <div id="modal-root"></div>
+    <div id="menu-root"></div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
