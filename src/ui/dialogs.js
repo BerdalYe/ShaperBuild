@@ -18,6 +18,7 @@ export class Dialogs {
       { label: '3MF — 3D printing', icon: 'export', action: () => f.exportDialog('3mf') },
       { label: 'OBJ — mesh', icon: 'export', action: () => f.exportDialog('obj') },
       { label: 'STEP — CAD exchange', icon: 'export', action: () => f.exportDialog('step') },
+      { label: 'DXF — sketches for laser cutting', icon: 'export', action: () => f.exportDXF() },
       '-',
       { label: 'Image (PNG)', icon: 'sparkle', action: () => f.exportPNG() },
       '-',

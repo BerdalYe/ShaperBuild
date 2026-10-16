@@ -17,6 +17,7 @@ export function appCommands(app) {
     { id: 'export-3mf', label: 'Export 3MF…', icon: 'export', keywords: '3d print printing slicer file', run: menu('export-3mf') },
     { id: 'export-obj', label: 'Export OBJ…', icon: 'export', keywords: 'mesh file', run: menu('export-obj') },
     { id: 'export-step', label: 'Export STEP…', icon: 'export', keywords: 'cad file stp', run: menu('export-step') },
+    { id: 'export-dxf', label: 'Export DXF (sketches)…', icon: 'export', keywords: 'laser cutting cnc 2d drawing file sketch', run: menu('export-dxf') },
     { id: 'export-png', label: 'Export image (PNG)…', icon: 'sparkle', keywords: 'screenshot picture render photo', run: menu('export-png') },
     { id: 'undo', label: 'Undo', icon: 'undo', kbd: `${m}Z`, keywords: 'back revert', run: () => app.cmd.undo() },
     { id: 'redo', label: 'Redo', icon: 'redo', kbd: `${m}Y`, keywords: 'again', run: () => app.cmd.redo() },

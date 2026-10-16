@@ -3,6 +3,8 @@ import { parseSTL, writeSTL, parseOBJ, writeOBJ, parse3MF, write3MF } from './co
 import { toast, modal } from './ui/overlays.js';
 import { h } from './ui/dom.js';
 import { emptyState } from './core/doc.js';
+import { parseDXF, writeDXF } from './core/dxf.js';
+import { GROUND } from './core/plane.js';
 
 export const PROJECT_EXT = 'shaperbuild';
 const THUMBS_KEY = 'shaperbuild.thumbs.v1';
@@ -84,13 +86,13 @@ export class FileOps {
   // ---- open ----------------------------------------------------------------
 
   async openDialog() {
-    if (!this.native) return this.browserPick('.shaperbuild,.stl,.obj,.3mf,.step,.stp');
+    if (!this.native) return this.browserPick('.shaperbuild,.stl,.obj,.3mf,.step,.stp,.dxf');
     const paths = await this.native.openDialog({ kind: 'open' });
     for (const p of paths) await this.openPath(p);
   }
 
   async importDialog() {
-    if (!this.native) return this.browserPick('.stl,.obj,.3mf,.step,.stp', true);
+    if (!this.native) return this.browserPick('.stl,.obj,.3mf,.step,.stp,.dxf', true);
     const paths = await this.native.openDialog({ kind: 'import', multi: true });
     for (const p of paths) await this.openPath(p, { import: true });
   }
@@ -123,7 +125,7 @@ export class FileOps {
       if (!(await this.confirmDiscard())) return;
       return this.loadProject(data, path, name);
     }
-    if (!['stl', 'obj', '3mf', 'step', 'stp'].includes(ext)) {
+    if (!['stl', 'obj', '3mf', 'step', 'stp', 'dxf'].includes(ext)) {
       toast(`Unsupported file type: .${ext}`, { type: 'error' });
       return;
     }
@@ -134,7 +136,49 @@ export class FileOps {
       app.home.hide();
     }
     void opts;
+    if (ext === 'dxf') return this.importDXF(name, data);
     return this.importData(name, data);
+  }
+
+  // A DXF drawing becomes a new sketch on the grid.
+  importDXF(name, data) {
+    const app = this.app;
+    try {
+      const { entities, skipped } = parseDXF(new TextDecoder().decode(data));
+      if (!entities.length) throw new Error('no lines, arcs or circles found');
+      const id = app.cmd.addSketch(GROUND, entities, { name: this.stem(name), label: `Import ${name}` });
+      app.selection.set([{ kind: 'sketch', sketchId: id }]);
+      const extra = Object.entries(skipped).map(([t, c]) => `${c} ${t.toLowerCase()}`);
+      toast(`Imported ${name} · ${entities.length} curves${extra.length ? ` (skipped: ${extra.join(', ')})` : ''}. Click its closed shapes to extrude them.`, { type: 'ok', ms: 5000 });
+      setTimeout(() => app.vp.fit(app.selectionBox()), 80);
+      return id;
+    } catch (err) {
+      toast(`Import failed: ${err.message}`, { type: 'error', ms: 6000 });
+      return null;
+    }
+  }
+
+  // Sketches as DXF: the selected ones, or every visible sketch.
+  async exportDXF({ path = null } = {}) {
+    const app = this.app;
+    const ids = [...new Set(app.selection.list.map((it) => it.sketchId).filter(Boolean))];
+    const sketches = (ids.length ? ids.map((id) => app.doc.sketch(id)) : app.doc.sketches.filter((s) => s.visible !== false)).filter(Boolean);
+    if (!sketches.length) {
+      toast('Draw or select a sketch first — DXF holds 2D sketches.', { type: 'error', ms: 3500 });
+      return null;
+    }
+    const bytes = new TextEncoder().encode(writeDXF(sketches));
+    const defaultName = sketches.length === 1 ? sketches[0].name : this.name;
+    let target = path;
+    if (!target) {
+      if (!this.native) return downloadBytes(`${defaultName}.dxf`, bytes);
+      target = await this.native.saveDialog({ kind: 'dxf', defaultName });
+      if (!target) return null;
+    }
+    await this.native.writeFile(target, bytes);
+    const planes = new Set(sketches.map((s) => JSON.stringify([s.plane.normal, s.plane.origin])));
+    toast(`Exported ${this.basename(target)}${planes.size > 1 ? ' — sketches on different planes are drawn on top of each other' : ''}`, { type: 'ok', ms: 3500 });
+    return target;
   }
 
   async importData(name, data) {

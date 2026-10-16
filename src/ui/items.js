@@ -282,6 +282,14 @@ export class ItemsPanel {
     showMenu(e.clientX, e.clientY, [
       { label: 'Rename', icon: 'sketch', action: () => ((this.renaming = s.id), this.render()) },
       { label: 'Look at', icon: 'lookAt', action: () => this.app.vp.lookAtPlane(s.plane) },
+      {
+        label: 'Export as DXF…',
+        icon: 'export',
+        action: () => {
+          this.app.selection.set([{ kind: 'sketch', sketchId: s.id }]);
+          this.app.files.exportDXF();
+        },
+      },
       { label: s.visible === false ? 'Show' : 'Hide', icon: s.visible === false ? 'eye' : 'eyeOff', action: () => cmd.setVisible('sketch', s.id, s.visible === false) },
       '-',
       { label: 'Delete', icon: 'trash', danger: true, action: () => cmd.deleteItems([{ kind: 'sketch', sketchId: s.id }]) },

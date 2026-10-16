@@ -35,6 +35,15 @@ export class Commands {
   // Add entities to the sketch on `plane` (creating it if needed).
   // `constraints` may refer to the new entities as '#0', '#1', …
   // Returns the sketch id.
+  // A new, separate sketch (e.g. an imported DXF drawing).
+  addSketch(plane, entities, { name, label = 'Sketch' } = {}) {
+    let id = null;
+    this.doc.apply(label, (d) => {
+      id = d.addSketch({ plane, entities: d.withIds(entities), ...(name ? { name } : {}) }).id;
+    });
+    return id;
+  }
+
   addSketchEntities(plane, sketchId, entities, label = 'Sketch', constraints = []) {
     const app = this.app;
     return this.doc.apply(label, (d) => {

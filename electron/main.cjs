@@ -245,18 +245,21 @@ async function serve(request) {
 const FILTERS = {
   project: [{ name: 'ShaperBuild design', extensions: [PROJECT_EXT] }],
   open: [
-    { name: 'All supported', extensions: [PROJECT_EXT, 'stl', 'obj', 'step', 'stp', '3mf'] },
+    { name: 'All supported', extensions: [PROJECT_EXT, 'stl', 'obj', 'step', 'stp', '3mf', 'dxf'] },
     { name: 'ShaperBuild design', extensions: [PROJECT_EXT] },
     { name: 'Mesh (STL, OBJ, 3MF)', extensions: ['stl', 'obj', '3mf'] },
     { name: 'STEP', extensions: ['step', 'stp'] },
+    { name: 'DXF drawing', extensions: ['dxf'] },
   ],
   import: [
-    { name: 'All supported', extensions: ['stl', 'obj', 'step', 'stp', '3mf'] },
+    { name: 'All supported', extensions: ['stl', 'obj', 'step', 'stp', '3mf', 'dxf'] },
     { name: 'STL', extensions: ['stl'] },
     { name: 'OBJ', extensions: ['obj'] },
     { name: 'STEP', extensions: ['step', 'stp'] },
     { name: '3MF', extensions: ['3mf'] },
+    { name: 'DXF drawing (becomes a sketch)', extensions: ['dxf'] },
   ],
+  dxf: [{ name: 'DXF drawing', extensions: ['dxf'] }],
   stl: [{ name: 'STL', extensions: ['stl'] }],
   font: [{ name: 'Fonts', extensions: ['ttf', 'otf', 'woff'] }],
   obj: [{ name: 'OBJ', extensions: ['obj'] }],

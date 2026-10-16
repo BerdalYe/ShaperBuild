@@ -18,7 +18,7 @@ export class StarterCard {
         'div.st-actions',
         action('rect', 'Draw a rectangle', 'Then pull it into 3D', 'R', () => app.tools.activate('rect')),
         action('box', 'Add a box', 'A ready-made shape', '', () => app.tools.activate('box')),
-        action('import', 'Import a file', 'STL, OBJ, 3MF or STEP', '', () => app.files.importDialog()),
+        action('import', 'Import a file', 'STL, OBJ, 3MF, STEP or DXF', '', () => app.files.importDialog()),
         action('learn', 'Take the tutorial', 'Learn the basics in 3 minutes', '', () => app.tutorial.start()),
       ),
       h('div.st-nav', {

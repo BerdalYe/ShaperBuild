@@ -64,6 +64,7 @@ function buildMenu({ send, recent = [], isDev = false }) {
             cmd('3MF (3D printing)…', 'export-3mf'),
             cmd('OBJ…', 'export-obj'),
             cmd('STEP (CAD)…', 'export-step'),
+            cmd('DXF (sketches, laser cutting)…', 'export-dxf'),
             { type: 'separator' },
             cmd('Image (PNG)…', 'export-png'),
           ],

@@ -1095,7 +1095,7 @@ export class App {
       if (!hint) {
         hint = document.createElement('div');
         hint.className = 'drop-hint';
-        hint.textContent = 'Drop STL, OBJ, 3MF, STEP or ShaperBuild files to open them';
+        hint.textContent = 'Drop STL, OBJ, 3MF, STEP, DXF or ShaperBuild files to open them';
         document.body.append(hint);
       }
     });
@@ -1149,6 +1149,8 @@ export class App {
         return this.files.exportDialog('obj');
       case 'export-step':
         return this.files.exportDialog('step');
+      case 'export-dxf':
+        return this.files.exportDXF();
       case 'export-png':
         return this.files.exportPNG();
       case 'close-design':

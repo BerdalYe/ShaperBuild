@@ -1,9 +1,11 @@
 // End-to-end: reference planes — add one with the Plane tool, draw on it,
 // split a body with it, and keep it when saving.
 import assert from 'node:assert/strict';
-import { launch, shot } from './harness.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { launch, shot, OUT } from './harness.mjs';
 
-const { win, errors, close } = await launch();
+const { app, win, errors, close } = await launch();
 const step = (msg) => console.log(`• ${msg}`);
 const A = (fn, arg) => win.evaluate(fn, arg);
 const near = (a, b, tol = 1e-3) => assert.ok(Math.abs(a - b) < tol, `${a} != ${b}`);
@@ -60,6 +62,22 @@ try {
   const sk = await A(() => window.__shaper.doc.sketches[0]);
   near(sk.plane.origin[2], 30);
   assert.equal(sk.entities.length, 4);
+
+  step('the sketch exports to DXF and imports back as a new sketch');
+  const dxf = path.join(fs.mkdtempSync(path.join(OUT, 'dxf-')), 'square.dxf');
+  await app.evaluate(({ dialog }, f) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath: f });
+  }, dxf);
+  await A(() => window.__shaper.selection.set([{ kind: 'sketch', sketchId: window.__shaper.doc.sketches[0].id }]));
+  await A(() => window.__shaper.files.exportDXF());
+  assert.match(fs.readFileSync(dxf, 'utf8'), /\nLINE\n/);
+  await A((f) => window.__shaper.files.openPath(f, { import: true }), dxf);
+  await win.waitForFunction(() => window.__shaper.doc.sketches.length === 2);
+  const imported = await A(() => window.__shaper.doc.sketches[1]);
+  assert.equal(imported.name, 'square');
+  assert.equal(imported.entities.length, 4);
+  near(Math.max(...imported.entities.map((e) => Math.abs(e.a[0]))), 10);
+  await A(() => window.__shaper.cmd.deleteItems([{ kind: 'sketch', sketchId: window.__shaper.doc.sketches[1].id }]));
 
   step('a tilted plane from a face');
   await A(async () => {
