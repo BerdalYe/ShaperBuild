@@ -45,13 +45,13 @@ Finding your way around:
 
 ## What it does
 
-**Sketch** – Line, Rectangle, Circle, Arc, Polygon, Spline, Ellipse, **Text**, Point, Trim, Offset, Project and Construction lines. Click the grid, any flat face, a reference plane, a picture or an existing sketch to draw on it. Points snap to ends, midpoints, centers, body corners, alignments and the grid. Start typing while drawing to enter exact sizes (Tab moves between boxes, Enter applies). Closed shapes turn into regions you can click.
+**Sketch** – Line, Rectangle (corner, centre or 3 points), Circle, Arc, Polygon, Spline (through points or shaped by control points), Ellipse, **Text**, Point, Trim, Offset, Pattern (rows, grids or around a point), Project and Construction lines. Click the grid, any flat face, a reference plane, a picture or an existing sketch to draw on it. Points snap to ends, midpoints, centers, body corners, alignments and the grid. Start typing while drawing to enter exact sizes (Tab moves between boxes, Enter applies). Closed shapes turn into regions you can click.
 
 **Text** – Type a name or label, pick Bold, Regular or any font file, set the letter height and click where it goes. The letters come out selected, so pressing E raises them (or a negative height engraves them).
 
-**Planes and pictures** – The **Plane** tool adds a flat surface to draw on, at a distance from or tilted to the grid, a face or another plane. **Import** a PNG or JPG to trace over: type its real width, make it more or less see-through, and draw on it.
+**Planes, axes and pictures** – The **Plane** tool adds a flat surface to draw on: at a distance from or tilted to the grid, a face or another plane, halfway between two faces, through three points, across a curve, through a line at an angle, or parallel to a face through a point. The **Axis** tool adds a reference axis (through two points, where two planes meet, through a round face, along an edge, or standing on a face) to revolve or turn things around. **Import** a PNG or JPG to trace over: type its real width, make it more or less see-through, and draw on it.
 
-**Constraints and dimensions** – Sizes you type become dimensions you can click and change later; the sketch follows. Lines drawn level or upright stay that way, and rectangles stay rectangles when you drag them. Select curves or points and use **Constrain** for parallel, perpendicular, equal, tangent, concentric, midpoint, on-curve, coincident, fixed, angle and distance. The **Dimension** tool (D) adds lengths, diameters, radii and distances.
+**Constraints and dimensions** – Sizes you type become dimensions you can click and change later; the sketch follows. Curves the constraints hold completely in place turn green. Lines drawn level or upright stay that way, and rectangles stay rectangles when you drag them. Select curves or points and use **Constrain** for parallel, perpendicular, equal, tangent, concentric, midpoint, on-curve, coincident, symmetric, lock/unlock, disconnect, angle and distance. The **Dimension** tool (D) adds lengths, diameters, radii and distances.
 
 **Model** – Extrude (also push/pull of faces: grow a body or cut into it), Revolve, Sweep (with **twist** and a different **size at the end**, for twisted vases, screws and tapers), Loft, Fillet, Chamfer, Shell, Draft, Split, Union, Subtract and Intersect. Every tool shows a live preview before you apply it. Select a region or face and drag its blue arrow to extrude directly.
 
@@ -61,7 +61,7 @@ Finding your way around:
 
 **Variables and formulas** – Any number field takes a formula: `20 + 5`, `1in + 2mm`, `1' 6"`, `width / 2`, `max(a, b)`, `sin(30)`… Add variables (lengths, angles or plain numbers) at the top of the History tab and use their names anywhere. Values typed with a variable stay linked: change the variable and every size made from it updates, including sketch dimensions (marked ƒ). Renaming a variable updates every formula. Number fields also have − / + buttons, and you can drag a field's name left or right to change it.
 
-**Transform** – Move/Rotate with a gizmo or exact values, Scale, Mirror, Linear and Circular patterns, Duplicate.
+**Transform** – Move/Rotate with a gizmo or exact values, Translate (from one point to another), Rotate around an axis, Align (put a face, edge or corner onto another), Scale (uniform, or X/Y/Z separately for meshes), Mirror, Linear patterns in up to three directions, Circular patterns, Duplicate.
 
 **Shapes** – Box, Cylinder, Sphere, Cone and Torus, placed by clicking.
 

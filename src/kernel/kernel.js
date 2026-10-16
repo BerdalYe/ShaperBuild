@@ -354,7 +354,18 @@ export class Kernel {
         info.radius = cy.Radius();
         info.axis = { origin: [loc.X(), loc.Y(), loc.Z()], dir: [d.X(), d.Y(), d.Z()] };
       } else if (t === ST.GeomAbs_Sphere) info.type = 'sphere';
-      else if (t === ST.GeomAbs_Cone) info.type = 'cone';
+      else if (t === ST.GeomAbs_Cone) {
+        info.type = 'cone';
+        // The cone's axis is the axis of its circular edges (gp_Cone has no
+        // binding here).
+        for (const ex of this.explore(face, this.T.TopAbs_EDGE)) {
+          const e = this.edgeInfo(oc.TopoDS.Edge(ex));
+          if (e.type === 'circle') {
+            info.axis = { origin: e.center, dir: e.axisDir };
+            break;
+          }
+        }
+      }
       else if (t === ST.GeomAbs_Torus) info.type = 'torus';
       else if (t === ST.GeomAbs_BSplineSurface || t === ST.GeomAbs_BezierSurface) info.type = 'freeform';
       return info;
@@ -485,6 +496,7 @@ export class Kernel {
         const pts = ent.pts;
         if (pts.length < 2) return null;
         if (pts.length === 2) return r(new oc.BRepBuilderAPI_MakeEdge(P(pts[0]), P(pts[1]))).Edge();
+        if (ent.control) return this.controlSplineEdge(ent, P, r);
         const closed = !!ent.closed;
         const n = closed ? pts.length - (dist2(pts[0], pts[pts.length - 1]) < 1e-12 ? 1 : 0) : pts.length;
         const plain = r(new oc.NCollection_Array1_gp_Pnt(1, n));
@@ -605,6 +617,28 @@ export class Kernel {
       }
     }
     return [...ids].sort();
+  }
+
+  // A cubic B-spline from control points: clamped (open) or periodic
+  // (closed), with uniform knots — the same curve geom2d draws.
+  controlSplineEdge(ent, P, r) {
+    const oc = this.oc;
+    let pts = ent.pts;
+    const closed = !!ent.closed && pts.length > 2;
+    if (closed && dist2(pts[0], pts[pts.length - 1]) < 1e-12) pts = pts.slice(0, -1);
+    const n = pts.length;
+    const d = Math.min(3, n - 1);
+    const poles = r(new oc.NCollection_Array1_gp_Pnt(1, n));
+    pts.forEach((p, i) => poles.SetValue(i + 1, P(p)));
+    const nk = closed ? n + 1 : n - d + 1;
+    const knots = r(new oc.NCollection_Array1_double(1, nk));
+    const mults = r(new oc.NCollection_Array1_int(1, nk));
+    for (let i = 1; i <= nk; i++) {
+      knots.SetValue(i, i - 1);
+      mults.SetValue(i, closed ? 1 : i === 1 || i === nk ? d + 1 : 1);
+    }
+    const curve = new oc.Geom_BSplineCurve(poles, knots, mults, d, closed);
+    return r(new oc.BRepBuilderAPI_MakeEdge(curve)).Edge();
   }
 
   // Exact polylines (plane coordinates) for spline entities, for display.
@@ -1466,21 +1500,46 @@ export class Kernel {
     return this.result(out);
   }
 
-  pattern({ ids, kind = 'linear', count = 3, spacing = 10, direction = [1, 0, 0], axis, angle = 360, union = false }) {
+  // Linear: `count` copies along `direction`, and with `more` (up to two
+  // further [{ direction, count, spacing }]) a grid. Circular: around
+  // `axis`; `keepTurn` moves the copies without turning them.
+  pattern({ ids, kind = 'linear', count = 3, spacing = 10, direction = [1, 0, 0], more = [], axis, angle = 360, union = false, keepTurn = false }) {
     const out = [];
     const n = Math.max(2, Math.floor(count));
+    // Offsets of every copy (linear), as index tuples.
+    const dirs = [{ direction, count: n, spacing }, ...more.filter((d) => d && Math.floor(d.count) >= 2)];
+    let grid = [[]];
+    for (const d of dirs) {
+      const next = [];
+      for (const g of grid) for (let i = 0; i < Math.floor(d.count); i++) next.push([...g, i]);
+      grid = next;
+    }
+    grid = grid.filter((g) => g.some((i) => i));
     for (const id of ids) {
       const copies = [];
-      for (let i = 1; i < n; i++) {
-        let m;
-        if (kind === 'circular') {
-          const full = Math.abs(Math.abs(angle) - 360) < 1e-9;
-          const step = (angle * Math.PI) / 180 / (full ? n : n - 1);
-          m = rotationMatrix(axis.origin, axis.dir, step * i);
-        } else {
-          m = translationMatrix(scale3(norm(direction), spacing * i));
+      if (kind === 'circular') {
+        const full = Math.abs(Math.abs(angle) - 360) < 1e-9;
+        const step = (angle * Math.PI) / 180 / (full ? n : n - 1);
+        const bb = keepTurn ? this.bbox(this.get(id).shape) : null;
+        const c = bb ? bb.min.map((v, i) => (v + bb.max[i]) / 2) : null;
+        for (let i = 1; i < n; i++) {
+          let m = rotationMatrix(axis.origin, axis.dir, step * i);
+          if (c) {
+            // Move the middle point round the circle; keep the direction.
+            const moved = [0, 1, 2].map((k) => m[k] * c[0] + m[4 + k] * c[1] + m[8 + k] * c[2] + m[12 + k]);
+            m = translationMatrix(moved.map((v, k) => v - c[k]));
+          }
+          copies.push(this.transformShape(id, m));
         }
-        copies.push(this.transformShape(id, m));
+      } else {
+        for (const g of grid) {
+          const t = [0, 0, 0];
+          g.forEach((i, k) => {
+            const d = scale3(norm(dirs[k].direction), dirs[k].spacing * i);
+            for (let a = 0; a < 3; a++) t[a] += d[a];
+          });
+          copies.push(this.transformShape(id, translationMatrix(t)));
+        }
       }
       if (union) {
         out.push(...this.unionInto(id, copies));

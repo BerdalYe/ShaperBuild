@@ -15,8 +15,10 @@
 //   { type: 'onCurve', p, e }            { type: 'fix', p, value: [x, y] }
 //   { type: 'length', e, value }         { type: 'radius' | 'diameter', e, value }
 //   { type: 'angle', e, e2, value }      { type: 'distance', p, p2, value }
+//   { type: 'symmetric', p, p2, e }      (p and p2 mirrored across line e)
 // Point names: line a/b, circle & arc c, arc s/e (start/end), point p,
 // spline p0…pn.
+import { freeVariables } from './dof.js';
 
 const TAU = Math.PI * 2;
 
@@ -32,6 +34,7 @@ export const CONSTRAINT_INFO = {
   midpoint: { label: 'Midpoint', glyph: 'M' },
   onCurve: { label: 'On curve', glyph: '⊙' },
   fix: { label: 'Fixed', glyph: '⚓' },
+  symmetric: { label: 'Symmetric', glyph: '⇹' },
   length: { label: 'Length', dimension: true },
   radius: { label: 'Radius', dimension: true },
   diameter: { label: 'Diameter', dimension: true },
@@ -380,6 +383,33 @@ export function residuals(V, c, entities) {
       add([...p.vars, ...P.vars], (x) => len2(sub2(p.get(x), P.c(x))) - Math.abs(P.r(x)));
       break;
     }
+    case 'symmetric': {
+      // p and p2 mirror each other across line e.
+      const p = V.point(c.p);
+      const q = V.point(c.p2);
+      const L = lineAcc(V, c.e);
+      if (!p || !q || !L) return null;
+      const vars = [...p.vars, ...q.vars, ...L.vars];
+      const axis = (x) => {
+        const d = sub2(L.b(x), L.a(x));
+        return [d, Math.hypot(d[0], d[1]) || 1];
+      };
+      add(vars, (x) => {
+        const [d, l] = axis(x);
+        const P = p.get(x);
+        const Q = q.get(x);
+        return ((Q[0] - P[0]) * d[0] + (Q[1] - P[1]) * d[1]) / l;
+      });
+      add(vars, (x) => {
+        const [d, l] = axis(x);
+        const P = p.get(x);
+        const Q = q.get(x);
+        const a = L.a(x);
+        const M = [(P[0] + Q[0]) / 2 - a[0], (P[1] + Q[1]) / 2 - a[1]];
+        return (d[0] * M[1] - d[1] * M[0]) / l;
+      });
+      break;
+    }
     case 'fix': {
       const p = V.point(c.p);
       if (!p || !c.value) return null;
@@ -499,8 +529,9 @@ function cholesky(M, b, n) {
 // ---- public API ----------------------------------------------------------
 
 // Solve a sketch. drags: [{ ref: point ref, to: [x, y] }] pull points
-// towards targets. Returns { ok, entities, constraints, residual }.
-export function solveSketch(entities, constraints = [], { drags = [], tolerance = 1e-7 } = {}) {
+// towards targets. loose: point refs not joined to points they touch.
+// Returns { ok, entities, constraints, residual }.
+export function solveSketch(entities, constraints = [], { drags = [], tolerance = 1e-7, loose = [] } = {}) {
   const V = new Vars(entities);
   const x0 = V.x.slice();
   const hard = [];
@@ -511,7 +542,9 @@ export function solveSketch(entities, constraints = [], { drags = [], tolerance 
     kept.push(c);
     hard.push(...R);
   }
-  for (const g of coincidentGroups(entities)) {
+  const isLoose = (r) => loose.some((l) => l.e === r.e && l.p === r.p);
+  for (const g0 of coincidentGroups(entities)) {
+    const g = g0.filter((r) => !isLoose(r));
     for (let i = 1; i < g.length; i++) hard.push(...residuals(V, { type: 'coincident', p: g[0], p2: g[i] }, entities));
   }
   const x = V.x.slice();
@@ -538,7 +571,10 @@ export function solveSketch(entities, constraints = [], { drags = [], tolerance 
   const ok = residual < tolerance * Math.max(1, ...x.map(Math.abs));
   // Make coincident points exactly equal again (removes solver round-off).
   for (const g of coincidentGroups(entities)) {
-    const settable = g.map((ref) => V.point(ref)).filter((p) => p && p.vars.length === 2);
+    const settable = g
+      .filter((r) => !isLoose(r))
+      .map((ref) => V.point(ref))
+      .filter((p) => p && p.vars.length === 2);
     if (settable.length < 2) continue;
     const [i0, i1] = settable[0].vars;
     for (const p of settable.slice(1)) {
@@ -547,6 +583,29 @@ export function solveSketch(entities, constraints = [], { drags = [], tolerance 
     }
   }
   return { ok, entities: V.apply(entities, x), constraints: kept, residual };
+}
+
+// Entities the constraints hold completely in place (shown green): every
+// value of theirs is outside the free motions the constraints allow.
+export function definedEntities(entities, constraints = []) {
+  const out = new Set();
+  if (!constraints.length) return out;
+  const V = new Vars(entities);
+  if (!V.x.length || V.x.length > 800) return out;
+  const rows = [];
+  for (const c of constraints) {
+    const R = residuals(V, c, entities);
+    if (R) rows.push(...R);
+  }
+  for (const g of coincidentGroups(entities)) {
+    for (let i = 1; i < g.length; i++) rows.push(...residuals(V, { type: 'coincident', p: g[0], p2: g[i] }, entities));
+  }
+  const free = freeVariables(rows, V.x.slice(), V.x.length);
+  for (const [id, m] of V.map) {
+    const idx = Object.values(m.idx);
+    if (idx.length && idx.every((i) => !free[i])) out.add(id);
+  }
+  return out;
 }
 
 // Coordinates of a named point.

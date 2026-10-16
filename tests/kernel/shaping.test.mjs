@@ -238,3 +238,45 @@ test('emboss inside a tube raises towards the middle', () => {
   const mm = res.bodies[0].mesh;
   assert.ok(Math.abs(mm.bbox.max[0] - 10) < 0.05, 'the outside is unchanged');
 });
+
+test('control-point splines: the kernel curve matches the drawn one', async () => {
+  const { controlSplinePoints } = await import('../../src/core/geom2d.js');
+  const pts = [
+    [0, 0],
+    [20, 0],
+    [20, 20],
+    [0, 20],
+  ];
+  const closed = { id: 'cs', plane: XY, entities: [{ id: 's', type: 'spline', pts, closed: true, control: true }] };
+  const res = k.sketchRegions(closed);
+  assert.equal(res.regions.length, 1);
+  // The exact display curve and the 2D sampling describe the same shape.
+  const exact = res.curves.s;
+  const drawn = controlSplinePoints(pts, true, 64);
+  for (const p of exact) {
+    const d = Math.min(...drawn.map((q) => Math.hypot(p[0] - q[0], p[1] - q[1])));
+    assert.ok(d < 0.05, `off by ${d}`);
+  }
+  // An open one starts and ends on its first and last control points.
+  const open = { id: 'co', plane: XY, entities: [{ id: 's', type: 'spline', pts: [[0, 0], [10, 10], [20, -10], [30, 0]], control: true }] };
+  const line = k.sketchRegions(open).curves.s;
+  assert.ok(Math.hypot(line[0][0], line[0][1]) < 1e-6);
+  assert.ok(Math.hypot(line.at(-1)[0] - 30, line.at(-1)[1]) < 1e-6);
+});
+
+test('linear patterns in two and three directions; circular copies that keep their turn', () => {
+  const box = k.primitive({ type: 'box', params: { width: 4, depth: 4, height: 4 } }).bodies[0];
+  const grid = k.pattern({ ids: [box.id], count: 3, spacing: 10, direction: [1, 0, 0], more: [{ direction: [0, 1, 0], count: 2, spacing: 10 }] });
+  assert.equal(grid.bodies.length, 5); // 3 × 2 places, less the original
+  const cube = k.pattern({ ids: [box.id], count: 2, spacing: 10, direction: [1, 0, 0], more: [{ direction: [0, 1, 0], count: 2, spacing: 10 }, { direction: [0, 0, 1], count: 2, spacing: 10 }] });
+  assert.equal(cube.bodies.length, 7);
+  const far = Math.max(...cube.bodies.map((b) => b.mesh.bbox.max[2]));
+  assert.ok(Math.abs(far - 14) < 1e-6);
+  // A long box turned round Z stays lying along X when it keeps its turn.
+  const bar = k.primitive({ type: 'box', params: { width: 10, depth: 2, height: 2 } }).bodies[0];
+  const around = k.pattern({ ids: [bar.id], kind: 'circular', count: 4, angle: 360, axis: { origin: [0, -20, 0], dir: [0, 0, 1] }, keepTurn: true });
+  for (const b of around.bodies) {
+    const s = b.mesh.bbox.max.map((v, i) => v - b.mesh.bbox.min[i]);
+    assert.ok(Math.abs(s[0] - 10) < 1e-6 && Math.abs(s[1] - 2) < 1e-6, `kept its turn: ${s}`);
+  }
+});

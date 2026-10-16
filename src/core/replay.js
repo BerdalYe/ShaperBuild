@@ -375,10 +375,29 @@ export function moveMatrix({ t = [0, 0, 0], r = [0, 0, 0], pivot = [0, 0, 0] }) 
   return [R[0][0], R[1][0], R[2][0], 0, R[0][1], R[1][1], R[2][1], 0, R[0][2], R[1][2], R[2][2], 0, tr[0], tr[1], tr[2], 1];
 }
 
+// Matrix of a turn by `angle` degrees about the axis through `origin` along
+// `dir` (Rotate around axis).
+export function turnMatrix({ origin, dir, angle }) {
+  const l = Math.hypot(dir[0], dir[1], dir[2]) || 1;
+  const [x, y, z] = dir.map((v) => v / l);
+  const a = (angle * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  const k = 1 - c;
+  const R = [
+    [c + x * x * k, x * y * k - z * s, x * z * k + y * s],
+    [y * x * k + z * s, c + y * y * k, y * z * k - x * s],
+    [z * x * k - y * s, z * y * k + x * s, c + z * z * k],
+  ];
+  const t = [0, 1, 2].map((i) => origin[i] - (R[i][0] * origin[0] + R[i][1] * origin[1] + R[i][2] * origin[2]));
+  return [R[0][0], R[1][0], R[2][0], 0, R[0][1], R[1][1], R[2][1], 0, R[0][2], R[1][2], R[2][2], 0, t[0], t[1], t[2], 1];
+}
+
 // Matrix of a uniform scale around `center`.
-export function scaleMatrix({ factor, center = [0, 0, 0] }) {
-  const f = factor;
-  return [f, 0, 0, 0, 0, f, 0, 0, 0, 0, f, 0, center[0] * (1 - f), center[1] * (1 - f), center[2] * (1 - f), 1];
+// `factors` ([x, y, z]) stretches each direction on its own (meshes only).
+export function scaleMatrix({ factor, factors, center = [0, 0, 0] }) {
+  const [x, y, z] = factors || [factor, factor, factor];
+  return [x, 0, 0, 0, 0, y, 0, 0, 0, 0, z, 0, center[0] * (1 - x), center[1] * (1 - y), center[2] * (1 - z), 1];
 }
 
 // Numbers a step lets you change: [argument path, kind, label, check].
@@ -411,6 +430,11 @@ const PARAMS = {
     ['count', 'count', 'Copies'],
     ['spacing', 'length', 'Spacing', 'nonzero'],
     ['angle', 'angle', 'Total angle', 'nonzero'],
+    ['more.0.count', 'count', 'Copies (second direction)'],
+    ['more.0.spacing', 'length', 'Spacing (second direction)', 'nonzero'],
+    ['more.1.count', 'count', 'Copies (third direction)'],
+    ['more.1.spacing', 'length', 'Spacing (third direction)', 'nonzero'],
+    ['keepTurn', 'toggle', 'Keep the direction'],
     ['union', 'toggle', 'Join copies'],
   ],
   transform: [
@@ -421,6 +445,10 @@ const PARAMS = {
     ['move.r.1', 'angle', 'Rotate Y', 'any'],
     ['move.r.2', 'angle', 'Rotate Z', 'any'],
     ['scale.factor', 'number', 'Scale factor', 'positive'],
+    ['scale.factors.0', 'number', 'Scale X', 'positive'],
+    ['scale.factors.1', 'number', 'Scale Y', 'positive'],
+    ['scale.factors.2', 'number', 'Scale Z', 'positive'],
+    ['turn.angle', 'angle', 'Angle', 'nonzero'],
     ['copy', 'toggle', 'Make a copy'],
   ],
 };
@@ -459,7 +487,7 @@ export function editableParams(f) {
       .map(([k, v]) => ({ key: `params.${k}`, type: 'length', label: PRIMITIVE_LABELS[k] || k, value: v, check: 'positive' }));
   }
   // A plain copy (Duplicate) has nothing to change.
-  if (call.method === 'transform' && !a.move && !a.scale) return [];
+  if (call.method === 'transform' && !a.move && !a.scale && !a.turn) return [];
   return (PARAMS[call.method] || [])
     .filter(([key]) => getPath(a, key) !== undefined)
     .filter(([key]) => !(call.method === 'pattern' && key === (a.kind === 'circular' ? 'spacing' : 'angle')))
@@ -476,6 +504,7 @@ export function withParams(f, values) {
       // Values that a matrix is made from.
       if (args.move) args.matrix = moveMatrix(args.move);
       if (args.scale) args.matrix = scaleMatrix(args.scale);
+      if (args.turn) args.matrix = turnMatrix(args.turn);
       return { ...c, args };
     }),
   };

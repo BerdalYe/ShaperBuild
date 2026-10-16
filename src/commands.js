@@ -176,9 +176,20 @@ export class Commands {
     return true;
   }
 
+  // Remove constraints by id (Unlock, Disconnect).
+  removeConstraintIds(sketchId, ids, label = 'Delete constraint') {
+    const drop = new Set(ids);
+    this.doc.apply(label, (d) => d.updateSketch(sketchId, (sk) => ({ constraints: (sk.constraints || []).filter((c) => !drop.has(c.id)) })));
+  }
+
   addConstraint(sketchId, c) {
     const sk = this.doc.sketch(sketchId);
     if (!sk) return false;
+    // Several at once (Symmetric for two lines adds one per end).
+    if (Array.isArray(c)) {
+      const info = CONSTRAINT_INFO[c[0]?.type];
+      return this.solveAndStore(sketchId, sk.entities, [...(sk.constraints || []), ...c.map((x) => stripUndefined({ ...x }))], info?.label || 'Constraint');
+    }
     const info = CONSTRAINT_INFO[c.type];
     const con = stripUndefined({ ...c });
     const askValue = info?.dimension && con.value === undefined;
@@ -287,7 +298,7 @@ export class Commands {
 
   setVisible(kind, id, visible) {
     this.doc.apply(visible ? 'Show' : 'Hide', (d) => updateItem(d, kind, id, { visible }));
-    if (!visible) this.app.selection.prune((it) => (kind === 'body' ? it.bodyId : kind === 'plane' ? it.planeId : kind === 'image' ? it.imageId : it.sketchId) !== id);
+    if (!visible) this.app.selection.prune((it) => (kind === 'body' ? it.bodyId : kind === 'plane' ? it.planeId : kind === 'axis' ? it.axisId : kind === 'image' ? it.imageId : it.sketchId) !== id);
   }
 
   // Add a reference image and select it.
@@ -314,6 +325,16 @@ export class Commands {
     return id;
   }
 
+  // Add a reference axis and select it.
+  addAxis(axis, { name } = {}) {
+    let id = null;
+    this.doc.apply('Axis', (d) => {
+      id = d.addAxis({ ...axis, ...(name ? { name } : {}) }).id;
+    });
+    this.app.selection.set([{ kind: 'axis', axisId: id }]);
+    return id;
+  }
+
   // Show or hide several items in one undo step: items = [{ kind, id }].
   setVisibleMany(items, visible) {
     if (!items.length) return;
@@ -322,7 +343,7 @@ export class Commands {
     });
     if (!visible) {
       const gone = new Set(items.map((x) => x.id));
-      this.app.selection.prune((it) => !gone.has(it.bodyId) && !gone.has(it.sketchId) && !gone.has(it.planeId) && !gone.has(it.imageId));
+      this.app.selection.prune((it) => !gone.has(it.bodyId) && !gone.has(it.sketchId) && !gone.has(it.planeId) && !gone.has(it.axisId) && !gone.has(it.imageId));
     }
   }
 
@@ -339,6 +360,8 @@ export class Commands {
             ? ['sketch', it.sketchId]
             : it.kind === 'plane'
               ? ['plane', it.planeId]
+              : it.kind === 'axis'
+                ? ['axis', it.axisId]
               : it.kind === 'image'
                 ? ['image', it.imageId]
                 : it.kind === 'folder'
@@ -375,6 +398,7 @@ export class Commands {
       ...doc.bodies.filter(inside).map((x) => ({ kind: 'body', bodyId: x.id })),
       ...doc.sketches.filter(inside).map((x) => ({ kind: 'sketch', sketchId: x.id })),
       ...doc.planes.filter(inside).map((x) => ({ kind: 'plane', planeId: x.id })),
+      ...doc.axes.filter(inside).map((x) => ({ kind: 'axis', axisId: x.id })),
       ...doc.images.filter(inside).map((x) => ({ kind: 'image', imageId: x.id })),
     ];
   }
@@ -444,6 +468,7 @@ export class Commands {
       for (const b of d.bodies) if (b.visible === false) d.updateBody(b.id, { visible: true });
       for (const s of d.sketches) if (s.visible === false) d.updateSketch(s.id, { visible: true });
       for (const p of d.planes) if (p.visible === false) d.updatePlane(p.id, { visible: true });
+      for (const a of d.axes) if (a.visible === false) d.updateAxis(a.id, { visible: true });
       for (const p of d.images) if (p.visible === false) d.updateImage(p.id, { visible: true });
     });
   }
@@ -492,6 +517,7 @@ export class Commands {
     const bodies = new Set();
     const sketches = new Set();
     const planes = new Set();
+    const axes = new Set();
     const images = new Set();
     const curves = new Map();
     const cons = items.filter((it) => it.kind === 'constraint');
@@ -511,15 +537,17 @@ export class Commands {
         curves.get(it.sketchId).add(it.entityId);
       } else if (it.kind === 'region') sketches.add(it.sketchId);
       else if (it.kind === 'plane') planes.add(it.planeId);
+      else if (it.kind === 'axis') axes.add(it.axisId);
       else if (it.kind === 'image') images.add(it.imageId);
     }
-    if (!bodies.size && !sketches.size && !curves.size && !planes.size && !images.size && !opts.also) return;
+    if (!bodies.size && !sketches.size && !curves.size && !planes.size && !axes.size && !images.size && !opts.also) return;
     const history = this.app.history;
     this.doc.apply(opts.label || 'Delete', (d) => {
       opts.also?.(d);
       // Steps that use deleted sketch curves keep their current shape.
       history.keepSketchShapes(d, [...sketches, ...curves.keys()]);
       for (const id of planes) d.removePlane(id);
+      for (const id of axes) d.removeAxis(id);
       for (const id of images) d.removeImage(id);
       for (const id of bodies) d.removeBody(id);
       history.recordDelete(d, [...bodies]);
@@ -596,6 +624,7 @@ function updateItem(d, kind, id, patch) {
   if (kind === 'body') return d.updateBody(id, patch);
   if (kind === 'folder') return d.updateFolder(id, patch);
   if (kind === 'plane') return d.updatePlane(id, patch);
+  if (kind === 'axis') return d.updateAxis(id, patch);
   if (kind === 'image') return d.updateImage(id, patch);
   return d.updateSketch(id, patch);
 }

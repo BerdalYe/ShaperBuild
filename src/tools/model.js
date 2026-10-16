@@ -203,11 +203,11 @@ export class RevolveTool extends OpTool {
       {
         key: 'axis',
         label: 'Axis',
-        kinds: ['curve', 'edge'],
+        kinds: ['curve', 'edge', 'axis'],
         multiple: false,
         optional: true,
         fromSelection: false,
-        placeholder: 'Click a line or straight edge',
+        placeholder: 'Click a line, straight edge or axis',
         reject: 'Pick a straight line or edge as the axis',
         accept: (it) => (this.app.axisOf(it) ? it : null),
       },
@@ -755,7 +755,7 @@ export class LinearPatternTool extends OpTool {
   inputs() {
     return [
       bodySlot(),
-      { key: 'edge', label: 'Direction', kinds: ['edge', 'curve'], multiple: false, optional: true, fromSelection: false, placeholder: 'Click a straight edge (optional)', accept: (it) => (this.app.axisOf(it) ? it : null) },
+      { key: 'edge', label: 'Direction', kinds: ['edge', 'curve', 'axis'], multiple: false, optional: true, fromSelection: false, placeholder: 'Click a straight edge or axis (optional)', accept: (it) => (this.app.axisOf(it) ? it : null) },
     ];
   }
 
@@ -774,9 +774,47 @@ export class LinearPatternTool extends OpTool {
         ],
       },
       { type: 'count', key: 'count', label: 'Count', value: v.count ?? 3, min: 2, max: 500 },
-      { type: 'length', key: 'spacing', label: 'Spacing', value: v.spacing ?? this.app.settings.patternSpacing ?? 20 },
+      {
+        type: 'choice',
+        key: 'mode',
+        label: 'Distance is',
+        value: v.mode ?? 'spacing',
+        options: [
+          { value: 'spacing', label: 'Between copies' },
+          { value: 'total', label: 'Total' },
+        ],
+      },
+      { type: 'length', key: 'spacing', label: 'Distance', value: v.spacing ?? this.app.settings.patternSpacing ?? 20 },
+      ...this.moreFields(2, v),
+      ...this.moreFields(3, v),
       { type: 'toggle', key: 'union', label: 'Join copies into one body', value: v.union ?? false },
     ];
+  }
+
+  // A second and third direction (grid patterns).
+  moreFields(k, v) {
+    const on = (v[`dir${k}`] ?? 'none') !== 'none';
+    if (k === 3 && (v.dir2 ?? 'none') === 'none') return [];
+    const out = [
+      {
+        type: 'choice',
+        key: `dir${k}`,
+        label: k === 2 ? 'Second direction' : 'Third direction',
+        value: v[`dir${k}`] ?? 'none',
+        options: [
+          { value: 'none', label: 'None' },
+          { value: 'x', label: 'X' },
+          { value: 'y', label: 'Y' },
+          { value: 'z', label: 'Z' },
+        ],
+      },
+    ];
+    if (on) out.push({ type: 'count', key: `count${k}`, label: 'Count', value: v[`count${k}`] ?? 2, min: 2, max: 500 }, { type: 'length', key: `spacing${k}`, label: 'Distance', value: v[`spacing${k}`] ?? 20 });
+    return out;
+  }
+
+  onParam(k) {
+    if (k === 'dir2' || k === 'dir3') this.render();
   }
 
   direction() {
@@ -785,9 +823,18 @@ export class LinearPatternTool extends OpTool {
     return AXES[this.values.axis || 'x'].dir;
   }
 
+  // Distance between neighbouring copies.
+  step(total, count) {
+    return this.values.mode === 'total' ? total / Math.max(1, count - 1) : total;
+  }
+
   async compute() {
+    const v = this.values;
     const ids = this.items('bodies').map((it) => this.app.doc.body(it.bodyId).shapeId);
-    return this.app.kernel.call('pattern', { ids, kind: 'linear', count: this.values.count, spacing: this.values.spacing, direction: this.direction(), union: !!this.values.union });
+    const more = [2, 3]
+      .filter((k) => (v[`dir${k}`] ?? 'none') !== 'none' && (k === 2 || (v.dir2 ?? 'none') !== 'none'))
+      .map((k) => ({ direction: AXES[v[`dir${k}`]].dir, count: v[`count${k}`] ?? 2, spacing: this.step(v[`spacing${k}`] ?? 20, v[`count${k}`] ?? 2) }));
+    return this.app.kernel.call('pattern', { ids, kind: 'linear', count: v.count, spacing: this.step(v.spacing, v.count), direction: this.direction(), ...(more.length ? { more } : {}), union: !!v.union });
   }
 }
 
@@ -795,7 +842,7 @@ export class CircularPatternTool extends OpTool {
   inputs() {
     return [
       bodySlot(),
-      { key: 'edge', label: 'Axis', kinds: ['edge', 'curve'], multiple: false, optional: true, fromSelection: false, placeholder: 'Click an edge (optional)', accept: (it) => (this.app.axisOf(it, { circles: true }) ? it : null) },
+      { key: 'edge', label: 'Axis', kinds: ['edge', 'curve', 'axis'], multiple: false, optional: true, fromSelection: false, placeholder: 'Click an edge or axis (optional)', accept: (it) => (this.app.axisOf(it, { circles: true }) ? it : null) },
     ];
   }
 
@@ -815,6 +862,7 @@ export class CircularPatternTool extends OpTool {
       },
       { type: 'count', key: 'count', label: 'Count', value: v.count ?? 6, min: 2, max: 500 },
       { type: 'angle', key: 'angle', label: 'Total angle', value: v.angle ?? 360 },
+      { type: 'toggle', key: 'keepTurn', label: 'Keep the direction (copies are not turned)', value: v.keepTurn ?? false },
       { type: 'toggle', key: 'union', label: 'Join copies into one body', value: v.union ?? false },
     ];
   }
@@ -834,7 +882,7 @@ export class CircularPatternTool extends OpTool {
 
   async compute() {
     const ids = this.items('bodies').map((it) => this.app.doc.body(it.bodyId).shapeId);
-    return this.app.kernel.call('pattern', { ids, kind: 'circular', count: this.values.count, angle: this.values.angle, axis: this.axis(), union: !!this.values.union });
+    return this.app.kernel.call('pattern', { ids, kind: 'circular', count: this.values.count, angle: this.values.angle, axis: this.axis(), union: !!this.values.union, ...(this.values.keepTurn ? { keepTurn: true } : {}) });
   }
 }
 
@@ -847,8 +895,25 @@ export class ScaleTool extends OpTool {
 
   params() {
     const v = this.values || {};
+    const stretch = v.type === 'stretch';
     return [
-      { type: 'number', key: 'factor', label: 'Scale factor', value: v.factor ?? 2, min: 0.0001 },
+      {
+        type: 'choice',
+        key: 'type',
+        label: 'Type',
+        value: v.type ?? 'uniform',
+        options: [
+          { value: 'uniform', label: 'Uniform' },
+          { value: 'stretch', label: 'X, Y and Z', title: 'Stretch each direction on its own (meshes only)' },
+        ],
+      },
+      ...(stretch
+        ? [
+            { type: 'number', key: 'fx', label: 'Scale X', value: v.fx ?? 1, min: 0.0001 },
+            { type: 'number', key: 'fy', label: 'Scale Y', value: v.fy ?? 1, min: 0.0001 },
+            { type: 'number', key: 'fz', label: 'Scale Z', value: v.fz ?? 2, min: 0.0001 },
+          ]
+        : [{ type: 'number', key: 'factor', label: 'Scale factor', value: v.factor ?? 2, min: 0.0001 }]),
       {
         type: 'choice',
         key: 'about',
@@ -860,25 +925,38 @@ export class ScaleTool extends OpTool {
           { value: 'base', label: 'Base' },
         ],
       },
+      { type: 'toggle', key: 'copy', label: 'Make a copy', value: v.copy ?? false },
       { type: 'info', text: 'Tip: imported STL files in inches or meters can be fixed with 25.4 or 1000.' },
     ];
   }
 
+  get label() {
+    return this.values?.copy ? 'Copy' : this.def.label;
+  }
+
+  onParam(k) {
+    if (k === 'type') this.render();
+  }
+
   async compute() {
     const app = this.app;
-    const f = this.values.factor;
-    if (!(f > 0)) throw new Error('Scale factor must be greater than zero');
+    const v = this.values;
+    const stretch = v.type === 'stretch';
+    const f = v.factor;
+    const fs = [v.fx ?? 1, v.fy ?? 1, v.fz ?? 2];
+    if (stretch ? !fs.every((x) => x > 0) : !(f > 0)) throw new Error('Scale factor must be greater than zero');
     const out = [];
     for (const it of this.items('bodies')) {
       const body = app.doc.body(it.bodyId);
+      if (stretch && body.kind !== 'mesh') throw new Error('Stretching X, Y and Z separately works on meshes only. Use Uniform for solids.');
       const bb = app.bodyBox(body.id);
       let c = [0, 0, 0];
       if (this.values.about !== 'origin' && bb) {
         c = [(bb.min.x + bb.max.x) / 2, (bb.min.y + bb.max.y) / 2, (bb.min.z + bb.max.z) / 2];
         if (this.values.about === 'base') c[2] = bb.min.z;
       }
-      const scale = { factor: f, center: c };
-      out.push(await app.kernel.call('transform', { ids: [body.shapeId], matrix: scaleMatrix(scale), scale }));
+      const scale = stretch ? { factors: fs, center: c } : { factor: f, center: c };
+      out.push(await app.kernel.call('transform', { ids: [body.shapeId], matrix: scaleMatrix(scale), scale, copy: !!v.copy }));
     }
     return merge(out);
   }

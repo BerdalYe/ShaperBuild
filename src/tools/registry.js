@@ -1,12 +1,14 @@
 // Every tool, its icon, shortcut and where it sits in the tools menu.
 import { SelectTool } from './select.js';
 import { LineTool, RectTool, CircleTool, ArcTool, PolygonTool, SplineTool, EllipseTool, PointTool } from './sketch.js';
-import { TrimTool, OffsetTool, ProjectTool, toggleConstruction } from './sketchedit.js';
+import { TrimTool, OffsetTool, ProjectTool, SketchPatternTool, toggleConstruction } from './sketchedit.js';
 import { DimensionTool } from './dimension.js';
 import { TextTool } from './text.js';
 import { PlaneTool } from './plane.js';
+import { AxisTool } from './axis.js';
 import { ExtrudeTool, RevolveTool, SweepTool, EmbossTool, LoftTool, FilletTool, ChamferTool, ShellTool, DraftTool, UnionTool, SubtractTool, IntersectTool, SplitTool, MirrorTool, LinearPatternTool, CircularPatternTool, ScaleTool } from './model.js';
 import { TransformTool } from './transform.js';
+import { TranslateTool, RotateAxisTool, AlignTool } from './transform2.js';
 import { PrimitiveTool } from './primitive.js';
 import { MeasureTool, SectionTool } from './inspect.js';
 
@@ -28,8 +30,10 @@ export const TOOL_SECTIONS = [
       def('point', 'Point', 'point', PointTool, { keywords: 'reference', desc: 'Reference point for snapping.' }),
       def('trim', 'Trim', 'trim', TrimTool, { key: 'T', keywords: 'cut erase remove delete segment', desc: 'Remove pieces of curves between intersections.' }),
       def('offset', 'Offset', 'offset', OffsetTool, { keywords: 'parallel copy wall thickness', desc: 'Copy curves at a distance.' }),
+      def('sketchPattern', 'Sketch pattern', 'patternLinear', SketchPatternTool, { short: 'Pattern', keywords: 'repeat array copies grid row circle holes', desc: 'Repeat sketch curves in a row, a grid or around a point.' }),
       def('project', 'Project', 'project', ProjectTool, { keywords: 'edges copy include reference', desc: 'Copy body edges into a sketch.' }),
       def('plane', 'Plane', 'planeRef', PlaneTool, { keywords: 'reference construction work offset angle datum surface', desc: 'Add a flat surface to draw on — at a distance from, or at an angle to, the grid or a face.' }),
+      def('axis', 'Axis', 'axis', AxisTool, { keywords: 'reference construction line datum center rotation', desc: 'Add a reference axis — through two points, where two planes meet, through a round face or along an edge. Use it to revolve or turn things around.' }),
       def('dimension', 'Dimension', 'dimension', DimensionTool, { key: 'D', keywords: 'constraint size length angle parallel tangent', desc: 'Add sizes that drive the sketch. Select curves to add constraints like parallel or tangent.' }),
       { id: 'construction', label: 'Construction', short: 'Construct', keywords: 'reference helper line', icon: 'construction', action: (app) => toggleConstruction(app), desc: 'Turn selected curves into construction geometry (ignored for profiles).' },
     ],
@@ -58,6 +62,9 @@ export const TOOL_SECTIONS = [
     subtitle: 'Move, copy, resize',
     tools: [
       def('move', 'Move / Rotate', 'move', TransformTool, { key: 'M', short: 'Move', keywords: 'rotate translate position turn align', desc: 'Move and rotate bodies and sketches.' }),
+      def('translate', 'Translate', 'translate', TranslateTool, { keywords: 'move from to point vector snap', desc: 'Move bodies from one point to another.' }),
+      def('rotateAxis', 'Rotate around axis', 'rotate', RotateAxisTool, { short: 'Rotate', keywords: 'turn spin hinge angle axis edge', desc: 'Turn bodies around an edge, line, axis or round face.' }),
+      def('align', 'Align', 'align', AlignTool, { keywords: 'snap place mate touch face coaxial onto', desc: 'Put a face, edge or corner of a body onto another one.' }),
       def('scale', 'Scale', 'scale', ScaleTool, { keywords: 'resize size bigger smaller', desc: 'Resize bodies uniformly.' }),
       def('mirror', 'Mirror', 'mirror', MirrorTool, { keywords: 'flip symmetric reflect', desc: 'Mirror bodies across a plane.' }),
       def('patternLinear', 'Linear pattern', 'patternLinear', LinearPatternTool, { short: 'Linear Pattern', keywords: 'array copies repeat row grid', desc: 'Copies in a row.' }),

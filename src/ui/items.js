@@ -11,7 +11,7 @@ export class ItemsPanel {
   constructor(el, app) {
     this.el = el;
     this.app = app;
-    this.collapsed = { bodies: false, meshes: false, sketches: false, planes: false, images: false };
+    this.collapsed = { bodies: false, meshes: false, sketches: false, planes: false, axes: false, images: false };
     this.renaming = null;
     this.query = '';
     // 'items' (what is in the design) or 'history' (the steps that made it).
@@ -28,7 +28,7 @@ export class ItemsPanel {
     const doc = app.doc;
     const searching = this.el.contains(document.activeElement) && document.activeElement?.classList.contains('items-filter');
     clear(this.el);
-    const anyHidden = [...doc.bodies, ...doc.sketches, ...doc.planes, ...doc.images].some((x) => x.visible === false);
+    const anyHidden = [...doc.bodies, ...doc.sketches, ...doc.planes, ...doc.axes, ...doc.images].some((x) => x.visible === false);
     const showAll = h('button.ih-btn', { title: 'Show all items', html: icon('eye') });
     showAll.hidden = !anyHidden;
     showAll.addEventListener('click', () => app.cmd.showAll());
@@ -47,7 +47,7 @@ export class ItemsPanel {
     const newFolder = h('button.ih-btn', { title: 'New folder (puts the selected items in it)', html: icon('folder2') });
     newFolder.dataset.action = 'new-folder';
     newFolder.addEventListener('click', () => {
-      const picked = app.selection.list.filter((it) => ['body', 'sketch', 'plane', 'image'].includes(it.kind));
+      const picked = app.selection.list.filter((it) => ['body', 'sketch', 'plane', 'axis', 'image'].includes(it.kind));
       // Items that are all in one folder get their new folder inside it.
       const homes = new Set(app.cmd.folderTargets(picked).map(({ kind, id }) => this.itemOf(kind, id)?.folder || null));
       const parent = homes.size === 1 ? [...homes][0] : null;
@@ -75,8 +75,9 @@ export class ItemsPanel {
     const meshes = doc.bodies.filter((b) => b.kind === 'mesh' && loose(b));
     const sketches = doc.sketches.filter(loose);
     const planes = doc.planes.filter(loose);
+    const axes = doc.axes.filter(loose);
     const images = doc.images.filter(loose);
-    const total = doc.bodies.length + doc.sketches.length + doc.planes.length + doc.images.length;
+    const total = doc.bodies.length + doc.sketches.length + doc.planes.length + doc.axes.length + doc.images.length;
 
     if (total > 6 || q) {
       const inp = h('input.items-filter', { type: 'text', placeholder: 'Find items', value: this.query, spellcheck: false });
@@ -107,6 +108,7 @@ export class ItemsPanel {
     if (meshes.length) scroll.append(this.group('meshes', 'Meshes', meshes, 'body', () => meshes.filter(match).map((b) => this.bodyRow(b))));
     scroll.append(this.group('sketches', 'Sketches', sketches, 'sketch', () => sketches.filter(match).map((s) => this.sketchRow(s))));
     if (planes.length) scroll.append(this.group('planes', 'Planes', planes, 'plane', () => planes.filter(match).map((p) => this.refRow('plane', p))));
+    if (axes.length) scroll.append(this.group('axes', 'Axes', axes, 'axis', () => axes.filter(match).map((a) => this.refRow('axis', a))));
     if (images.length) scroll.append(this.group('images', 'Images', images, 'image', () => images.filter(match).map((p) => this.refRow('image', p))));
     if (!total) {
       scroll.append(
@@ -119,7 +121,7 @@ export class ItemsPanel {
     const nSolids = doc.bodies.filter((b) => b.kind !== 'mesh').length;
     const nMeshes = doc.bodies.length - nSolids;
     const foot = h('div.items-foot', {
-      str: total ? `${n(nSolids, 'body', 'bodies')} · ${nMeshes ? `${n(nMeshes, 'mesh', 'meshes')} · ` : ''}${n(doc.sketches.length, 'sketch', 'sketches')}${doc.planes.length ? ` · ${n(doc.planes.length, 'plane', 'planes')}` : ''}${doc.images.length ? ` · ${n(doc.images.length, 'image', 'images')}` : ''} — ${t('double-click a name to rename, drag items into folders')}` : t('Tip: right-click an item for more options'),
+      str: total ? `${n(nSolids, 'body', 'bodies')} · ${nMeshes ? `${n(nMeshes, 'mesh', 'meshes')} · ` : ''}${n(doc.sketches.length, 'sketch', 'sketches')}${doc.planes.length ? ` · ${n(doc.planes.length, 'plane', 'planes')}` : ''}${doc.axes.length ? ` · ${n(doc.axes.length, 'axis', 'axes')}` : ''}${doc.images.length ? ` · ${n(doc.images.length, 'image', 'images')}` : ''} — ${t('double-click a name to rename, drag items into folders')}` : t('Tip: right-click an item for more options'),
     });
     this.el.append(head, scroll, foot);
     scroll.querySelector('.item.selected')?.scrollIntoView({ block: 'nearest' });
@@ -164,7 +166,7 @@ export class ItemsPanel {
 
   itemOf(kind, id) {
     const doc = this.app.doc;
-    return kind === 'body' ? doc.body(id) : kind === 'sketch' ? doc.sketch(id) : kind === 'plane' ? doc.plane(id) : kind === 'image' ? doc.image(id) : doc.folder(id);
+    return kind === 'body' ? doc.body(id) : kind === 'sketch' ? doc.sketch(id) : kind === 'plane' ? doc.plane(id) : kind === 'axis' ? doc.axis(id) : kind === 'image' ? doc.image(id) : doc.folder(id);
   }
 
   // A folder with its items and the folders inside it. Returns null when a
@@ -179,6 +181,7 @@ export class ItemsPanel {
       ...doc.bodies.filter(inside).map((x) => ({ x, row: () => this.bodyRow(x) })),
       ...doc.sketches.filter(inside).map((x) => ({ x, row: () => this.sketchRow(x) })),
       ...doc.planes.filter(inside).map((x) => ({ x, row: () => this.refRow('plane', x) })),
+      ...doc.axes.filter(inside).map((x) => ({ x, row: () => this.refRow('axis', x) })),
       ...doc.images.filter(inside).map((x) => ({ x, row: () => this.refRow('image', x) })),
     ];
     const nameHit = !q || f.name.toLowerCase().includes(q);
@@ -429,10 +432,10 @@ export class ItemsPanel {
   // Row for a reference plane or image.
   refRow(kind, p) {
     const app = this.app;
-    const item = kind === 'plane' ? { kind, planeId: p.id } : { kind, imageId: p.id };
+    const item = kind === 'plane' ? { kind, planeId: p.id } : kind === 'axis' ? { kind, axisId: p.id } : { kind, imageId: p.id };
     const sel = app.selection.has(item);
     const row = h(`div.item${sel ? '.selected' : ''}${p.visible === false ? '.hidden-item' : ''}`);
-    const ic = h('span', { html: icon(kind === 'plane' ? 'planeRef' : 'image') });
+    const ic = h('span', { html: icon(kind === 'plane' ? 'planeRef' : kind === 'axis' ? 'axis' : 'image') });
     ic.querySelector('svg').style.cssText = 'width:16px;height:16px;opacity:.75';
     const eye = h(`button.item-btn${p.visible === false ? '.on' : ''}`, { title: p.visible === false ? 'Show' : 'Hide', html: icon(p.visible === false ? 'eyeOff' : 'eye') });
     eye.addEventListener('click', (e) => {
@@ -443,13 +446,13 @@ export class ItemsPanel {
     const menu = (e) =>
       showMenu(e.clientX, e.clientY, [
         { label: 'Rename', icon: 'sketch', action: () => ((this.renaming = p.id), this.render()) },
-        { label: 'Look at', icon: 'lookAt', action: () => app.vp.lookAtPlane(p.plane) },
-        { label: 'Move…', icon: 'move', action: () => (app.selection.set([item]), app.tools.activate('move', { force: true })) },
+        kind !== 'axis' && { label: 'Look at', icon: 'lookAt', action: () => app.vp.lookAtPlane(p.plane) },
+        kind !== 'axis' && { label: 'Move…', icon: 'move', action: () => (app.selection.set([item]), app.tools.activate('move', { force: true })) },
         { label: p.visible === false ? 'Show' : 'Hide', icon: p.visible === false ? 'eye' : 'eyeOff', action: () => app.cmd.setVisible(kind, p.id, p.visible === false) },
         { label: 'Move to folder…', icon: 'folder', action: () => this.moveMenu(e, item, p.folder) },
         '-',
         { label: 'Delete', icon: 'trash', danger: true, action: () => app.cmd.deleteItems([item]) },
-      ]);
+      ].filter(Boolean));
     more.addEventListener('click', (e) => {
       e.stopPropagation();
       menu(e);

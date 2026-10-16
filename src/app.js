@@ -33,7 +33,7 @@ import { buildKeymap, comboOf } from './core/keymap.js';
 import { UNITS, formatLength, formatArea, formatVolume, formatAngle, niceStep, setVariables } from './core/units.js';
 import { variableValues } from './core/variables.js';
 import { planeFrame, to3D, to2D, samePlane } from './core/plane.js';
-import { keyPoints, closestOnEntity, dist, intersect } from './core/geom2d.js';
+import { keyPoints, closestOnEntity, dist, intersect, sampleEntity } from './core/geom2d.js';
 
 const SETTINGS_KEY = 'shaperbuild.settings.v1';
 // What a click selects (status bar; Tab cycles in the Shapr3D-style keys).
@@ -205,6 +205,7 @@ export class App {
     for (const sk of doc.sketches) this.requestRegions(sk);
     this.vp.syncSketches(doc.sketches, (sk) => this.regionDataFor(sk));
     this.vp.syncPlanes(doc.planes);
+    this.vp.syncAxes(doc.axes);
     this.vp.syncImages(doc.images);
     this.selection.prune((it) => this.isValidItem(it));
     this.refreshHighlights();
@@ -303,6 +304,8 @@ export class App {
         return !!doc.sketch(it.sketchId)?.constraints?.some((c) => c.id === it.cid);
       case 'plane':
         return !!doc.plane(it.planeId);
+      case 'axis':
+        return !!doc.axis(it.axisId);
       case 'image':
         return !!doc.image(it.imageId);
       default:
@@ -336,6 +339,7 @@ export class App {
     const bodyH = new Map();
     const sketchH = new Map();
     const planeH = new Map();
+    const axisH = new Map();
     const imageH = new Map();
     const B = (id) => {
       if (!bodyH.has(id)) bodyH.set(id, { faces: new Map(), edges: new Map(), body: null });
@@ -374,6 +378,9 @@ export class App {
         case 'plane':
           planeH.set(it.planeId, color);
           break;
+        case 'axis':
+          axisH.set(it.axisId, color);
+          break;
         case 'image':
           imageH.set(it.imageId, color);
           break;
@@ -391,6 +398,7 @@ export class App {
       view.setHighlight(h);
     }
     for (const [id, view] of this.vp.planeViews) view.setHighlight(planeH.get(id) || null);
+    for (const [id, view] of this.vp.axisViews) view.setHighlight(axisH.get(id) || null);
     for (const [id, view] of this.vp.imageViews) view.setHighlight(imageH.get(id) || null);
     this.constraints?.update();
     this.vp.requestRender();
@@ -428,6 +436,10 @@ export class App {
     if (it.kind === 'plane' || it.kind === 'image') {
       const v = it.kind === 'plane' ? this.vp.planeViews.get(it.planeId) : this.vp.imageViews.get(it.imageId);
       return v ? new THREE.Box3().setFromObject(v.group) : null;
+    }
+    if (it.kind === 'axis') {
+      const v = this.vp.axisViews.get(it.axisId);
+      return v ? new THREE.Box3().setFromPoints(v.ends().map((p) => new THREE.Vector3(...p))) : null;
     }
     return null;
   }
@@ -512,6 +524,10 @@ export class App {
   // A straight axis from a sketch line or body edge. With circles: true,
   // circular edges give their centre axis.
   axisOf(it, { circles = false } = {}) {
+    if (it.kind === 'axis') {
+      const ax = this.doc.axis(it.axisId);
+      return ax ? { origin: ax.origin, dir: ax.dir } : null;
+    }
     if (it.kind === 'curve') {
       const sk = this.doc.sketch(it.sketchId);
       const en = sk?.entities.find((e) => e.id === it.entityId);
@@ -536,6 +552,50 @@ export class App {
         return { origin: e.a, dir: d.map((v) => v / l) };
       }
       if (circles && e.type === 'circle') return { origin: e.center, dir: e.axisDir };
+    }
+    return null;
+  }
+
+  // 3D point of a pick: a body corner, a sketch point, or where a face was hit.
+  pointOf(hit) {
+    if (!hit) return null;
+    if (hit.kind === 'vertex') {
+      const v = this.bodyMesh(hit.bodyId)?.vertices;
+      return v ? [v[hit.index * 3], v[hit.index * 3 + 1], v[hit.index * 3 + 2]] : null;
+    }
+    if (hit.kind === 'spoint') {
+      const sk = this.doc.sketch(hit.sketchId);
+      return sk ? to3D(planeFrame(sk.plane), hit.point) : null;
+    }
+    return hit.point ? [...hit.point] : null;
+  }
+
+  // Polyline (3D points) along a body edge or a sketch curve.
+  curvePoints(it) {
+    if (it.kind === 'curve') {
+      const sk = this.doc.sketch(it.sketchId);
+      const en = sk?.entities.find((e) => e.id === it.entityId);
+      if (!en) return null;
+      const f = planeFrame(sk.plane);
+      return sampleEntity(en, 128).map((p) => to3D(f, p));
+    }
+    if (it.kind === 'edge') {
+      const view = this.vp.bodyViews.get(it.bodyId);
+      const seg = view?.data?.edgeSegments;
+      if (!seg) return null;
+      const out = [];
+      for (const [start, count] of view.edgeSegRanges?.[it.index] || []) {
+        for (let s = start; s < start + count; s++) {
+          const a = [seg[s * 6], seg[s * 6 + 1], seg[s * 6 + 2]];
+          if (!out.length) out.push(a);
+          out.push([seg[s * 6 + 3], seg[s * 6 + 4], seg[s * 6 + 5]]);
+        }
+      }
+      return out.length > 1 ? out : null;
+    }
+    if (it.kind === 'axis') {
+      const v = this.vp.axisViews.get(it.axisId);
+      return v ? v.ends() : null;
     }
     return null;
   }

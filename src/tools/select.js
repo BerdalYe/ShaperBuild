@@ -179,7 +179,12 @@ export class SelectTool extends Tool {
     p = app.snapSketchPoint(g.sketch, p, e, { exclude: g.kind === 'point' ? g.from : null });
     const sk = g.sketch;
     if (g.kind === 'curve' && !g.start) return;
-    if (sk.constraints?.length) {
+    // Alt-drag a point where curves meet: pull just one curve's end away.
+    const single = g.kind === 'point' && e.alt ? refsAt(sk.entities, g.from)[0] : null;
+    if (single && !sk.constraints?.length) {
+      const res = solveSketch(sk.entities, [], { drags: [{ ref: single, to: p }], loose: [single] });
+      g.entities = res.entities;
+    } else if (sk.constraints?.length) {
       // Let the constraint solver decide how the rest of the sketch follows.
       let drags;
       if (g.kind === 'point') drags = refsAt(sk.entities, g.from).slice(0, 1).map((ref) => ({ ref, to: p }));
@@ -187,7 +192,7 @@ export class SelectTool extends Tool {
         const d = sub(p, g.start);
         drags = sk.entities.filter((en) => g.ids.has(en.id)).flatMap((en) => entityPoints(en).map((pt) => ({ ref: { e: en.id, p: pt.p }, to: add(pt.at, d) })));
       }
-      const res = solveSketch(sk.entities, sk.constraints, { drags });
+      const res = solveSketch(sk.entities, sk.constraints, { drags, loose: single ? [single] : [] });
       if (res.ok) g.entities = res.entities;
     } else if (g.kind === 'point') g.entities = moveSketchPoint(sk.entities, g.from, p);
     else {

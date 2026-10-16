@@ -79,7 +79,7 @@ export class ContextBar {
     }
     const counts = {};
     for (const it of list) counts[it.kind] = (counts[it.kind] || 0) + 1;
-    const NAMES = { constraint: ['constraint', 'constraints'], body: ['body', 'bodies'], face: ['face', 'faces'], edge: ['edge', 'edges'], region: ['region', 'regions'], curve: ['curve', 'curves'], spoint: ['point', 'points'], sketch: ['sketch', 'sketches'], vertex: ['vertex', 'vertices'], plane: ['plane', 'planes'], image: ['image', 'images'] };
+    const NAMES = { constraint: ['constraint', 'constraints'], body: ['body', 'bodies'], face: ['face', 'faces'], edge: ['edge', 'edges'], region: ['region', 'regions'], curve: ['curve', 'curves'], spoint: ['point', 'points'], sketch: ['sketch', 'sketches'], vertex: ['vertex', 'vertices'], plane: ['plane', 'planes'], axis: ['axis', 'axes'], image: ['image', 'images'] };
     const label = Object.entries(counts)
       .map(([k, n]) => tn(n, `1 ${(NAMES[k] || [k, k])[0]}`, `{n} ${(NAMES[k] || [k, k])[1]}`))
       .join(', ');
@@ -96,7 +96,7 @@ export class ContextBar {
         const menu = showMenu(
           r.left,
           r.top,
-          cons.map((o) => ({ label: `<span class="glyph">${o.glyph}</span>${t(o.label)}`, action: () => app.cmd.addConstraint(o.sketchId, o.constraint) })),
+          cons.map((o) => ({ label: `<span class="glyph">${o.glyph}</span>${t(o.label)}`, action: () => app.constraints.apply(o) })),
         );
         const mr = menu.getBoundingClientRect();
         menu.style.top = `${r.top - mr.height - 6}px`;

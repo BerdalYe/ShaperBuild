@@ -11,6 +11,8 @@ export function emptyState() {
     bodies: [],
     sketches: [],
     planes: [],
+    // Reference axes ({ id, name, origin, dir, length, visible, folder }).
+    axes: [],
     images: [],
     // Folders in the Items list ({ id, name, parent }); items point at
     // theirs with `folder`, folders inside folders with `parent`.
@@ -19,7 +21,7 @@ export function emptyState() {
     history: [],
     // Variables ({ id, name, kind: 'length' | 'angle' | 'number', expr }).
     variables: [],
-    seq: { body: 0, sketch: 0, entity: 0, constraint: 0, plane: 0, image: 0, feature: 0, folder: 0, variable: 0 },
+    seq: { body: 0, sketch: 0, entity: 0, constraint: 0, plane: 0, axis: 0, image: 0, feature: 0, folder: 0, variable: 0 },
     units: 'mm',
   };
 }
@@ -37,6 +39,7 @@ export class Draft {
     this.bodies = state.bodies.slice();
     this.sketches = state.sketches.slice();
     this.planes = (state.planes || []).slice();
+    this.axes = (state.axes || []).slice();
     this.images = (state.images || []).slice();
     this.folders = (state.folders || []).slice();
     this.history = (state.history || []).slice();
@@ -47,7 +50,7 @@ export class Draft {
 
   nextId(kind) {
     this.seq[kind] = (this.seq[kind] || 0) + 1;
-    const prefix = { body: 'b', sketch: 's', entity: 'e', constraint: 'k', plane: 'p', image: 'i', feature: 'f', folder: 'g', variable: 'v' }[kind] || kind;
+    const prefix = { body: 'b', sketch: 's', entity: 'e', constraint: 'k', plane: 'p', axis: 'x', image: 'i', feature: 'f', folder: 'g', variable: 'v' }[kind] || kind;
     return `${prefix}${this.seq[kind]}`;
   }
 
@@ -125,6 +128,29 @@ export class Draft {
     this.planes = this.planes.filter((p) => p.id !== id);
   }
 
+  axis(id) {
+    return this.axes.find((a) => a.id === id);
+  }
+
+  // Reference axis: { origin, dir, length }.
+  addAxis(props) {
+    const id = this.nextId('axis');
+    const ax = { name: t('Axis {n}', { n: this.seq.axis }), visible: true, length: 80, ...props, id };
+    this.axes.push(ax);
+    return ax;
+  }
+
+  updateAxis(id, patch) {
+    const i = this.axes.findIndex((a) => a.id === id);
+    if (i < 0) return null;
+    this.axes[i] = { ...this.axes[i], ...patch };
+    return this.axes[i];
+  }
+
+  removeAxis(id) {
+    this.axes = this.axes.filter((a) => a.id !== id);
+  }
+
   image(id) {
     return this.images.find((p) => p.id === id);
   }
@@ -176,6 +202,7 @@ export class Draft {
     out(this.bodies, (i, p) => this.updateBody(i, p));
     out(this.sketches, (i, p) => this.updateSketch(i, p));
     out(this.planes, (i, p) => this.updatePlane(i, p));
+    out(this.axes, (i, p) => this.updateAxis(i, p));
     out(this.images, (i, p) => this.updateImage(i, p));
   }
 
@@ -189,7 +216,7 @@ export class Draft {
   }
 
   toState() {
-    return { bodies: this.bodies, sketches: this.sketches, planes: this.planes, images: this.images, folders: this.folders, history: this.history, variables: this.variables, seq: this.seq, units: this.units };
+    return { bodies: this.bodies, sketches: this.sketches, planes: this.planes, axes: this.axes, images: this.images, folders: this.folders, history: this.history, variables: this.variables, seq: this.seq, units: this.units };
   }
 }
 
@@ -235,6 +262,14 @@ export class Document extends Emitter {
     return this.planes.find((p) => p.id === id);
   }
 
+  get axes() {
+    return this.state.axes || [];
+  }
+
+  axis(id) {
+    return this.axes.find((a) => a.id === id);
+  }
+
   get images() {
     return this.state.images || [];
   }
@@ -252,7 +287,7 @@ export class Document extends Emitter {
   }
 
   get isEmpty() {
-    return !this.state.bodies.length && !this.state.sketches.length && !(this.state.planes || []).length && !(this.state.images || []).length;
+    return !this.state.bodies.length && !this.state.sketches.length && !(this.state.planes || []).length && !(this.state.axes || []).length && !(this.state.images || []).length;
   }
 
   // Apply a change; returns whatever the callback returns.

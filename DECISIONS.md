@@ -94,3 +94,59 @@ works differently on purpose, the choice is written down here.
   elements"); the first 300 lines of the sketch plane are checked.
 - The status bar shows the grid size. Clicking it locks the grid at that
   size; clicking again lets it follow the zoom.
+
+## Sketching
+
+- Fully defined curves are drawn green: the constraints leave none of
+  their values free (including moving or turning the whole sketch, so lock
+  a point or dimension to it). Other curves keep the normal sketch colour
+  instead of turning blue, so sketches without constraints look as before.
+  Sketches with more than 800 values are not checked.
+- Rectangle has a third mode, **3 points**: one side, then the height. It
+  is held together by perpendicular and parallel constraints, not
+  horizontal and vertical ones, so it can stay turned.
+- Splines can be shaped by **control points** (cubic B-spline with uniform
+  knots; open ones start and end on their first and last points, closed
+  ones are periodic). The geometry engine builds the exact same curve.
+- **Symmetric**: two points and a line, or two lines (or two circles) and
+  the mirror line selected last. Two lines pair up their ends the way that
+  is closest already; two circles also get the same size.
+- **Unlock** removes a point's lock. **Disconnect** removes the
+  constraints that tie curves together at a point. Curves whose ends touch
+  still count as joined, so hold **Alt** and drag the point to pull one
+  curve's end away.
+- **Sketch pattern** copies curves in a row, a grid (a second direction at
+  right angles) or around a point (the sketch origin unless a point is
+  clicked). The copies are ordinary curves; there is no pattern constraint
+  keeping them related.
+
+## Construction planes and axes
+
+- Plane types: Offset (as before), Midplane (between two flat things;
+  halves the angle when they are not parallel), 3 points, Across a curve
+  (at a percentage of the curve's length), Through a line (at an angle) and
+  Parallel at a point. Planes are not history steps; they stay where they
+  were made.
+- Axes are a new item: through two points, where two planes meet, through
+  a round face (cylinders and cones; or a circular edge), along an edge or
+  line, or standing on a face. Revolve, Circular pattern, Linear pattern
+  (as a direction), Rotate around axis and the plane tool can use them.
+  They are not history steps either.
+
+## Transform
+
+- **Translate** moves bodies from one picked point to another. **Rotate
+  around axis** turns them about an edge, line, axis or round face (the
+  angle stays editable in History). **Align** puts a face, edge or corner of
+  a body onto another: flat faces end up touching and centred, round faces
+  and circular edges end up on the same axis (keeping their position along
+  it), straight edges end up along each other. Translate and Align become
+  ordinary Move steps (editable X/Y/Z and angles).
+- Linear patterns take up to three directions (a grid); the distance can
+  be the gap between copies or the total. Circular patterns can keep the
+  copies' direction instead of turning them.
+- Scale has an **X, Y and Z** type that stretches each direction on its
+  own. The geometry engine used here has no way to stretch solids unevenly
+  (no binding for it), so this works on meshes only; solids get a message.
+  Scale can also make a copy.
+- Copies made by transforms are independent bodies (no linked copies).

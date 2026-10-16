@@ -8,6 +8,7 @@ import { PickRegistry, Picker } from './pick.js';
 import { BodyView } from './bodyview.js';
 import { SketchView } from './sketchview.js';
 import { PlaneView } from './planeview.js';
+import { AxisView } from './axisview.js';
 import { ImageView } from './imageview.js';
 import { Overlay } from './overlay.js';
 import { ViewCube } from './viewcube.js';
@@ -15,8 +16,8 @@ import { THEMES } from './theme.js';
 import { Emitter } from '../core/events.js';
 import { to3D } from '../core/plane.js';
 
-const PRIORITY = { handle: 0, spoint: 1, vertex: 1, curve: 2, edge: 2, region: 3, face: 4, body: 4, plane: 5, image: 5 };
-const RADIUS = { handle: 10, spoint: 9, vertex: 9, curve: 7, edge: 7, region: 1.5, face: 1.5, body: 1.5, plane: 1.5, image: 1.5 };
+const PRIORITY = { handle: 0, spoint: 1, vertex: 1, curve: 2, edge: 2, axis: 2, region: 3, face: 4, body: 4, plane: 5, image: 5 };
+const RADIUS = { handle: 10, spoint: 9, vertex: 9, curve: 7, edge: 7, axis: 7, region: 1.5, face: 1.5, body: 1.5, plane: 1.5, image: 1.5 };
 
 export class Viewport extends Emitter {
   constructor(container, { theme = 'dark' } = {}) {
@@ -99,13 +100,15 @@ export class Viewport extends Emitter {
     this.bodyGroup = new THREE.Group();
     this.sketchGroup = new THREE.Group();
     this.planeGroup = new THREE.Group();
+    this.axisGroup = new THREE.Group();
     this.imageGroup = new THREE.Group();
-    this.scene.add(this.bodyGroup, this.sketchGroup, this.planeGroup, this.imageGroup);
+    this.scene.add(this.bodyGroup, this.sketchGroup, this.planeGroup, this.axisGroup, this.imageGroup);
     this.pickBodies = new THREE.Group();
     this.pickSketches = new THREE.Group();
     this.pickPlanes = new THREE.Group();
+    this.pickAxes = new THREE.Group();
     this.pickImages = new THREE.Group();
-    this.pickScene.add(this.pickBodies, this.pickSketches, this.pickPlanes, this.pickImages);
+    this.pickScene.add(this.pickBodies, this.pickSketches, this.pickPlanes, this.pickAxes, this.pickImages);
 
     this.overlay = new Overlay(this);
     this.scene.add(this.overlay.group);
@@ -114,6 +117,7 @@ export class Viewport extends Emitter {
     this.bodyViews = new Map();
     this.sketchViews = new Map();
     this.planeViews = new Map();
+    this.axisViews = new Map();
     this.imageViews = new Map();
 
     this.viewcube = new ViewCube(container, (p) => this.onCubePick(p));
@@ -294,6 +298,28 @@ export class Viewport extends Emitter {
     this.requestRender();
   }
 
+  syncAxes(axes) {
+    const seen = new Set();
+    for (const ax of axes) {
+      seen.add(ax.id);
+      let view = this.axisViews.get(ax.id);
+      if (!view) {
+        view = new AxisView(ax, this.ctx);
+        this.axisViews.set(ax.id, view);
+        this.axisGroup.add(view.group);
+        this.pickAxes.add(view.pickGroup);
+      } else if (view.ax !== ax) view.update(ax);
+      if (this.visualization) view.group.visible = false;
+    }
+    for (const [id, view] of this.axisViews) {
+      if (!seen.has(id)) {
+        view.dispose();
+        this.axisViews.delete(id);
+      }
+    }
+    this.requestRender();
+  }
+
   syncImages(images) {
     const seen = new Set();
     for (const im of images) {
@@ -403,6 +429,7 @@ export class Viewport extends Emitter {
     for (const v of this.bodyViews.values()) v.pickGroup.visible = v.group.visible;
     for (const v of this.sketchViews.values()) v.pickGroup.visible = v.group.visible;
     for (const v of this.planeViews.values()) v.pickGroup.visible = v.group.visible;
+    for (const v of this.axisViews.values()) v.pickGroup.visible = v.group.visible;
     for (const v of this.imageViews.values()) v.pickGroup.visible = v.group.visible;
     this.overlay.updateScreenSizes();
     const found = this.picker.read(this.pickScene, this.camera, x, y, this.width, this.height, this.ctx.pickLineMaterials);
@@ -706,6 +733,7 @@ export class Viewport extends Emitter {
     }
     for (const v of this.sketchViews.values()) v.group.visible = !on && v.sketch.visible !== false;
     for (const v of this.planeViews.values()) v.group.visible = !on && v.pl.visible !== false;
+    for (const v of this.axisViews.values()) v.group.visible = !on && v.ax.visible !== false;
     for (const v of this.imageViews.values()) v.group.visible = !on && v.im.visible !== false;
     this.requestRender();
   }

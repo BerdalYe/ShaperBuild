@@ -1,7 +1,7 @@
 // DXF: 2D drawings for laser cutters, CNC and other CAD apps. Sketch curves
 // are written in their plane's coordinates (millimetres); reading turns
 // lines, circles, arcs, polylines, ellipses and splines into sketch curves.
-import { sampleSpline, TAU } from './geom2d.js';
+import { sampleSpline, controlSplinePoints, TAU } from './geom2d.js';
 
 const n = (v) => String(+(+v).toFixed(6));
 
@@ -98,7 +98,7 @@ export function writeDXF(sketches, { construction = false } = {}) {
           break;
         }
         case 'spline': {
-          const pts = e.cache && e.cache.length ? e.cache : sampleSpline(e.pts, e.closed);
+          const pts = e.cache && e.cache.length ? e.cache : e.control ? controlSplinePoints(e.pts, e.closed) : sampleSpline(e.pts, e.closed);
           poly(layer, e.closed ? pts.slice(0, -1) : pts, !!e.closed);
           break;
         }
