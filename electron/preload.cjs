@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('native', {
   writeRecovery: (data, meta) => ipcRenderer.invoke('recovery:write', data, meta),
   readRecovery: () => ipcRenderer.invoke('recovery:read'),
   clearRecovery: () => ipcRenderer.invoke('recovery:clear'),
+  listSlicers: () => ipcRenderer.invoke('slicers:list'),
+  openForPrint: (opts) => ipcRenderer.invoke('print:open', opts),
   ready: () => ipcRenderer.send('app:ready'),
   setDirty: (dirty) => ipcRenderer.send('app:dirty', dirty),
   setTitle: (title) => ipcRenderer.send('app:title', title),

@@ -2363,3 +2363,253 @@ svg.icon {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* ---- 3D print dialog -------------------------------------------------- */
+.print-modal .modal-body {
+  padding-bottom: 12px;
+}
+
+.pd-section h4 {
+  margin: 0 0 6px;
+}
+
+.pd-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 160px;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel-2);
+}
+
+.pd-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.pd-body:hover {
+  background: var(--panel-3);
+}
+
+.pd-body.hidden-body .pd-name {
+  opacity: 0.6;
+}
+
+.pd-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex: none;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+}
+
+.pd-name {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pd-tag {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--panel-3);
+  color: var(--muted);
+}
+
+.pd-size {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pd-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 12px 0 6px;
+}
+
+.pd-summary:empty {
+  display: none;
+}
+
+.pd-summary > div {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--panel-2);
+}
+
+.pd-summary small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.pd-summary b {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pd-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 14px;
+}
+
+.pd-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-2);
+  background: var(--panel-2);
+}
+
+.pd-check svg.icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin-top: 1px;
+}
+
+.pd-check.ok svg.icon {
+  color: var(--ok);
+}
+
+.pd-check.warn {
+  background: rgba(255, 176, 46, 0.1);
+}
+
+.pd-check.warn svg.icon {
+  color: var(--warn);
+}
+
+.pd-check.bad {
+  background: rgba(255, 95, 95, 0.1);
+  color: var(--text);
+}
+
+.pd-check.bad svg.icon {
+  color: var(--danger);
+}
+
+.pd-check .spinner {
+  width: 14px;
+  height: 14px;
+}
+
+.pd-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pd-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pd-row > label {
+  width: 92px;
+  flex: none;
+  color: var(--text-2);
+}
+
+.pd-row select,
+.pd-row input[type='number'] {
+  height: 30px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  padding: 0 8px;
+}
+
+.pd-row select {
+  flex: 1;
+}
+
+.pd-custom:empty {
+  display: none;
+}
+
+.pd-custom {
+  padding-left: 102px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pd-custom input[type='number'] {
+  width: 74px;
+}
+
+.pd-seg button {
+  padding: 0 12px;
+}
+
+.pd-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.pd-hint {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.pd-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.pd-foot .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pd-foot .btn svg.icon {
+  width: 16px;
+  height: 16px;
+}
+
+.pd-spacer {
+  flex: 1;
+}
+
+.pd-slicer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pd-slicer select {
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  padding: 0 8px;
+  max-width: 190px;
+}

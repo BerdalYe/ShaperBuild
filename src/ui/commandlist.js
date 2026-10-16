@@ -12,6 +12,7 @@ export function appCommands(app) {
     { id: 'save', label: 'Save', icon: 'save', kbd: `${m}S`, keywords: 'file store keep', run: menu('save') },
     { id: 'save-as', label: 'Save as…', icon: 'save', kbd: `${m}Shift+S`, keywords: 'file copy', run: menu('save-as') },
     { id: 'import', label: 'Import STL, OBJ, 3MF or STEP…', icon: 'import', kbd: `${m}I`, keywords: 'file open mesh load add', run: menu('import') },
+    { id: 'print', label: '3D print — check and save STL / 3MF…', icon: 'printer', kbd: `${m}P`, keywords: '3d print printer printing slicer stl 3mf prusa bambu cura orca export', run: () => app.print.open() },
     { id: 'export-stl', label: 'Export STL…', icon: 'export', kbd: `${m}E`, keywords: '3d print printing slicer mesh file', run: menu('export-stl') },
     { id: 'export-3mf', label: 'Export 3MF…', icon: 'export', keywords: '3d print printing slicer file', run: menu('export-3mf') },
     { id: 'export-obj', label: 'Export OBJ…', icon: 'export', keywords: 'mesh file', run: menu('export-obj') },

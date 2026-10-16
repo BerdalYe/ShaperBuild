@@ -122,7 +122,7 @@ try {
   await expectStep('Everything you made');
   await shot(win, '65-tutorial-items');
   await win.locator('.tut-card .btn.primary').click();
-  await expectStep('Undo, save and export');
+  await expectStep('Ready to print');
   await win.locator('.tut-card .btn.primary').click();
   await expectStep('You’re ready!');
   await win.locator('.tut-card .btn.primary', { hasText: 'Finish' }).click();

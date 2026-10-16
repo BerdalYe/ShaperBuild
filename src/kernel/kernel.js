@@ -1436,6 +1436,24 @@ export class Kernel {
     return { parts: ids.map((id) => ({ id, ...this.tessellateForExport(id, tolerance) })) };
   }
 
+  // Meshes ready for 3D printing: welded into closed surfaces, facing
+  // outwards, with size, volume and a watertightness check for each body.
+  printMeshes({ ids, tolerance = 0.01 }) {
+    const parts = ids.map((id) => {
+      const e = this.get(id);
+      const t = this.tessellateForExport(id, tolerance);
+      let { positions, indices } = mergeVertices(t.positions, t.indices, 1e-5);
+      let stats = meshStats(positions, indices);
+      // A mesh turned inside out prints as nothing; flip it.
+      if (stats.signedVolume < 0) {
+        indices = flipWinding(indices);
+        stats = { ...stats, signedVolume: -stats.signedVolume };
+      }
+      return { id, kind: e.kind, positions, indices, stats };
+    });
+    return { parts };
+  }
+
   exportSTEP({ ids }) {
     const oc = this.oc;
     const solids = ids.filter((id) => this.get(id).kind === 'solid');
@@ -1811,6 +1829,57 @@ export function meshVolume(p, idx) {
     v += (p[a] * (p[b + 1] * p[c + 2] - p[b + 2] * p[c + 1]) - p[a + 1] * (p[b] * p[c + 2] - p[b + 2] * p[c]) + p[a + 2] * (p[b] * p[c + 1] - p[b + 1] * p[c])) / 6;
   }
   return Math.abs(v);
+}
+
+// Facts about a welded triangle mesh for 3D printing: bounding box, volume
+// and whether it is a closed surface (every edge shared by exactly two
+// triangles, consistently oriented).
+export function meshStats(p, idx) {
+  const nv = p.length / 3;
+  const nt = idx.length / 3;
+  const bbox = meshBBox(p);
+  let vol = 0;
+  for (let i = 0; i < idx.length; i += 3) {
+    const a = idx[i] * 3;
+    const b = idx[i + 1] * 3;
+    const c = idx[i + 2] * 3;
+    vol += (p[a] * (p[b + 1] * p[c + 2] - p[b + 2] * p[c + 1]) - p[a + 1] * (p[b] * p[c + 2] - p[b + 2] * p[c]) + p[a + 2] * (p[b] * p[c + 1] - p[b + 1] * p[c])) / 6;
+  }
+  // Edge keys as numbers (safe while nv² < 2^53).
+  const und = new Float64Array(nt * 3);
+  const dir = new Float64Array(nt * 3);
+  for (let t = 0; t < nt; t++) {
+    for (let k = 0; k < 3; k++) {
+      const a = idx[t * 3 + k];
+      const b = idx[t * 3 + ((k + 1) % 3)];
+      und[t * 3 + k] = a < b ? a * nv + b : b * nv + a;
+      dir[t * 3 + k] = a * nv + b;
+    }
+  }
+  und.sort();
+  dir.sort();
+  let openEdges = 0;
+  let nonManifoldEdges = 0;
+  for (let i = 0; i < und.length; ) {
+    let j = i + 1;
+    while (j < und.length && und[j] === und[i]) j++;
+    const n = j - i;
+    if (n === 1) openEdges++;
+    else if (n > 2) nonManifoldEdges++;
+    i = j;
+  }
+  let flippedEdges = 0;
+  for (let i = 1; i < dir.length; i++) if (dir[i] === dir[i - 1]) flippedEdges++;
+  return {
+    bbox,
+    volume: Math.abs(vol),
+    signedVolume: vol,
+    triangles: nt,
+    openEdges,
+    nonManifoldEdges,
+    flippedEdges,
+    watertight: nt > 0 && openEdges === 0 && nonManifoldEdges === 0 && flippedEdges === 0,
+  };
 }
 
 export function meshArea(p, idx) {

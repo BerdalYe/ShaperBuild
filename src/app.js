@@ -19,6 +19,7 @@ import { ConstraintLayer } from './ui/constraints.js';
 import { ViewControls, NavHelp } from './ui/viewcontrols.js';
 import { StarterCard, ToolHint } from './ui/starter.js';
 import { Tutorial } from './ui/tutorial.js';
+import { PrintDialog } from './ui/printdialog.js';
 import { toast, showMenu, hideTooltip } from './ui/overlays.js';
 import { icon } from './ui/icons.js';
 import { isTyping, modKey } from './ui/dom.js';
@@ -75,6 +76,7 @@ export class App {
     this.tools.on('change', () => this.constraints.update());
     this.navHelp = new NavHelp(this);
     this.tutorial = new Tutorial(this);
+    this.print = new PrintDialog(this);
     this.starter = new StarterCard(document.getElementById('starter'), this);
 
     this.doc.on('change', (ev) => this.onDocChange(ev));
@@ -798,6 +800,8 @@ export class App {
     $('btn-settings').innerHTML = icon('settings');
     $('btn-import').querySelector('.ic').innerHTML = icon('import');
     $('btn-export').querySelector('.ic').innerHTML = icon('export');
+    $('btn-print').querySelector('.ic').innerHTML = icon('printer');
+    $('btn-print').addEventListener('click', () => this.print.open());
     $('btn-home').addEventListener('click', () => this.home.show());
     $('btn-undo').addEventListener('click', () => this.cmd.undo());
     $('btn-redo').addEventListener('click', () => this.cmd.redo());
@@ -941,6 +945,7 @@ export class App {
           ',': 'settings',
           '/': 'shortcuts',
           k: 'find-tool',
+          p: 'print',
         };
         const textEdit = typing && (k === 'z' || k === 'y');
         if (map[k] && !textEdit) {
@@ -1112,6 +1117,8 @@ export class App {
         return this.files.save().then((ok) => ok && window.native?.closeConfirmed());
       case 'import':
         return this.files.importDialog();
+      case 'print':
+        return this.print.open();
       case 'export-stl':
         return this.files.exportDialog('stl');
       case 'export-3mf':

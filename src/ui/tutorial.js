@@ -186,9 +186,9 @@ export class Tutorial {
         },
       },
       {
-        title: 'Undo, save and export',
-        text: `Made a mistake? <b>Undo</b> with <kbd>${modKey()}Z</kbd>. Save your design with <kbd>${modKey()}S</kbd>.<br><br>Ready to 3D print? <b>Export</b> → <b>STL</b> or <b>3MF</b>. Import STL files with <b>Import</b>.`,
-        target: () => document.getElementById('btn-export'),
+        title: 'Ready to print',
+        text: `Click <b>3D Print</b> to check your part (closed shape, fits your printer) and save an STL or 3MF file — or open it straight in your slicer.<br><br>Made a mistake? <b>Undo</b> with <kbd>${modKey()}Z</kbd>. Save your design with <kbd>${modKey()}S</kbd>.`,
+        target: () => document.getElementById('btn-print'),
         place: 'bottom',
       },
       {

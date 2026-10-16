@@ -97,7 +97,8 @@ export function showMenu(x, y, items) {
 }
 
 // ---- modals ------------------------------------------------------------------
-export function modal({ title, body, buttons = [{ label: 'Close', primary: true }], width, onClose }) {
+// bind(close) receives a function that closes the dialog with a value.
+export function modal({ title, body, buttons = [{ label: 'Close', primary: true }], width, onClose, bind, className }) {
   return new Promise((resolve) => {
     const root = document.getElementById('modal-root');
     const foot = h('div.modal-foot');
@@ -113,7 +114,10 @@ export function modal({ title, body, buttons = [{ label: 'Close', primary: true 
       foot.append(btn);
     }
     const m = h('div.modal', h('div.modal-head', { text: title }), h('div.modal-body', body), foot);
+    if (className) m.classList.add(className);
+    if (!buttons.length) foot.hidden = true;
     if (width) m.style.width = `min(${width}px, calc(100vw - 40px))`;
+    bind?.(close);
     const backdrop = h('div.modal-backdrop', m);
     backdrop.addEventListener('pointerdown', (e) => {
       if (e.target === backdrop) close(null);

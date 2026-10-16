@@ -56,6 +56,7 @@ function buildMenu({ send, recent = [], isDev = false }) {
         cmd('Save As…', 'save-as', 'CmdOrCtrl+Shift+S'),
         { type: 'separator' },
         cmd('Import…', 'import', 'CmdOrCtrl+I'),
+        cmd('3D Print…', 'print', 'CmdOrCtrl+P'),
         {
           label: 'Export',
           submenu: [

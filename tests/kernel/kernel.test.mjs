@@ -3,7 +3,7 @@ import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import OC from '../../node_modules/replicad-opencascadejs/dist/replicad_single.js';
 import ManifoldModule from '../../src/vendor/manifold/manifold.js';
-import { Kernel, rotationMatrix, translationMatrix } from '../../src/kernel/kernel.js';
+import { Kernel, rotationMatrix, translationMatrix, meshStats, flipWinding } from '../../src/kernel/kernel.js';
 import { parseSTL, writeSTL } from '../../src/core/formats.js';
 
 let k;
@@ -231,6 +231,38 @@ test('STL import, mesh booleans and conversion to a solid', () => {
   const e = sm.edgeInfo.findIndex((x) => x.type === 'line');
   const fil = k.fillet({ id: solid.bodies[0].id, edges: [e], radius: 1 });
   assert.ok(volume(fil.bodies[0].id) < 1000);
+});
+
+test('print meshes are welded, closed and report size and volume', () => {
+  const box = makeBox(10, 20, 30);
+  const cyl = k.primitive({ type: 'cylinder', params: { radius: 5, height: 10 } }).bodies[0].id;
+  const { parts } = k.printMeshes({ ids: [box, cyl] });
+  const [b, c] = parts.map((p) => p.stats);
+  assert.equal(b.watertight, true);
+  assert.equal(c.watertight, true);
+  near(b.volume, 6000, 0.01);
+  near(c.volume, Math.PI * 250, 3);
+  near(b.bbox.max[0] - b.bbox.min[0], 10);
+  near(b.bbox.max[2] - b.bbox.min[2], 30);
+  assert.ok(b.signedVolume > 0, 'normals face outwards');
+});
+
+test('mesh stats find holes and flip inside-out meshes', () => {
+  const box = makeBox(10, 10, 10);
+  const { positions, indices } = k.printMeshes({ ids: [box] }).parts[0];
+  // Remove one triangle: three open edges.
+  const holed = meshStats(positions, indices.slice(3));
+  assert.equal(holed.watertight, false);
+  assert.equal(holed.openEdges, 3);
+  // An inside-out mesh is flipped when prepared for printing.
+  const inside = k.importMesh({ positions, indices: flipWinding(indices) }).bodies[0].id;
+  const part = k.printMeshes({ ids: [inside] }).parts[0];
+  assert.ok(part.stats.signedVolume > 0);
+  assert.equal(part.stats.watertight, true);
+  // One flipped triangle breaks consistent orientation.
+  const mixed = Uint32Array.from(indices);
+  [mixed[1], mixed[2]] = [mixed[2], mixed[1]];
+  assert.ok(meshStats(positions, mixed).flippedEdges > 0);
 });
 
 test('ASCII STL parsing', () => {

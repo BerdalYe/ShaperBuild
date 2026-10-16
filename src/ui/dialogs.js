@@ -12,6 +12,8 @@ export class Dialogs {
     const f = this.app.files;
     const r = e.currentTarget.getBoundingClientRect();
     showMenu(r.left, r.bottom + 6, [
+      { label: '3D print (check and save)…', icon: 'printer', kbd: `${modKey()}P`, action: () => this.app.print.open() },
+      '-',
       { label: 'STL — 3D printing', icon: 'export', kbd: `${modKey()}E`, action: () => f.exportDialog('stl') },
       { label: '3MF — 3D printing', icon: 'export', action: () => f.exportDialog('3mf') },
       { label: 'OBJ — mesh', icon: 'export', action: () => f.exportDialog('obj') },

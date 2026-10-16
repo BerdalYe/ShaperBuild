@@ -5,6 +5,7 @@ const { app, BrowserWindow, Menu, dialog, ipcMain, protocol, shell, nativeTheme,
 const path = require('node:path');
 const fs = require('node:fs');
 const { buildMenu } = require('./menu.cjs');
+const { listSlicers, openInSlicer } = require('./slicers.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const SCHEME = 'app';
@@ -287,6 +288,20 @@ ipcMain.handle('fs:read', async (_e, file) => {
 ipcMain.handle('fs:write', async (_e, file, data) => {
   await fs.promises.writeFile(file, Buffer.from(data));
   return true;
+});
+
+// 3D printing: write the file to a temporary folder and open it in a slicer
+// (or whatever app the system uses for that file type).
+ipcMain.handle('slicers:list', () => listSlicers());
+ipcMain.handle('print:open', async (_e, { name, ext, data, slicer } = {}) => {
+  const dir = path.join(app.getPath('temp'), 'ShaperBuild');
+  await fs.promises.mkdir(dir, { recursive: true });
+  const safe = String(name || 'Print').replace(/[\\/:*?"<>|\x00-\x1f]+/g, '_').slice(0, 80) || 'Print';
+  const file = path.join(dir, `${safe}.${ext === 'stl' ? 'stl' : '3mf'}`);
+  await fs.promises.writeFile(file, Buffer.from(data));
+  if (slicer && slicer !== 'default' && openInSlicer(slicer, file)) return { ok: true, file };
+  const error = await shell.openPath(file);
+  return { ok: !error, file, error: error || null };
 });
 
 ipcMain.handle('recent:get', () => readRecent());
