@@ -2674,3 +2674,90 @@ svg.icon {
 .tp-field-text {
   align-items: flex-start;
 }
+
+/* ---- 2D drawing dialog ---------------------------------------------- */
+.dd-main {
+  display: flex;
+  gap: 16px;
+}
+
+.dd-preview {
+  flex: 1;
+  min-width: 0;
+  min-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e9ebef;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.dd-preview svg {
+  width: 100%;
+  height: auto;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+}
+
+.dd-msg {
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dd-side {
+  width: 220px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dd-label {
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.dd-title {
+  height: 30px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  padding: 0 8px;
+  outline: none;
+  user-select: text;
+}
+
+.dd-title:focus {
+  border-color: var(--accent);
+}
+
+.dd-side .seg {
+  flex-wrap: wrap;
+}
+
+.dd-side .seg button {
+  flex: 1;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+.dd-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.dd-info {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}

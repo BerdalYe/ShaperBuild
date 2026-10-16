@@ -57,6 +57,7 @@ function buildMenu({ send, recent = [], isDev = false }) {
         { type: 'separator' },
         cmd('Import…', 'import', 'CmdOrCtrl+I'),
         cmd('3D Print…', 'print', 'CmdOrCtrl+P'),
+        cmd('2D Drawing (PDF)…', 'drawing'),
         {
           label: 'Export',
           submenu: [

@@ -260,6 +260,8 @@ const FILTERS = {
     { name: 'DXF drawing (becomes a sketch)', extensions: ['dxf'] },
   ],
   dxf: [{ name: 'DXF drawing', extensions: ['dxf'] }],
+  pdf: [{ name: 'PDF document', extensions: ['pdf'] }],
+  svg: [{ name: 'SVG image', extensions: ['svg'] }],
   stl: [{ name: 'STL', extensions: ['stl'] }],
   font: [{ name: 'Fonts', extensions: ['ttf', 'otf', 'woff'] }],
   obj: [{ name: 'OBJ', extensions: ['obj'] }],
@@ -311,6 +313,22 @@ ipcMain.handle('print:open', async (_e, { name, ext, data, slicer } = {}) => {
   if (slicer && slicer !== 'default' && openInSlicer(slicer, file)) return { ok: true, file };
   const error = await shell.openPath(file);
   return { ok: !error, file, error: error || null };
+});
+
+// 2D drawings: print an SVG sheet to PDF in a hidden window (no scripts).
+ipcMain.handle('drawing:pdf', async (_e, { svg, width, height } = {}) => {
+  if (typeof svg !== 'string' || !svg.startsWith('<svg')) throw new Error('not a drawing');
+  const w = Number(width) || 297;
+  const h = Number(height) || 210;
+  const page = new BrowserWindow({ show: false, webPreferences: { sandbox: true, javascript: false } });
+  try {
+    const html = `<!doctype html><html><head><meta charset="utf-8"><style>@page{size:${w}mm ${h}mm;margin:0}html,body{margin:0;padding:0}svg{display:block;width:${w}mm;height:${h}mm}</style></head><body>${svg}</body></html>`;
+    await page.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    const pdf = await page.webContents.printToPDF({ preferCSSPageSize: true, printBackground: true, margins: { marginType: 'none' } });
+    return new Uint8Array(pdf.buffer, pdf.byteOffset, pdf.byteLength);
+  } finally {
+    page.destroy();
+  }
 });
 
 ipcMain.handle('recent:get', () => readRecent());

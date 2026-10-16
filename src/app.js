@@ -21,6 +21,7 @@ import { StarterCard, ToolHint } from './ui/starter.js';
 import { Tutorial } from './ui/tutorial.js';
 import { PrintDialog } from './ui/printdialog.js';
 import { Updates } from './ui/updates.js';
+import { DrawingDialog } from './ui/drawingdialog.js';
 import { toast, showMenu, hideTooltip } from './ui/overlays.js';
 import { icon } from './ui/icons.js';
 import { isTyping, modKey } from './ui/dom.js';
@@ -80,6 +81,7 @@ export class App {
     this.tutorial = new Tutorial(this);
     this.print = new PrintDialog(this);
     this.updates = new Updates(this);
+    this.drawing = new DrawingDialog(this);
     this.starter = new StarterCard(document.getElementById('starter'), this);
 
     this.doc.on('change', (ev) => this.onDocChange(ev));
@@ -1151,6 +1153,8 @@ export class App {
         return this.files.exportDialog('step');
       case 'export-dxf':
         return this.files.exportDXF();
+      case 'drawing':
+        return this.drawing.open();
       case 'export-png':
         return this.files.exportPNG();
       case 'close-design':

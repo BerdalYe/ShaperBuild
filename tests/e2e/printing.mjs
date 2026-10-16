@@ -123,6 +123,41 @@ try {
   assert.ok(checks.some((t) => /closed, solid/i.test(t)), checks.join('\n'));
   await win.keyboard.press('Escape');
 
+  step('2D drawing: preview, then save PDF, SVG and DXF');
+  await A(async () => {
+    const a = window.__shaper;
+    await a.files.reset('Bracket');
+    const box = await a.kernel.call('primitive', { type: 'box', params: { width: 60, depth: 40, height: 25 } });
+    const [boxId] = a.cmd.applyResult('Box', box);
+    const cyl = await a.kernel.call('primitive', { type: 'cylinder', params: { radius: 6, height: 60 } });
+    const [cylId] = a.cmd.applyResult('Cylinder', cyl);
+    const b = a.doc.body(boxId);
+    const c = a.doc.body(cylId);
+    const cut = await a.kernel.call('boolean', { op: 'subtract', targets: [b.shapeId], tools: [c.shapeId] });
+    a.cmd.applyResult('Subtract', cut);
+  });
+  await win.waitForFunction(() => window.__shaper.doc.bodies.length === 1);
+  await A(() => {
+    window.__shaper.onMenu('drawing');
+  });
+  await win.waitForSelector('.dd-preview svg', { timeout: 30000 });
+  const svgText = await win.locator('.dd-preview').innerHTML();
+  for (const t of ['>60<', '>25<', '>40<', 'class="hid"']) assert.ok(svgText.includes(t), `drawing shows ${t}`);
+  await shot(win, '73-drawing');
+  for (const fmt of ['pdf', 'svg', 'dxf']) {
+    const f = path.join(dir, `bracket.${fmt}`);
+    await nextSave(f);
+    await win.locator('.pd-foot .btn', { hasText: `Save ${fmt.toUpperCase()}` }).click();
+    await win.waitForFunction(() => window.__shaper.drawing.lastSaved, null, { timeout: 30000 });
+    await win.waitForTimeout(200);
+    await A(() => (window.__shaper.drawing.lastSaved = null));
+    const head = fs.readFileSync(f).subarray(0, 8).toString('latin1');
+    if (fmt === 'pdf') assert.ok(head.startsWith('%PDF'), `pdf header ${head}`);
+    if (fmt === 'svg') assert.ok(head.startsWith('<svg'));
+    if (fmt === 'dxf') assert.ok(fs.readFileSync(f, 'utf8').includes('VISIBLE'));
+  }
+  await win.keyboard.press('Escape');
+
   assert.deepEqual(errors, [], `renderer errors:\n${errors.join('\n')}`);
   console.log('\nprinting: all steps passed');
 } catch (err) {

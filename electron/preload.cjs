@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('native', {
   readRecovery: () => ipcRenderer.invoke('recovery:read'),
   clearRecovery: () => ipcRenderer.invoke('recovery:clear'),
   listSlicers: () => ipcRenderer.invoke('slicers:list'),
+  drawingPDF: (opts) => ipcRenderer.invoke('drawing:pdf', opts),
   updateState: () => ipcRenderer.invoke('update:state'),
   updateCheck: () => ipcRenderer.invoke('update:check'),
   updateInstall: () => ipcRenderer.invoke('update:install'),

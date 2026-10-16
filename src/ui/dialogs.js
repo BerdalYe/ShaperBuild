@@ -20,6 +20,7 @@ export class Dialogs {
       { label: 'STEP — CAD exchange', icon: 'export', action: () => f.exportDialog('step') },
       { label: 'DXF — sketches for laser cutting', icon: 'export', action: () => f.exportDXF() },
       '-',
+      { label: '2D drawing (PDF, SVG, DXF)…', icon: 'file', action: () => this.app.drawing.open() },
       { label: 'Image (PNG)', icon: 'sparkle', action: () => f.exportPNG() },
       '-',
       { label: 'Save design', icon: 'file', kbd: `${modKey()}S`, action: () => f.save() },

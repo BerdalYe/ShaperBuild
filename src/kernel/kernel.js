@@ -1454,6 +1454,72 @@ export class Kernel {
     return { parts };
   }
 
+  // Flat views for 2D drawings: hidden-line removal per view. Each view is
+  // { name, normal (towards the viewer), xDir }; results are polylines in
+  // the view's 2D coordinates (x right, y up), split into visible and
+  // hidden lines. Mesh bodies are skipped (they have no exact edges).
+  drawingViews({ ids, views }) {
+    const oc = this.oc;
+    const solids = ids.filter((id) => this.get(id).kind === 'solid').map((id) => this.get(id).shape);
+    if (!solids.length) throw new Error('2D drawings need solid bodies. Convert meshes with Mesh → Solid first.');
+    const shape = solids.length === 1 ? solids[0] : this.compound(solids);
+    const out = [];
+    try {
+      for (const v of views) {
+        out.push(
+          this.guard('2D drawing', () => {
+            const r = this.scope();
+            try {
+              const ax = r(new oc.gp_Ax2(this.pnt(r, [0, 0, 0]), this.dir(r, v.normal), this.dir(r, v.xDir)));
+              const algo = r(new oc.HLRBRep_Algo());
+              algo.Add(shape, 0);
+              algo.Projector(r(new oc.HLRAlgo_Projector(ax)));
+              algo.Update();
+              algo.Hide();
+              const hlr = r(new oc.HLRBRep_HLRToShape(algo));
+              const lines = (shapes) => {
+                const polys = [];
+                for (const sh of shapes) {
+                  if (!sh || sh.IsNull()) continue;
+                  for (const e of this.explore(sh, this.T.TopAbs_EDGE)) {
+                    const pl = this.edgePolyline(oc.TopoDS.Edge(e), r);
+                    if (pl.length >= 2) polys.push(pl);
+                    e.delete();
+                  }
+                }
+                return polys;
+              };
+              const visible = lines([r(hlr.VCompound()), r(hlr.OutLineVCompound())]);
+              const hidden = lines([r(hlr.HCompound()), r(hlr.OutLineHCompound())]);
+              return { name: v.name, visible, hidden };
+            } finally {
+              r.free();
+            }
+          }),
+        );
+      }
+    } finally {
+      if (solids.length > 1) shape.delete();
+    }
+    return { views: out };
+  }
+
+  // Points along an edge (x, y of a projected edge; z is ignored).
+  edgePolyline(edge, r) {
+    const oc = this.oc;
+    const ad = r(new oc.BRepAdaptor_Curve(edge));
+    const u0 = ad.FirstParameter();
+    const u1 = ad.LastParameter();
+    const straight = ad.GetType() === oc.GeomAbs_CurveType.GeomAbs_Line;
+    const n = straight ? 1 : 48;
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+      const P = r(ad.Value(u0 + ((u1 - u0) * i) / n));
+      pts.push([P.X(), P.Y()]);
+    }
+    return pts;
+  }
+
   exportSTEP({ ids }) {
     const oc = this.oc;
     const solids = ids.filter((id) => this.get(id).kind === 'solid');
