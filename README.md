@@ -36,7 +36,7 @@ Finding your way around:
 
 - **Tools** are on the right, with names, grouped into Sketch, Model, Transform, Shapes and Inspect. Hover one to see what it does.
 - **Search tools** (Ctrl+K / ⌘K) finds any tool or command by name or purpose — try "hole", "round" or "print".
-- **Items** on the left lists everything in your design: bodies, meshes, sketches, planes and images. Hide, rename, recolour or delete them there, and sort them into **folders** (the folder button at the top, or drag items onto a folder).
+- **Items** on the left lists everything in your design: bodies, meshes, sketches, planes and images. Hide, rename, recolour or delete them there, and sort them into **folders** — folders can hold other folders (the folder button at the top, or drag items and folders onto a folder).
 - **History** (the tab next to Items, or Shift+H) lists every step that made your design, in order. Click a step to change it.
 - The **bar at the bottom** suggests tools for whatever you selected. While a tool is active, a hint there tells you what to do next.
 - The **buttons under the view cube** fit the view, jump to standard views, zoom, and switch on **Orbit** or **Pan** mode for dragging with the left button. The **mouse** button explains every way to move around.
@@ -53,7 +53,7 @@ Finding your way around:
 
 **Model** – Extrude (also push/pull of faces: grow a body or cut into it), Revolve, Sweep (with **twist** and a different **size at the end**, for twisted vases, screws and tapers), Loft, Fillet, Chamfer, Shell, Draft, Split, Union, Subtract and Intersect. Every tool shows a live preview before you apply it. Select a region or face and drag its blue arrow to extrude directly.
 
-**Wrap & Emboss** – Put text or a logo on a part: pick the sketch shapes and a flat or round face, and raise or engrave them. On a round face (a cup, a can, a handle) the shapes are rolled around it without stretching.
+**Wrap & Emboss** – Put text or a logo on a part: pick the sketch shapes and a face, and raise or engrave them. It works on flat faces, round ones (a cup, a can, a handle — outside or inside), balls, cones, rings and free-form surfaces. On round faces the shapes are rolled on without stretching; on balls and other curved faces they keep their size where the sketch faces the surface and bend with it further out.
 
 **Editable history** – Every step is remembered: extrude, fillet, shell, sweep, emboss, move, scale, mirror, split, draft, pattern, shapes and more. Open **History**, click a step and type a new value (say, make the first extrude taller, move a part further, or shift a cut): every later step is redone on top of it, so fillets, holes and push/pulls follow. Changing a sketch (a dimension, a curve, even trimming or redrawing a line) updates the bodies made from it, and sketches drawn on a face move with that face. Mirror, Split and Draft planes taken from a face follow that face. Steps can be turned off or deleted; if a later step no longer fits (a fillet that has become too big), it is marked in red and skipped until you fix it.
 
@@ -92,7 +92,7 @@ Press **?** or use *Help → Keyboard Shortcuts* in the app to see everything. L
 
 ## How it compares to Shapr3D
 
-It follows Shapr3D's workflow and layout closely, but it is not a copy of Shapr3D and does not have everything yet. Not included so far: wrapping onto curved surfaces other than cylinders (spheres, free-form), folders inside folders, IGES files, AI rendering, the iPad / Vision Pro / AR apps, cloud sync and team sharing, and the video learning center.
+It follows Shapr3D's workflow and layout closely, but it is not a copy of Shapr3D and does not have everything yet. Not included so far: IGES files, AI rendering, the iPad / Vision Pro / AR apps, cloud sync and team sharing, and the video learning center.
 
 ## Updates
 

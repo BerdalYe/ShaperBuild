@@ -336,12 +336,9 @@ export class EmbossTool extends OpTool {
         kinds: ['face'],
         multiple: false,
         fromSelection: false,
-        placeholder: 'Click a flat or round face',
-        reject: 'Pick a flat or round (cylindrical) face of a solid body',
-        accept: (it) => {
-          const t = this.app.faceInfo(it.bodyId, it.index)?.type;
-          return t === 'plane' || t === 'cylinder' ? it : null;
-        },
+        placeholder: 'Click the face to put them on',
+        reject: 'Pick a face of a solid body',
+        accept: (it) => (this.app.faceInfo(it.bodyId, it.index) ? it : null),
       },
     ];
   }
@@ -364,7 +361,7 @@ export class EmbossTool extends OpTool {
   }
 
   hint() {
-    return 'Pick sketch shapes (text works well), then a flat or round face. Draw on a plane facing the face: on round faces the shapes are rolled on without stretching. A negative height engraves.';
+    return 'Pick sketch shapes (text works well), then a face: flat, round, a ball, a cone or a free-form surface. Draw on a plane facing the face: the shapes are wrapped on keeping their size where the plane touches it. A negative height engraves.';
   }
 
   async compute() {

@@ -45,7 +45,7 @@ export const TOOL_SECTIONS = [
       def('fillet', 'Fillet', 'fillet', FilletTool, { key: 'F', keywords: 'round radius smooth edge', desc: 'Round edges.' }),
       def('chamfer', 'Chamfer', 'chamfer', ChamferTool, { keywords: 'bevel edge', desc: 'Bevel edges.' }),
       def('shell', 'Shell', 'shell', ShellTool, { key: 'H', keywords: 'hollow wall thickness', desc: 'Hollow out a body, leaving walls.' }),
-      def('emboss', 'Wrap & Emboss', 'emboss', EmbossTool, { short: 'Emboss', keywords: 'wrap emboss engrave deboss stamp label logo text curved round cylinder surface raise', desc: 'Wrap sketch shapes or text onto a flat or round face, then raise or engrave them.' }),
+      def('emboss', 'Wrap & Emboss', 'emboss', EmbossTool, { short: 'Emboss', keywords: 'wrap emboss engrave deboss stamp label logo text curved round cylinder sphere ball cone freeform surface raise', desc: 'Wrap sketch shapes or text onto any face — flat, round, a ball or free-form — then raise or engrave them.' }),
       def('draft', 'Draft', 'draft', DraftTool, { keywords: 'taper angle mould mold', desc: 'Tilt side faces by an angle (for moulds and easy printing).' }),
       def('split', 'Split', 'split', SplitTool, { keywords: 'cut divide slice', desc: 'Cut a body in two with a plane or face.' }),
       def('union', 'Union', 'union', UnionTool, { key: 'U', keywords: 'join combine merge add boolean', desc: 'Join bodies into one.' }),

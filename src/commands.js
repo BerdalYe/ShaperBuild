@@ -258,56 +258,103 @@ export class Commands {
 
   // ---- folders ---------------------------------------------------------------
 
-  // Selection entries that can go in a folder, as { kind, id }.
+  // Selection entries that can go in a folder (folders too), as { kind, id }.
   folderTargets(items) {
     const out = new Map();
     for (const it of items) {
       const pair =
-        it.kind === 'body' || it.kind === 'face' || it.kind === 'edge' ? ['body', it.bodyId] : it.kind === 'sketch' || it.kind === 'region' || it.kind === 'curve' ? ['sketch', it.sketchId] : it.kind === 'plane' ? ['plane', it.planeId] : it.kind === 'image' ? ['image', it.imageId] : null;
+        it.kind === 'body' || it.kind === 'face' || it.kind === 'edge'
+          ? ['body', it.bodyId]
+          : it.kind === 'sketch' || it.kind === 'region' || it.kind === 'curve'
+            ? ['sketch', it.sketchId]
+            : it.kind === 'plane'
+              ? ['plane', it.planeId]
+              : it.kind === 'image'
+                ? ['image', it.imageId]
+                : it.kind === 'folder'
+                  ? ['folder', it.folderId]
+                  : null;
       if (pair?.[1]) out.set(pair.join(':'), { kind: pair[0], id: pair[1] });
     }
     return [...out.values()];
   }
 
-  // What is in a folder, as selection entries.
-  folderItems(folderId) {
+  // A folder and every folder inside it (at any depth).
+  folderTree(folderId) {
+    const ids = new Set([folderId]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const f of this.doc.folders) {
+        if (f.parent && ids.has(f.parent) && !ids.has(f.id)) {
+          ids.add(f.id);
+          grew = true;
+        }
+      }
+    }
+    return ids;
+  }
+
+  // What is in a folder (and, with `deep`, in the folders inside it), as
+  // selection entries.
+  folderItems(folderId, { deep = true } = {}) {
     const doc = this.doc;
+    const ids = deep ? this.folderTree(folderId) : new Set([folderId]);
+    const inside = (x) => ids.has(x.folder);
     return [
-      ...doc.bodies.filter((x) => x.folder === folderId).map((x) => ({ kind: 'body', bodyId: x.id })),
-      ...doc.sketches.filter((x) => x.folder === folderId).map((x) => ({ kind: 'sketch', sketchId: x.id })),
-      ...doc.planes.filter((x) => x.folder === folderId).map((x) => ({ kind: 'plane', planeId: x.id })),
-      ...doc.images.filter((x) => x.folder === folderId).map((x) => ({ kind: 'image', imageId: x.id })),
+      ...doc.bodies.filter(inside).map((x) => ({ kind: 'body', bodyId: x.id })),
+      ...doc.sketches.filter(inside).map((x) => ({ kind: 'sketch', sketchId: x.id })),
+      ...doc.planes.filter(inside).map((x) => ({ kind: 'plane', planeId: x.id })),
+      ...doc.images.filter(inside).map((x) => ({ kind: 'image', imageId: x.id })),
     ];
   }
 
-  // A new folder, holding `items` if given. Returns its id.
-  newFolder(items = []) {
+  // Put items or folders in a folder (folderId = null: the top level).
+  // A folder never goes inside itself.
+  placeInFolder(d, targets, folderId) {
+    for (const t of targets) {
+      if (t.kind === 'folder') {
+        if (folderId && this.folderTree(t.id).has(folderId)) continue;
+        d.updateFolder(t.id, { parent: folderId || null });
+      } else updateItem(d, t.kind, t.id, { folder: folderId || null });
+    }
+  }
+
+  // A new folder (inside `parent` if given), holding `items`. Returns its id.
+  newFolder(items = [], parent = null) {
     let id = null;
     this.doc.apply('New folder', (d) => {
-      id = d.addFolder().id;
-      for (const t of this.folderTargets(items)) updateItem(d, t.kind, t.id, { folder: id });
+      id = d.addFolder({ parent: parent || null }).id;
+      this.placeInFolder(d, this.folderTargets(items), id);
     });
     return id;
   }
 
   // Put items in a folder (or take them out with folderId = null).
   moveToFolder(items, folderId) {
-    const targets = this.folderTargets(items);
-    if (!targets.length) return;
+    const targets = this.folderTargets(items).filter((t) => !(t.kind === 'folder' && folderId && this.folderTree(t.id).has(folderId)));
+    if (!targets.length) return false;
     const name = folderId ? this.doc.folder(folderId)?.name : null;
-    this.doc.apply(folderId ? `Move to ${name || 'folder'}` : 'Take out of folder', (d) => {
-      for (const t of targets) updateItem(d, t.kind, t.id, { folder: folderId || null });
-    });
+    this.doc.apply(folderId ? `Move to ${name || 'folder'}` : 'Take out of folder', (d) => this.placeInFolder(d, targets, folderId));
+    return true;
   }
 
   renameFolder(id, name) {
     this.doc.apply('Rename folder', (d) => d.updateFolder(id, { name }));
   }
 
-  // Delete a folder; with `contents`, also everything in it.
+  // Delete a folder; with `contents`, also everything in it (and the
+  // folders inside it). Otherwise what it holds moves up a level.
   deleteFolder(id, { contents = false } = {}) {
-    if (contents) this.deleteItems(this.folderItems(id), { also: (d) => d.removeFolder(id), label: 'Delete folder' });
-    else this.doc.apply('Delete folder', (d) => d.removeFolder(id));
+    if (contents) {
+      const tree = this.folderTree(id);
+      this.deleteItems(this.folderItems(id), {
+        also: (d) => {
+          d.folders = d.folders.filter((f) => !tree.has(f.id));
+        },
+        label: 'Delete folder',
+      });
+    } else this.doc.apply('Delete folder', (d) => d.removeFolder(id));
   }
 
   setFolderVisible(id, visible) {

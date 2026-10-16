@@ -11,7 +11,8 @@ export function emptyState() {
     sketches: [],
     planes: [],
     images: [],
-    // Folders in the Items list ({ id, name }); items point at theirs with `folder`.
+    // Folders in the Items list ({ id, name, parent }); items point at
+    // theirs with `folder`, folders inside folders with `parent`.
     folders: [],
     // Design history: every step that made or changed bodies (see history.js).
     history: [],
@@ -161,10 +162,13 @@ export class Draft {
     return this.folders[i];
   }
 
-  // Remove a folder; what was in it stays, outside any folder.
+  // Remove a folder; what was in it (items and folders) moves up a level.
   removeFolder(id) {
-    this.folders = this.folders.filter((f) => f.id !== id);
-    const out = (list, update) => list.filter((x) => x.folder === id).forEach((x) => update(x.id, { folder: null }));
+    const gone = this.folder(id);
+    if (!gone) return;
+    const up = gone.parent && this.folder(gone.parent) ? gone.parent : null;
+    this.folders = this.folders.filter((f) => f.id !== id).map((f) => (f.parent === id ? { ...f, parent: up } : f));
+    const out = (list, update) => list.filter((x) => x.folder === id).forEach((x) => update(x.id, { folder: up }));
     out(this.bodies, (i, p) => this.updateBody(i, p));
     out(this.sketches, (i, p) => this.updateSketch(i, p));
     out(this.planes, (i, p) => this.updatePlane(i, p));

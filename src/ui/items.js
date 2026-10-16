@@ -45,7 +45,10 @@ export class ItemsPanel {
     newFolder.dataset.action = 'new-folder';
     newFolder.addEventListener('click', () => {
       const picked = app.selection.list.filter((it) => ['body', 'sketch', 'plane', 'image'].includes(it.kind));
-      const id = app.cmd.newFolder(picked);
+      // Items that are all in one folder get their new folder inside it.
+      const homes = new Set(app.cmd.folderTargets(picked).map(({ kind, id }) => this.itemOf(kind, id)?.folder || null));
+      const parent = homes.size === 1 ? [...homes][0] : null;
+      const id = app.cmd.newFolder(picked, parent && doc.folder(parent) ? parent : null);
       this.renaming = id;
       this.render();
     });
@@ -91,7 +94,7 @@ export class ItemsPanel {
           inp.setSelectionRange(inp.value.length, inp.value.length);
         });
     }
-    for (const f of doc.folders) {
+    for (const f of doc.folders.filter((x) => !x.parent || !doc.folder(x.parent))) {
       const g = this.folderGroup(f, q, match);
       if (g) scroll.append(g);
     }
@@ -154,9 +157,18 @@ export class ItemsPanel {
 
   // ---- folders ---------------------------------------------------------------
 
-  folderGroup(f, q, match) {
+  itemOf(kind, id) {
+    const doc = this.app.doc;
+    return kind === 'body' ? doc.body(id) : kind === 'sketch' ? doc.sketch(id) : kind === 'plane' ? doc.plane(id) : kind === 'image' ? doc.image(id) : doc.folder(id);
+  }
+
+  // A folder with its items and the folders inside it. Returns null when a
+  // search finds nothing in it.
+  folderGroup(f, q, match, seen = new Set()) {
     const app = this.app;
     const doc = app.doc;
+    if (seen.has(f.id)) return null;
+    seen.add(f.id);
     const inside = (x) => x.folder === f.id;
     const content = [
       ...doc.bodies.filter(inside).map((x) => ({ x, row: () => this.bodyRow(x) })),
@@ -165,17 +177,20 @@ export class ItemsPanel {
       ...doc.images.filter(inside).map((x) => ({ x, row: () => this.refRow('image', x) })),
     ];
     const nameHit = !q || f.name.toLowerCase().includes(q);
+    // Folders inside: when the name matches, show all of them.
+    const subs = doc.folders.filter((x) => x.parent === f.id).map((x) => this.folderGroup(x, nameHit ? '' : q, nameHit ? () => true : match, seen)).filter(Boolean);
     const shown = nameHit ? content : content.filter((c) => match(c.x));
-    if (q && !shown.length && !nameHit) return null;
+    if (q && !shown.length && !subs.length && !nameHit) return null;
+    const deep = app.cmd.folderItems(f.id);
     const key = `folder:${f.id}`;
     const g = h('div.items-group.folder');
     g.dataset.folder = f.id;
     const head = h('div.item.folder-head');
     const chevron = h('span.ig-chev', { html: icon(this.collapsed[key] ? 'chevron' : 'chevronDown') });
     const ic = h('span.folder-icon', { html: icon('folder') });
-    const allHidden = content.length > 0 && content.every((c) => c.x.visible === false);
+    const allHidden = deep.length > 0 && app.cmd.folderTargets(deep).every(({ kind, id }) => this.itemOf(kind, id)?.visible === false);
     const eye = h(`button.item-btn${allHidden ? '.on' : ''}`, { title: allHidden ? 'Show everything in this folder' : 'Hide everything in this folder', html: icon(allHidden ? 'eyeOff' : 'eye') });
-    eye.hidden = !content.length;
+    eye.hidden = !deep.length;
     eye.addEventListener('click', (e) => {
       e.stopPropagation();
       app.cmd.setFolderVisible(f.id, allHidden);
@@ -185,7 +200,7 @@ export class ItemsPanel {
       e.stopPropagation();
       this.folderMenu(e, f);
     });
-    head.append(chevron, ic, this.nameEl(f, 'folder'), h('span.tag', { text: String(content.length), title: 'Items in this folder' }), eye, more);
+    head.append(chevron, ic, this.nameEl(f, 'folder'), h('span.tag', { text: String(deep.length), title: 'Items in this folder (and the folders inside it)' }), eye, more);
     head.addEventListener('click', () => {
       if (this.renaming === f.id) return;
       this.collapsed[key] = !this.collapsed[key];
@@ -200,12 +215,14 @@ export class ItemsPanel {
       e.preventDefault();
       this.folderMenu(e, f);
     });
+    // Folders can be dragged into other folders too.
+    if (this.renaming !== f.id) this.draggable(head, { kind: 'folder', folderId: f.id });
     this.dropTarget(g, f.id);
     g.append(head);
-    if (!this.collapsed[key]) {
+    if (!this.collapsed[key] || q) {
       const box = h('div.folder-items');
-      if (shown.length) box.append(...shown.map((c) => c.row()));
-      else box.append(h('div.items-none', { text: 'Empty — drag items here, or right-click an item → Move to folder.' }));
+      box.append(...subs, ...shown.map((c) => c.row()));
+      if (!subs.length && !shown.length) box.append(h('div.items-none', { text: 'Empty — drag items or folders here, or right-click an item → Move to folder.' }));
       g.append(box);
     }
     return g;
@@ -215,33 +232,56 @@ export class ItemsPanel {
     const app = this.app;
     const cmd = app.cmd;
     const items = cmd.folderItems(f.id);
-    const hidden = items.length && cmd.folderTargets(items).every(({ kind, id }) => (kind === 'body' ? app.doc.body(id) : kind === 'sketch' ? app.doc.sketch(id) : kind === 'plane' ? app.doc.plane(id) : app.doc.image(id))?.visible === false);
+    const hidden = items.length && cmd.folderTargets(items).every(({ kind, id }) => this.itemOf(kind, id)?.visible === false);
     showMenu(e.clientX, e.clientY, [
       { label: 'Rename', icon: 'sketch', action: () => ((this.renaming = f.id), this.render()) },
+      {
+        label: 'New folder inside',
+        icon: 'folder2',
+        action: () => {
+          this.collapsed[`folder:${f.id}`] = false;
+          this.renaming = cmd.newFolder([], f.id);
+          this.render();
+        },
+      },
+      { label: 'Move to folder…', icon: 'folder', action: () => this.moveMenu(e, { kind: 'folder', folderId: f.id }, f.parent) },
       items.length && { label: 'Select everything in it', icon: 'select', action: () => app.selection.set(items) },
       items.length && { label: hidden ? 'Show everything in it' : 'Hide everything in it', icon: hidden ? 'eye' : 'eyeOff', action: () => cmd.setFolderVisible(f.id, !!hidden) },
       '-',
       { label: 'Delete folder (keep what is in it)', icon: 'folder', action: () => cmd.deleteFolder(f.id) },
-      items.length && { label: 'Delete folder and everything in it', icon: 'trash', danger: true, action: () => cmd.deleteFolder(f.id, { contents: true }) },
+      (items.length || app.doc.folders.some((x) => x.parent === f.id)) && { label: 'Delete folder and everything in it', icon: 'trash', danger: true, action: () => cmd.deleteFolder(f.id, { contents: true }) },
     ].filter(Boolean));
   }
 
-  // Menu to move items (the selection, if the item is part of it) to a folder.
+  // Menu to move items or a folder (the selection, if the item is part of
+  // it) to a folder. `current`: the folder it is in now.
   moveMenu(e, item, current) {
     const app = this.app;
+    const doc = app.doc;
     const sel = app.selection;
-    const items = sel.has(item) && sel.size > 1 ? sel.list : [item];
-    const entries = app.doc.folders.filter((f) => f.id !== current).map((f) => ({ label: f.name, icon: 'folder', action: () => app.cmd.moveToFolder(items, f.id) }));
+    const items = item.kind !== 'folder' && sel.has(item) && sel.size > 1 ? sel.list : [item];
+    // A folder cannot go inside itself or a folder inside it.
+    const blocked = item.kind === 'folder' ? app.cmd.folderTree(item.folderId) : new Set();
+    const path = (f) => {
+      const names = [f.name];
+      for (let p = doc.folder(f.parent), n = 0; p && n < 20; p = doc.folder(p.parent), n++) names.unshift(p.name);
+      return names.join(' › ');
+    };
+    const entries = doc.folders.filter((f) => f.id !== current && !blocked.has(f.id)).map((f) => ({ label: path(f), icon: 'folder', action: () => app.cmd.moveToFolder(items, f.id) }));
     if (entries.length) entries.push('-');
     entries.push({
       label: 'New folder',
       icon: 'folder2',
       action: () => {
-        this.renaming = app.cmd.newFolder(items);
+        this.renaming = app.cmd.newFolder(items, current && doc.folder(current) ? current : null);
         this.render();
       },
     });
-    if (current) entries.push({ label: 'Take out of folder', icon: 'close', action: () => app.cmd.moveToFolder(items, null) });
+    if (current && doc.folder(current)) {
+      const up = doc.folder(current).parent;
+      const upName = up && doc.folder(up) ? doc.folder(up).name : null;
+      entries.push({ label: upName ? `Move up to ${upName}` : 'Take out of folder', icon: 'close', action: () => app.cmd.moveToFolder(items, upName ? up : null) });
+    }
     showMenu(e.clientX, e.clientY, entries);
   }
 
@@ -266,6 +306,7 @@ export class ItemsPanel {
       e.preventDefault();
       e.stopPropagation();
       e.dataTransfer.dropEffect = 'move';
+      this.el.querySelectorAll('.drop-on').forEach((x) => x !== el && x.classList.remove('drop-on'));
       el.classList.add('drop-on');
     });
     el.addEventListener('dragleave', (e) => {

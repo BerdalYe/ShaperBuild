@@ -706,28 +706,80 @@ export class Kernel {
     });
   }
 
-  // Apply a tool solid to the document according to mode.
+  // Fuse many shapes in one go (much faster than one by one, e.g. letters).
+  fuseAll(shapes, what) {
+    const oc = this.oc;
+    if (shapes.length <= 1) return shapes[0] || null;
+    return this.guard(what || 'fuse', () => {
+      const r = this.scope();
+      try {
+        const args = r(new oc.NCollection_List_TopoDS_Shape());
+        args.Append(shapes[0]);
+        const tools = r(new oc.NCollection_List_TopoDS_Shape());
+        for (const s of shapes.slice(1)) tools.Append(s);
+        const op = r(new oc.BRepAlgoAPI_Fuse());
+        op.SetArguments(args);
+        op.SetTools(tools);
+        op.Build(r(new oc.Message_ProgressRange()));
+        if (op.HasErrors()) throw new Error('boolean error');
+        op.SimplifyResult(true, true, 1e-4);
+        return op.Shape();
+      } finally {
+        r.free();
+      }
+    });
+  }
+
+  // Cut many tools out of a shape in one go.
+  cutAll(shape, tools, what) {
+    const oc = this.oc;
+    return this.guard(what || 'cut', () => {
+      const r = this.scope();
+      try {
+        const args = r(new oc.NCollection_List_TopoDS_Shape());
+        args.Append(shape);
+        const list = r(new oc.NCollection_List_TopoDS_Shape());
+        for (const s of tools) list.Append(s);
+        const op = r(new oc.BRepAlgoAPI_Cut());
+        op.SetArguments(args);
+        op.SetTools(list);
+        op.Build(r(new oc.Message_ProgressRange()));
+        if (op.HasErrors()) throw new Error('boolean error');
+        op.SimplifyResult(true, true, 1e-4);
+        return op.Shape();
+      } finally {
+        r.free();
+      }
+    });
+  }
+
+  // Apply a tool solid (or a list of tool solids, e.g. one per letter) to
+  // the document according to mode. A list is combined with the bodies in
+  // one boolean: joining the tools first and then the body can lose parts.
   applyTool(tool, mode, targets, what) {
     const created = [];
     const removed = [];
+    const many = Array.isArray(tool);
+    const whole = () => (many ? this.fuseAll(tool, what) : tool);
     if (mode === 'new' || !targets.length) {
-      for (const id of this.storeSolids(tool)) created.push({ id });
+      for (const id of this.storeSolids(whole())) created.push({ id });
       return this.result(created, removed);
     }
     const meshInvolved = targets.some((t) => this.get(t).kind === 'mesh');
-    if (meshInvolved) return this.applyToolMesh(tool, mode, targets);
+    if (meshInvolved) return this.applyToolMesh(whole(), mode, targets);
     if (mode === 'union') {
       let acc = this.solid(targets[0]);
       for (const t of targets.slice(1)) acc = this.boolOp('fuse', acc, this.solid(t), what);
-      acc = this.boolOp('fuse', acc, tool, what);
+      acc = many ? this.fuseAll([acc, ...tool], what) : this.boolOp('fuse', acc, tool, what);
       const ids = this.storeSolids(acc);
       ids.forEach((id, i) => created.push(i === 0 ? { id, replaces: targets[0] } : { id, from: targets[0] }));
       removed.push(...targets.slice(1));
       if (!ids.length) removed.push(targets[0]);
       return this.result(created, removed);
     }
+    const common = mode !== 'subtract' && many ? whole() : null;
     for (const t of targets) {
-      const res = this.boolOp(mode === 'subtract' ? 'cut' : 'common', this.solid(t), tool, what);
+      const res = mode === 'subtract' && many ? this.cutAll(this.solid(t), tool, what) : this.boolOp(mode === 'subtract' ? 'cut' : 'common', this.solid(t), common || tool, what);
       const ids = this.storeSolids(res);
       if (!ids.length) removed.push(t);
       ids.forEach((id, i) => created.push(i === 0 ? { id, replaces: t } : { id, from: t }));
@@ -744,7 +796,7 @@ export class Kernel {
     const tool = this.guard('Extrude', () => {
       const r = this.scope();
       try {
-        let acc = null;
+        const parts = [];
         for (const ref of profiles) {
           const { face, normal } = this.profile(ref);
           const n = norm(normal);
@@ -757,9 +809,9 @@ export class Kernel {
             len = Math.abs(distance) * 2;
           }
           const prism = r(new oc.BRepPrimAPI_MakePrism(base, this.vec(r, scale3(n, len)), false, true)).Shape();
-          acc = acc ? this.boolOp('fuse', acc, prism, 'Extrude') : prism;
+          parts.push(prism);
         }
-        return acc;
+        return parts;
       } finally {
         r.free();
       }
@@ -774,15 +826,15 @@ export class Kernel {
       const r = this.scope();
       try {
         const ax = r(new oc.gp_Ax1(this.pnt(r, axis.origin), this.dir(r, axis.dir)));
-        let acc = null;
+        const parts = [];
         const full = Math.abs(Math.abs(angle) - 360) < 1e-6;
         for (const ref of profiles) {
           const { face } = this.profile(ref);
           const rad = (angle * Math.PI) / 180;
           const rev = r(new oc.BRepPrimAPI_MakeRevol(face, ax, full ? Math.PI * 2 : rad, false)).Shape();
-          acc = acc ? this.boolOp('fuse', acc, rev, 'Revolve') : rev;
+          parts.push(rev);
         }
-        return acc;
+        return parts;
       } finally {
         r.free();
       }
@@ -816,13 +868,13 @@ export class Kernel {
       const r = this.scope();
       try {
         const wire = this.pathWire(path, r);
-        let acc = null;
+        const parts = [];
         for (const ref of profiles) {
           const { face } = this.profile(ref);
           const s = shaped ? this.shapedSweep(face, wire, twist, endScale, r) : r(new oc.BRepOffsetAPI_MakePipe(wire, face)).Shape();
-          acc = acc ? this.boolOp('fuse', acc, s, 'Sweep') : s;
+          parts.push(s);
         }
-        return acc;
+        return parts;
       } finally {
         r.free();
       }
@@ -870,8 +922,8 @@ export class Kernel {
 
   // Wrap sketch regions onto a body face and raise them (height > 0) or
   // engrave them (height < 0). Flat faces: the regions are placed on the
-  // face. Round (cylindrical) faces: the regions are rolled around it,
-  // keeping their sizes, like a label on a can.
+  // face. Curved faces: the regions are wrapped around it (see embossCurved),
+  // like a label on a can or a logo on a ball.
   emboss({ profiles, target, height, mode = 'auto' }) {
     if (!profiles.length) throw new Error('Select the sketch shapes (e.g. text) to wrap');
     if (!target) throw new Error('Select the face to wrap them onto');
@@ -883,8 +935,7 @@ export class Kernel {
       const r = this.scope();
       try {
         if (info.type === 'plane') return this.embossFlat(faces, info, height, r);
-        if (info.type === 'cylinder') return this.embossRound(faces, info, height, r);
-        throw new Error('Pick a flat or round (cylindrical) face');
+        return this.embossCurved(faces, targetFace, info, height, r);
       } finally {
         r.free();
       }
@@ -897,7 +948,7 @@ export class Kernel {
   embossFlat(faces, info, height, r) {
     const oc = this.oc;
     const n = norm(info.normal);
-    let acc = null;
+    const parts = [];
     for (const face of faces) {
       const fi = this.faceInfo(face);
       if (Math.abs(Math.abs(dot(norm(fi.normal), n)) - 1) > 1e-6) throw new Error('For a flat face, draw on the face or a plane parallel to it');
@@ -907,68 +958,154 @@ export class Kernel {
       tr.SetTranslation(this.vec(r, scale3(n, off)));
       const placed = r(new oc.BRepBuilderAPI_Transform(face, tr, true)).Shape();
       const prism = r(new oc.BRepPrimAPI_MakePrism(placed, this.vec(r, scale3(n, height)), false, true)).Shape();
-      acc = acc ? this.boolOp('fuse', acc, prism, 'Wrap & Emboss') : prism;
+      parts.push(prism);
     }
-    return acc;
+    return parts;
   }
 
-  embossRound(faces, info, height, r) {
+  // Wrap onto a curved face. Round faces (cylinders, balls) get their own
+  // surface turned so the shapes sit around the point facing them, and are
+  // rolled on keeping their sizes; other faces (cones, rings, free-form) are
+  // mapped through their own surface, true to size around that point.
+  embossCurved(faces, target, info, height, r) {
     const oc = this.oc;
-    const C = info.axis.origin;
-    const d = norm(info.axis.dir);
-    const R = info.radius;
-    // Roll the shapes on from the side of the cylinder that faces them.
+    const eps = Math.min(0.05, Math.abs(height) * 0.1);
+    const raise = height > 0;
     let mid = [0, 0, 0];
     for (const f of faces) mid = mid.map((v, i) => v + this.faceInfo(f).center[i] / faces.length);
-    const toMid = sub(mid, C);
-    let X = sub(toMid, scale3(d, dot(toMid, d)));
-    if (Math.hypot(...X) < 1e-9) X = sub(scale3(this.faceInfo(faces[0]).normal, -1), scale3(d, dot(this.faceInfo(faces[0]).normal, d) * -1));
-    X = norm(X);
-    const Y = cross(d, X);
-    for (const f of faces) {
-      if (Math.abs(dot(norm(this.faceInfo(f).normal), d)) > 0.5) throw new Error('Draw the shapes on a plane that faces the round face (along its length)');
+    // The point of the face the shapes look at: on the line through their
+    // middle, square to their plane (the nearest one if both ways hit).
+    const tsurf = oc.BRep_Tool.Surface(target);
+    const ns = norm(this.faceInfo(faces[0]).normal);
+    let best = null;
+    for (const t of [0, 1, -1, 3, -3, 10, -10, 30, -30, 100, -100]) {
+      const q = mid.map((v, i) => v + ns[i] * t);
+      const proj = r(new oc.GeomAPI_ProjectPointOnSurf(this.pnt(r, q), tsurf));
+      if (!proj.NbPoints()) continue;
+      const P = r(proj.NearestPoint());
+      const w = sub([P.X(), P.Y(), P.Z()], mid);
+      const off = Math.hypot(...cross(w, ns));
+      const score = off + Math.hypot(...w) * 1e-3 + (dot(w, ns) < 0 ? 1e-6 : 0);
+      if (!best || score < best.score - 1e-9) best = { score, ...proj.LowerDistanceParameters() };
     }
-    // Plane point -> (angle, height) on the cylinder; lengths are kept.
-    const map = (P) => {
-      const v = sub(P, C);
-      return [dot(v, Y) / R, dot(v, d)];
+    if (!best) throw new Error('The shapes are too far from the face');
+    const { U: u0, V: v0 } = best;
+    const d1 = (srf, u, v) => {
+      const P = r(new oc.gp_Pnt(0, 0, 0));
+      const Su = r(new oc.gp_Vec(0, 0, 0));
+      const Sv = r(new oc.gp_Vec(0, 0, 0));
+      srf.D1(u, v, P, Su, Sv);
+      return { P: [P.X(), P.Y(), P.Z()], Su: [Su.X(), Su.Y(), Su.Z()], Sv: [Sv.X(), Sv.Y(), Sv.Z()] };
     };
-    const eps = Math.min(0.05, Math.abs(height) * 0.1);
-    // Start just inside (raise) or outside (engrave) so the shapes overlap the body.
-    const R0 = height > 0 ? R - eps : R + eps;
-    const ax3 = r(new oc.gp_Ax3(this.pnt(r, C), this.dir(r, d), this.dir(r, X)));
-    const surf = new oc.Geom_CylindricalSurface(ax3, R0);
-    let acc = null;
-    for (const face of faces) {
-      const wrapped = this.wrapFace(face, surf, map, r);
-      const thick = r(new oc.BRepOffsetAPI_MakeThickSolid());
-      const t = height > 0 ? height + eps : height - eps;
-      thick.MakeThickSolidBySimple(wrapped, t);
-      let solid = thick.Shape();
-      // The offset goes along the face normal: make sure it went the right way.
-      const props = r(new oc.GProp_GProps());
-      oc.BRepGProp.VolumeProperties(solid, props, false, false, false);
-      const c = r(props.CentreOfMass());
-      const v = sub([c.X(), c.Y(), c.Z()], C);
-      const radial = Math.hypot(...sub(v, scale3(d, dot(v, d))));
-      if ((height > 0 && radial < R0) || (height < 0 && radial > R0)) {
-        const again = r(new oc.BRepOffsetAPI_MakeThickSolid());
-        again.MakeThickSolidBySimple(wrapped, -t);
-        solid = again.Shape();
+    const at = d1(tsurf, u0, v0);
+    const P0 = at.P;
+    let nOut = norm(cross(at.Su, at.Sv));
+    if (target.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED) nOut = scale3(nOut, -1);
+    for (const f of faces) {
+      if (Math.abs(dot(norm(this.faceInfo(f).normal), nOut)) < 0.3) throw new Error('Draw the shapes on a plane that faces the curved face');
+    }
+    // Base surface for the shapes, moved slightly into the body (raise) or
+    // out of it (engrave) so the result overlaps the body.
+    const into = raise ? -eps : eps; // along nOut
+    let surf;
+    let map;
+    let offset = 0;
+    // The face's outward direction at a point of `surf`.
+    let outAt;
+    if (info.type === 'cylinder' || info.type === 'sphere') {
+      const ad = r(new oc.BRepAdaptor_Surface(target, true));
+      const round = info.type === 'cylinder' ? r(ad.Cylinder()) : r(ad.Sphere());
+      const R = round.Radius();
+      let C;
+      let axis;
+      if (info.type === 'cylinder') {
+        const pos = r(round.Position());
+        const loc = r(pos.Location());
+        const dir = r(pos.Direction());
+        C = [loc.X(), loc.Y(), loc.Z()];
+        axis = [dir.X(), dir.Y(), dir.Z()];
+      } else {
+        const loc = r(round.Location());
+        C = [loc.X(), loc.Y(), loc.Z()];
       }
+      const toP = sub(P0, C);
+      let X = axis ? sub(toP, scale3(axis, dot(toP, axis))) : toP;
+      X = norm(X);
+      if (!axis) {
+        // Keep "up" up: the pole of the ball's own surface is sideways.
+        let up = [0, 0, 1];
+        if (Math.abs(dot(up, X)) > 0.9) up = [0, 1, 0];
+        axis = norm(sub(up, scale3(X, dot(up, X))));
+      }
+      const Y = cross(axis, X);
+      // Convex (outside of a can) or concave (inside of a cup).
+      const outward = dot(nOut, X) > 0 ? 1 : -1;
+      const R0 = R + into * outward;
+      const ax3 = r(new oc.gp_Ax3(this.pnt(r, C), this.dir(r, axis), this.dir(r, X)));
+      surf = info.type === 'cylinder' ? new oc.Geom_CylindricalSurface(ax3, R0) : new oc.Geom_SphericalSurface(ax3, R0);
+      map = (P) => {
+        const v = sub(P, C);
+        return info.type === 'cylinder' ? [dot(v, Y) / R, dot(v, axis)] : [dot(v, Y) / R, dot(v, axis) / R];
+      };
+      const kind = info.type;
+      outAt = (P) => {
+        const v = sub(P, C);
+        return scale3(norm(kind === 'cylinder' ? sub(v, scale3(axis, dot(v, axis))) : v), outward);
+      };
+    } else {
+      // Linear around the nearest point: sizes are kept there.
+      surf = tsurf;
+      const { Su, Sv } = at;
+      const a = dot(Su, Su);
+      const b = dot(Su, Sv);
+      const c = dot(Sv, Sv);
+      const det = a * c - b * b;
+      if (Math.abs(det) < 1e-12) throw new Error('The face is too pinched there to wrap onto');
+      map = (P) => {
+        const w = sub(P, P0);
+        const p = dot(Su, w);
+        const q = dot(Sv, w);
+        return [u0 + (c * p - b * q) / det, v0 + (a * q - b * p) / det];
+      };
+      offset = into;
+      const flip = target.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED ? -1 : 1;
+      outAt = (P, d) => scale3(norm(cross(d.Su, d.Sv)), flip);
+    }
+    const bounds = surf.Bounds(0, 0, 0, 0);
+    const inside = ([u, v]) => (surf.IsUPeriodic() || (u >= bounds.U1 - 1e-7 && u <= bounds.U2 + 1e-7)) && (surf.IsVPeriodic() || (v >= bounds.V1 - 1e-7 && v <= bounds.V2 + 1e-7));
+    const parts = [];
+    for (const face of faces) {
+      let base = this.wrapFace(face, surf, map, r, inside);
+      // Normal of the wrapped face, to offset and thicken the right way.
+      const [mu, mv] = map(this.faceInfo(face).center);
+      const wd = d1(surf, mu, mv);
+      let nW = norm(cross(wd.Su, wd.Sv));
+      if (base.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED) nW = scale3(nW, -1);
+      // Compared where this shape sits: text can reach far round a can.
+      const sign = dot(nW, outAt(wd.P, wd)) >= 0 ? 1 : -1;
+      if (offset) {
+        const off = r(new oc.BRepOffsetAPI_MakeOffsetShape());
+        off.PerformBySimple(base, offset * sign);
+        const moved = this.explore(off.Shape(), this.T.TopAbs_FACE)[0];
+        if (!moved) throw new Error('could not wrap the shape');
+        base = oc.TopoDS.Face(moved);
+      }
+      const thick = r(new oc.BRepOffsetAPI_MakeThickSolid());
+      thick.MakeThickSolidBySimple(base, sign * (raise ? height + eps : height - eps));
+      let solid = thick.Shape();
       // Turned inside out when the face points inwards.
       const vp = r(new oc.GProp_GProps());
       oc.BRepGProp.VolumeProperties(solid, vp, false, false, false);
       if (vp.Mass() < 0) solid = solid.Reversed();
-      acc = acc ? this.boolOp('fuse', acc, solid, 'Wrap & Emboss') : solid;
+      parts.push(solid);
     }
-    return acc;
+    return parts;
   }
 
   // A planar face rebuilt on `surf`, each curve mapped through `map` (plane
   // point -> surface (u, v)). Curves are converted to B-splines, whose
   // control points map exactly under this kind of (affine) map.
-  wrapFace(face, surf, map, r) {
+  wrapFace(face, surf, map, r, inside = () => true) {
     const oc = this.oc;
     const wrapWire = (wire) => {
       const list = r(new oc.NCollection_List_TopoDS_Shape());
@@ -984,6 +1121,7 @@ export class Kernel {
         for (let i = 1; i <= np; i++) {
           const P = r(bs.Pole(i));
           const [u, v] = map([P.X(), P.Y(), P.Z()]);
+          if (!inside([u, v])) throw new Error('The shapes are bigger than the face they are wrapped onto');
           poles.SetValue(i, r(new oc.gp_Pnt2d(u, v)));
           weights.SetValue(i, bs.Weight(i));
         }

@@ -100,10 +100,32 @@ try {
   near((await bodyBox(can)).max[0], 11, 0.05);
   await shot(win, '93-emboss');
 
+  step('Wrap & Emboss onto a ball');
+  const ball = await addShape('sphere', { radius: 10 }, 'Sphere');
+  await A(() => {
+    const a = window.__shaper;
+    a.cmd.addSketch({ origin: [12, 0, 10], xDir: [0, 1, 0], normal: [1, 0, 0] }, [
+      { type: 'line', a: [-2, -2], b: [2, -2] },
+      { type: 'line', a: [2, -2], b: [2, 2] },
+      { type: 'line', a: [2, 2], b: [-2, 2] },
+      { type: 'line', a: [-2, 2], b: [-2, -2] },
+    ], { name: 'Badge' });
+  });
+  const badge = await A(() => window.__shaper.doc.sketches.at(-1).id);
+  await win.waitForFunction((id) => window.__shaper.regionCache.get(id)?.data?.regions.length === 1, badge);
+  const ballVol = await volumeOf(ball);
+  const ballFace = await A((id) => window.__shaper.bodyMesh(id).faceInfo.findIndex((f) => f.type === 'sphere'), ball);
+  await runTool('emboss', [[{ kind: 'region', sketchId: badge, index: 0 }], [{ kind: 'face', bodyId: ball, index: ballFace }]], { height: 1 });
+  const onBall = (((100 * 0.4 * 2 * Math.sin(0.2)) / 100) * (11 ** 3 - 10 ** 3)) / 3;
+  near((await volumeOf(ball)) - ballVol, onBall);
+  await A((id) => window.__shaper.cmd.deleteItems([{ kind: 'body', bodyId: id }]), ball);
+  await idle();
+
   step('History: make the emboss an engraving instead');
   let st = await steps();
-  assert.equal(st.at(-1).label, 'Wrap & Emboss');
-  await editStep(st.length - 1, 'height', -0.5);
+  const embossStep = st.map((x) => x.label).indexOf('Wrap & Emboss');
+  assert.ok(embossStep >= 0);
+  await editStep(embossStep, 'height', -0.5);
   near(canVol - (await volumeOf(can)), (0.6 / 2) * (100 - 9.5 ** 2) * 6);
   assert.equal((await steps()).at(-1).error, null);
 
@@ -187,6 +209,41 @@ try {
   await win.locator('.folder-head .item-btn').first().click();
   assert.equal(await A((ids) => ids.every((id) => window.__shaper.doc.body(id).visible !== false), [can, twisted]), true);
 
+  step('folders inside folders: new folder inside, drag a body and a folder around');
+  await win.locator('.folder-head').first().click({ button: 'right' });
+  await win.locator('.menu button', { hasText: 'New folder inside' }).click();
+  const subBox = win.locator('.folder-head .item-name input');
+  await subBox.fill('Parts');
+  await subBox.press('Enter');
+  const sub = await A(() => window.__shaper.doc.folders.find((f) => f.name === 'Parts'));
+  assert.equal(sub.parent, folder.id, 'the new folder is inside the first one');
+  const half = await A(() => window.__shaper.doc.bodies.at(-1));
+  await win.locator('.item', { hasText: half.name }).first().dragTo(win.locator(`.items-group.folder[data-folder="${sub.id}"] > .folder-head`));
+  await idle();
+  assert.equal(await A((id) => window.__shaper.doc.body(id).folder, half.id), sub.id);
+  assert.equal(await win.locator(`.items-group.folder[data-folder="${folder.id}"] .items-group.folder[data-folder="${sub.id}"] .item`, { hasText: half.name }).count(), 1, 'shown nested');
+  // A folder never goes inside itself or its own subfolder.
+  assert.equal(await A(({ a, b }) => window.__shaper.cmd.moveToFolder([{ kind: 'folder', folderId: a }], b), { a: folder.id, b: sub.id }), false);
+  // Drag the subfolder out to the top level, then back in.
+  await win.locator(`.items-group.folder[data-folder="${sub.id}"] > .folder-head`).dragTo(win.locator('.items-group-head', { hasText: 'Bodies' }));
+  await idle();
+  assert.equal(await A((id) => window.__shaper.doc.folder(id).parent ?? null, sub.id), null);
+  await win.locator(`.items-group.folder[data-folder="${sub.id}"] > .folder-head`).dragTo(win.locator(`.items-group.folder[data-folder="${folder.id}"] > .folder-head`));
+  await idle();
+  assert.equal(await A((id) => window.__shaper.doc.folder(id).parent, sub.id), folder.id);
+  await shot(win, '96-nested-folders');
+  // Hiding the outer folder hides what is in the inner one too.
+  await A((id) => window.__shaper.cmd.setFolderVisible(id, false), folder.id);
+  assert.equal(await A((id) => window.__shaper.doc.body(id).visible, half.id), false);
+  await A((id) => window.__shaper.cmd.setFolderVisible(id, true), folder.id);
+  // Deleting the outer folder (keeping its things) moves them up a level.
+  await A((id) => window.__shaper.cmd.deleteFolder(id), folder.id);
+  assert.equal(await A((id) => window.__shaper.doc.folder(id).parent ?? null, sub.id), null);
+  assert.equal(await A((id) => window.__shaper.doc.body(id).folder ?? null, can), null);
+  assert.equal(await A((id) => window.__shaper.doc.body(id).folder, half.id), sub.id);
+  await A(() => window.__shaper.cmd.undo());
+  assert.equal(await A((id) => window.__shaper.doc.folder(id).parent, sub.id), folder.id);
+
   step('move a sketch in with the menu; folders are saved; rebuilt bodies stay in them');
   await A(
     ({ sk, f }) => window.__shaper.cmd.moveToFolder([{ kind: 'sketch', sketchId: sk }], f),
@@ -197,7 +254,8 @@ try {
     await a.files.loadProject(await a.files.serialize({ thumbnail: false }), null, 'Folders');
   });
   await idle();
-  assert.equal(await A(() => window.__shaper.doc.folders.length), 1);
+  assert.equal(await A(() => window.__shaper.doc.folders.length), 2);
+  assert.equal(await A((id) => window.__shaper.doc.folder(id).parent, sub.id), folder.id, 'nesting is saved');
   assert.equal(await A((id) => window.__shaper.doc.sketch(id).folder, labelSketch), folder.id);
   await editStep(0, 'params.height', 50);
   assert.equal(await A((id) => window.__shaper.doc.body(id).folder, can), folder.id, 'a rebuilt body keeps its folder');
@@ -205,13 +263,14 @@ try {
 
   step('delete the folder but keep what is in it; undo brings it back');
   await A((id) => window.__shaper.cmd.deleteFolder(id), folder.id);
-  assert.equal(await A(() => window.__shaper.doc.folders.length), 0);
+  assert.equal(await A(() => window.__shaper.doc.folders.length), 1);
   assert.equal(await A((id) => window.__shaper.doc.body(id)?.folder ?? null, can), null);
   await A(() => window.__shaper.cmd.undo());
   assert.equal(await A((id) => window.__shaper.doc.body(id).folder, can), folder.id);
   await A((id) => window.__shaper.cmd.deleteFolder(id, { contents: true }), folder.id);
   await idle();
-  assert.equal(await A((ids) => ids.filter((id) => window.__shaper.doc.body(id)).length, [can, twisted]), 0, 'everything in it is deleted');
+  assert.equal(await A((ids) => ids.filter((id) => window.__shaper.doc.body(id)).length, [can, twisted, half.id]), 0, 'everything in it is deleted, nested too');
+  assert.equal(await A(() => window.__shaper.doc.folders.length), 0);
 
   assert.deepEqual(errors, [], `renderer errors:\n${errors.join('\n')}`);
   console.log('\norganize: all steps passed');
