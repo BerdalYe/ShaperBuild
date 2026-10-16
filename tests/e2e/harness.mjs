@@ -3,6 +3,7 @@ import { _electron as electron } from 'playwright';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const OUT = path.join(ROOT, 'test-output');
@@ -10,13 +11,14 @@ export const OUT = path.join(ROOT, 'test-output');
 export async function launch({ userData } = {}) {
   fs.mkdirSync(OUT, { recursive: true });
   const dataDir = userData || fs.mkdtempSync(path.join(OUT, 'profile-'));
-  const exe = process.platform === 'win32' ? 'electron.exe' : process.platform === 'darwin' ? 'Electron.app/Contents/MacOS/Electron' : 'electron';
+  // require('electron') returns the binary path and downloads it if needed.
+  const electronPath = createRequire(import.meta.url)('electron');
   // SHAPER_EXE runs a packaged build (e.g. dist/linux-unpacked/shaperbuild)
   // instead of the sources.
   const packaged = process.env.SHAPER_EXE;
   const flags = ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', `--user-data-dir=${dataDir}`];
   const app = await electron.launch({
-    executablePath: packaged || path.join(ROOT, 'node_modules/electron/dist', exe),
+    executablePath: packaged || electronPath,
     // Software rendering keeps screenshots identical on machines without a GPU.
     args: packaged ? flags : [ROOT, ...flags],
     cwd: ROOT,
