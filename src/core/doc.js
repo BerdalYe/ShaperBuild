@@ -11,9 +11,11 @@ export function emptyState() {
     sketches: [],
     planes: [],
     images: [],
+    // Folders in the Items list ({ id, name }); items point at theirs with `folder`.
+    folders: [],
     // Design history: every step that made or changed bodies (see history.js).
     history: [],
-    seq: { body: 0, sketch: 0, entity: 0, constraint: 0, plane: 0, image: 0, feature: 0 },
+    seq: { body: 0, sketch: 0, entity: 0, constraint: 0, plane: 0, image: 0, feature: 0, folder: 0 },
     units: 'mm',
   };
 }
@@ -32,6 +34,7 @@ export class Draft {
     this.sketches = state.sketches.slice();
     this.planes = (state.planes || []).slice();
     this.images = (state.images || []).slice();
+    this.folders = (state.folders || []).slice();
     this.history = (state.history || []).slice();
     this.seq = { ...state.seq };
     this.units = state.units;
@@ -39,7 +42,7 @@ export class Draft {
 
   nextId(kind) {
     this.seq[kind] = (this.seq[kind] || 0) + 1;
-    const prefix = { body: 'b', sketch: 's', entity: 'e', constraint: 'k', plane: 'p', image: 'i', feature: 'f' }[kind] || kind;
+    const prefix = { body: 'b', sketch: 's', entity: 'e', constraint: 'k', plane: 'p', image: 'i', feature: 'f', folder: 'g' }[kind] || kind;
     return `${prefix}${this.seq[kind]}`;
   }
 
@@ -140,6 +143,34 @@ export class Draft {
     this.images = this.images.filter((p) => p.id !== id);
   }
 
+  folder(id) {
+    return this.folders.find((f) => f.id === id);
+  }
+
+  addFolder(props = {}) {
+    const id = this.nextId('folder');
+    const f = { name: `Folder ${this.seq.folder}`, ...props, id };
+    this.folders.push(f);
+    return f;
+  }
+
+  updateFolder(id, patch) {
+    const i = this.folders.findIndex((f) => f.id === id);
+    if (i < 0) return null;
+    this.folders[i] = { ...this.folders[i], ...patch };
+    return this.folders[i];
+  }
+
+  // Remove a folder; what was in it stays, outside any folder.
+  removeFolder(id) {
+    this.folders = this.folders.filter((f) => f.id !== id);
+    const out = (list, update) => list.filter((x) => x.folder === id).forEach((x) => update(x.id, { folder: null }));
+    out(this.bodies, (i, p) => this.updateBody(i, p));
+    out(this.sketches, (i, p) => this.updateSketch(i, p));
+    out(this.planes, (i, p) => this.updatePlane(i, p));
+    out(this.images, (i, p) => this.updateImage(i, p));
+  }
+
   // Give new entities ids.
   withIds(entities) {
     return entities.map((e) => (e.id ? e : { ...e, id: this.nextId('entity') }));
@@ -150,7 +181,7 @@ export class Draft {
   }
 
   toState() {
-    return { bodies: this.bodies, sketches: this.sketches, planes: this.planes, images: this.images, history: this.history, seq: this.seq, units: this.units };
+    return { bodies: this.bodies, sketches: this.sketches, planes: this.planes, images: this.images, folders: this.folders, history: this.history, seq: this.seq, units: this.units };
   }
 }
 
@@ -178,6 +209,14 @@ export class Document extends Emitter {
 
   get planes() {
     return this.state.planes || [];
+  }
+
+  get folders() {
+    return this.state.folders || [];
+  }
+
+  folder(id) {
+    return this.folders.find((f) => f.id === id);
   }
 
   plane(id) {

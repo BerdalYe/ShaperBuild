@@ -109,20 +109,31 @@ export function matchEdge(sig, edgeInfos, bbox) {
   return bestScore <= LIMIT ? best : -1;
 }
 
-// Region outlined by the same curves (most shared, then nearest centre).
-export function pickRegion(ref, regions) {
+// Region outlined by the same curves (most shared, then nearest centre and
+// most similar size). Curves split by Trim count as the curve they came from
+// (`origin` maps a curve id to that). With `geometric`, a region that shares
+// no curves can still match if it sits in the same place with the same size.
+// `at(region)` and `ref.c2` are in-plane centres; `ref.a` is the area.
+export function pickRegion(ref, regions, { origin = (id) => id, at = (r) => null, geometric = false } = {}) {
   let best = -1;
   let bestScore = -Infinity;
   const want = new Set(ref.ents || []);
+  const size = Math.sqrt(Math.max(ref.a || 0, 1e-9));
   regions.forEach((r, i) => {
-    const have = new Set(r.entities || []);
+    const have = new Set((r.entities || []).map(origin));
     let shared = 0;
     for (const id of have) if (want.has(id)) shared++;
     const union = want.size + have.size - shared;
     const jac = union ? shared / union : 0;
-    const d = ref.c && r.centroid ? len(sub(r.centroid, ref.c)) : 0;
-    const s = jac * 1000 - d;
-    if (jac > 0 && s > bestScore) {
+    const c2 = at(r);
+    let d = 0;
+    if (c2 && ref.c2) d = Math.hypot(c2[0] - ref.c2[0], c2[1] - ref.c2[1]) / size;
+    else if (ref.c && r.centroid) d = len(sub(r.centroid, ref.c)) / size;
+    const ratio = ref.a > 1e-9 && r.area > 1e-9 ? Math.abs(Math.log(r.area / ref.a)) : 0;
+    const close = d < 0.35 && ratio < Math.log(1.6);
+    if (!(jac > 0 || (geometric && close))) return;
+    const s = jac * 10 - d - ratio;
+    if (s > bestScore) {
       bestScore = s;
       best = i;
     }

@@ -5,7 +5,7 @@ import { TrimTool, OffsetTool, ProjectTool, toggleConstruction } from './sketche
 import { DimensionTool } from './dimension.js';
 import { TextTool } from './text.js';
 import { PlaneTool } from './plane.js';
-import { ExtrudeTool, RevolveTool, SweepTool, LoftTool, FilletTool, ChamferTool, ShellTool, DraftTool, UnionTool, SubtractTool, IntersectTool, SplitTool, MirrorTool, LinearPatternTool, CircularPatternTool, ScaleTool } from './model.js';
+import { ExtrudeTool, RevolveTool, SweepTool, EmbossTool, LoftTool, FilletTool, ChamferTool, ShellTool, DraftTool, UnionTool, SubtractTool, IntersectTool, SplitTool, MirrorTool, LinearPatternTool, CircularPatternTool, ScaleTool } from './model.js';
 import { TransformTool } from './transform.js';
 import { PrimitiveTool } from './primitive.js';
 import { MeasureTool, SectionTool } from './inspect.js';
@@ -24,7 +24,7 @@ export const TOOL_SECTIONS = [
       def('polygon', 'Polygon', 'polygon', PolygonTool, { key: 'P', keywords: 'hexagon triangle sides nut draw', desc: 'Regular polygon with any number of sides.' }),
       def('spline', 'Spline', 'spline', SplineTool, { key: 'B', keywords: 'curve freeform bezier draw', desc: 'Smooth curve through the points you click.' }),
       def('ellipse', 'Ellipse', 'ellipse', EllipseTool, { keywords: 'oval draw', desc: 'Center, axis, then width.' }),
-      def('text', 'Text', 'text', TextTool, { keywords: 'letters words name label engrave emboss font type writing', desc: 'Write text as sketch curves. Extrude it to raise the letters, or cut it into a face to engrave.' }),
+      def('text', 'Text', 'text', TextTool, { keywords: 'letters words name label engrave font type writing', desc: 'Write text as sketch curves. Extrude it to raise the letters, or cut it into a face to engrave.' }),
       def('point', 'Point', 'point', PointTool, { keywords: 'reference', desc: 'Reference point for snapping.' }),
       def('trim', 'Trim', 'trim', TrimTool, { key: 'T', keywords: 'cut erase remove delete segment', desc: 'Remove pieces of curves between intersections.' }),
       def('offset', 'Offset', 'offset', OffsetTool, { keywords: 'parallel copy wall thickness', desc: 'Copy curves at a distance.' }),
@@ -40,11 +40,12 @@ export const TOOL_SECTIONS = [
     tools: [
       def('extrude', 'Extrude', 'extrude', ExtrudeTool, { key: 'E', keywords: 'push pull pad height thicken 3d', desc: 'Pull a sketch region or face into 3D. Also pushes and pulls faces of bodies.' }),
       def('revolve', 'Revolve', 'revolve', RevolveTool, { key: 'Q', keywords: 'spin lathe turn rotate profile', desc: 'Spin a profile around an axis.' }),
-      def('sweep', 'Sweep', 'sweep', SweepTool, { keywords: 'path pipe tube', desc: 'Move a profile along a path.' }),
+      def('sweep', 'Sweep', 'sweep', SweepTool, { keywords: 'path pipe tube twist spiral screw thread taper', desc: 'Move a profile along a path. It can twist and change size on the way.' }),
       def('loft', 'Loft', 'loft', LoftTool, { keywords: 'blend transition profiles', desc: 'Blend between two or more profiles.' }),
       def('fillet', 'Fillet', 'fillet', FilletTool, { key: 'F', keywords: 'round radius smooth edge', desc: 'Round edges.' }),
       def('chamfer', 'Chamfer', 'chamfer', ChamferTool, { keywords: 'bevel edge', desc: 'Bevel edges.' }),
       def('shell', 'Shell', 'shell', ShellTool, { key: 'H', keywords: 'hollow wall thickness', desc: 'Hollow out a body, leaving walls.' }),
+      def('emboss', 'Wrap & Emboss', 'emboss', EmbossTool, { short: 'Emboss', keywords: 'wrap emboss engrave deboss stamp label logo text curved round cylinder surface raise', desc: 'Wrap sketch shapes or text onto a flat or round face, then raise or engrave them.' }),
       def('draft', 'Draft', 'draft', DraftTool, { keywords: 'taper angle mould mold', desc: 'Tilt side faces by an angle (for moulds and easy printing).' }),
       def('split', 'Split', 'split', SplitTool, { keywords: 'cut divide slice', desc: 'Cut a body in two with a plane or face.' }),
       def('union', 'Union', 'union', UnionTool, { key: 'U', keywords: 'join combine merge add boolean', desc: 'Join bodies into one.' }),

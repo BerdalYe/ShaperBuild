@@ -137,3 +137,75 @@ test('a cut on a face follows the face when the body gets taller', async () => {
   // The hole moved up with the top face: still 8 mm deep.
   near(volume(d.bodies.get(body)), 40 * 30 * 30 - Math.PI * 25 * 8, 1);
 });
+
+const bbox = (sid) => k.tessellate(sid).bbox;
+
+test('move, split and mirror steps can be changed later', async () => {
+  const { moveMatrix } = await import('../../src/core/replay.js');
+  const d = makeDesign();
+  const box = d.run('Box', 'primitive', { type: 'box', params: { width: 20, depth: 20, height: 20 } });
+  const b = box.calls[0].out[0];
+  const move = { t: [10, 0, 0], r: [0, 0, 0], pivot: [0, 0, 10] };
+  const mv = d.run('Move', 'transform', { ids: [d.bodies.get(b)], matrix: moveMatrix(move), copy: false, move });
+  near(bbox(d.bodies.get(b)).min[0], 0, 1e-6);
+  assert.deepEqual(editableParams(mv).map((p) => p.key), ['move.t.0', 'move.t.1', 'move.t.2', 'move.r.0', 'move.r.1', 'move.r.2', 'copy']);
+  // Split at z = 5 (a fixed plane with an offset), then mirror the box
+  // about its own right-hand face.
+  const sp = d.run('Split', 'split', { id: d.bodies.get(b), plane: { origin: [0, 0, 5], normal: [0, 0, 1] }, planeFrom: { kind: 'fixed', plane: { origin: [0, 0, 0], normal: [0, 0, 1] }, offset: 5 } });
+  assert.equal(sp.calls[0].out.length, 2);
+  const vols = () => [...d.bodies.values()].map(volume).sort((x, y) => x - y);
+  near(vols()[0], 20 * 20 * 5, 0.5);
+  assert.deepEqual(editableParams(sp).map((p) => [p.key, p.value]), [['planeRef.offset', 5]]);
+
+  // Move further: everything after it follows.
+  d.features[1] = withParams(mv, { 'move.t.0': 30, 'move.r.2': 90 });
+  await d.replay();
+  const xs = [...d.bodies.values()].map((s) => bbox(s).min[0]);
+  xs.forEach((x) => near(x, 20, 1e-6));
+  // Cut higher up.
+  d.features[2] = withParams(d.features[2], { 'planeRef.offset': 12 });
+  await d.replay();
+  near(vols()[0], 20 * 20 * 8, 0.5);
+});
+
+test('a mirror about a face follows the face', async () => {
+  const d = makeDesign();
+  const box = d.run('Box', 'primitive', { type: 'box', params: { width: 20, depth: 20, height: 20 } });
+  const b = box.calls[0].out[0];
+  const m = k.tessellate(d.bodies.get(b));
+  const right = m.faceInfo.findIndex((f) => f.type === 'plane' && f.normal[0] > 0.99);
+  d.run('Mirror', 'mirror', { ids: [d.bodies.get(b)], plane: { origin: m.faceInfo[right].center, normal: [1, 0, 0] }, planeFrom: { kind: 'face', id: d.bodies.get(b), index: right }, copy: true });
+  assert.equal(d.bodies.size, 2);
+  d.features[0] = withParams(box, { 'params.width': 40 });
+  await d.replay();
+  const xs = [...d.bodies.values()].map((s) => bbox(s).max[0]).sort((x, y) => x - y);
+  near(xs[0], 20, 1e-6);
+  near(xs[1], 60, 1e-6);
+});
+
+test('regions are found again after Trim and after redrawing a curve', async () => {
+  const { trimEntity } = await import('../../src/core/geom2d.js');
+  const d = makeDesign();
+  const ents = [...rect(40, 30), { id: 'l5', type: 'line', a: [20, -10], b: [20, 40] }];
+  d.sketch('s1', ents);
+  const regions = d.regions.get('s1');
+  const left = regions.findIndex((r) => r.centroid[0] < 20);
+  d.run('Extrude', 'extrude', { profiles: [{ type: 'region', sketchId: 's1', index: left, normal: [0, 0, 1] }], distance: 10, mode: 'new' });
+  const vol = () => volume([...d.bodies.values()][0]);
+  near(vol(), 20 * 30 * 10, 0.5);
+  // Trim the bit of the middle line that sticks out at the bottom: the
+  // line is replaced by a new piece.
+  const sk = d.sketches.get('s1');
+  const l5 = sk.entities.find((e) => e.id === 'l5');
+  const { keep } = trimEntity(l5, [20, -5], sk.entities);
+  assert.equal(keep.length, 1);
+  assert.equal(keep[0].src, 'l5');
+  d.sketch('s1', [...sk.entities.filter((e) => e.id !== 'l5'), { ...keep[0], id: 'p1' }]);
+  await d.replay();
+  near(vol(), 20 * 30 * 10, 0.5);
+  // Delete the left side and draw it again further out: the body follows.
+  const now = d.sketches.get('s1').entities.filter((e) => e.id !== 'l4');
+  d.sketch('s1', [...now.map((e) => (e.id === 'l1' ? { ...e, a: [-10, 0] } : e.id === 'l3' ? { ...e, b: [-10, 30] } : e)), { id: 'n1', type: 'line', a: [-10, 30], b: [-10, 0] }]);
+  await d.replay();
+  near(vol(), 30 * 30 * 10, 0.5);
+});

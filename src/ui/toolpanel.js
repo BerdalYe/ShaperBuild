@@ -186,7 +186,7 @@ export class ToolPanel {
         const unit = f.type === 'length' ? this.units : f.type === 'angle' ? '°' : '';
         const wrap = h('div.ctrl', { style: { position: 'relative' } }, inp);
         if (unit) wrap.append(h('span', { text: unit, style: { position: 'absolute', right: '8px', top: '5px', color: 'var(--muted)', fontSize: '12px', pointerEvents: 'none' } }));
-        return h('div.tp-field', h('label', { text: f.label }), wrap);
+        return h('div.tp-field', h('label', { text: f.label, title: f.hint }), wrap);
       }
       case 'choice': {
         const chips = h('div.chips');

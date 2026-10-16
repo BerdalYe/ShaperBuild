@@ -1,6 +1,7 @@
 // Solid modelling tools.
 import { OpTool } from './optool.js';
 import { formatLength, niceStep } from '../core/units.js';
+import { scaleMatrix } from '../core/replay.js';
 
 const AXES = {
   x: { origin: [0, 0, 0], dir: [1, 0, 0] },
@@ -48,6 +49,11 @@ function bodySlot(key = 'bodies', label = 'Bodies', extra = {}) {
     summary: (items) => `${items.length} bod${items.length === 1 ? 'y' : 'ies'}`,
     ...extra,
   };
+}
+
+// A plane taken from a body face, as the history records it.
+function planeSource(app, it) {
+  return { kind: 'face', id: app.doc.body(it.bodyId).shapeId, index: it.index };
 }
 
 // Combine several kernel results into one.
@@ -286,11 +292,16 @@ export class SweepTool extends OpTool {
   }
 
   params() {
-    return [{ type: 'select', key: 'mode', label: 'Result', value: this.values?.mode ?? 'new', options: MODE_OPTIONS.filter((o) => o.value !== 'auto') }];
+    const v = this.values || {};
+    return [
+      { type: 'select', key: 'mode', label: 'Result', value: v.mode ?? 'new', options: MODE_OPTIONS.filter((o) => o.value !== 'auto') },
+      { type: 'angle', key: 'twist', label: 'Twist', value: v.twist ?? 0, hint: 'How far the profile turns from start to end (e.g. 360 for one full turn)' },
+      { type: 'number', key: 'endScale', label: 'Size at the end', value: v.endScale ?? 1, min: 0.01, hint: '1 keeps the size; 0.5 ends at half size, 2 at double' },
+    ];
   }
 
   hint() {
-    return 'Pick a profile, then the path it should follow. The path should start at the profile.';
+    return 'Pick a profile, then the path it should follow. The path should start at the profile. Twist turns the profile along the way.';
   }
 
   async compute() {
@@ -300,7 +311,71 @@ export class SweepTool extends OpTool {
     const path = this.items('path').map((it) => app.pathRef(it)).filter(Boolean);
     const mode = this.values.mode;
     const targets = mode === 'new' ? [] : app.doc.bodies.filter((b) => b.visible !== false).map((b) => b.shapeId);
-    return app.kernel.call('sweep', { profiles: profiles.map((p) => app.profileRef(p)), path, mode, targets });
+    const twist = this.values.twist || 0;
+    const endScale = this.values.endScale ?? 1;
+    return app.kernel.call('sweep', { profiles: profiles.map((p) => app.profileRef(p)), path, mode, targets, twist, endScale });
+  }
+}
+
+// ---- Wrap & Emboss -------------------------------------------------------------
+
+export class EmbossTool extends OpTool {
+  inputs() {
+    return [
+      {
+        key: 'profiles',
+        label: 'Shapes',
+        kinds: ['region'],
+        multiple: true,
+        placeholder: 'Click sketch shapes or letters',
+        summary: (items) => `${items.length} shape${items.length === 1 ? '' : 's'}`,
+      },
+      {
+        key: 'face',
+        label: 'Onto face',
+        kinds: ['face'],
+        multiple: false,
+        fromSelection: false,
+        placeholder: 'Click a flat or round face',
+        reject: 'Pick a flat or round (cylindrical) face of a solid body',
+        accept: (it) => {
+          const t = this.app.faceInfo(it.bodyId, it.index)?.type;
+          return t === 'plane' || t === 'cylinder' ? it : null;
+        },
+      },
+    ];
+  }
+
+  params() {
+    const v = this.values || {};
+    return [
+      { type: 'length', key: 'height', label: 'Height', value: v.height ?? 1, hint: 'Positive raises the shapes, negative engraves them' },
+      {
+        type: 'choice',
+        key: 'mode',
+        label: 'Result',
+        value: v.mode ?? 'auto',
+        options: [
+          { value: 'auto', label: 'Join / cut' },
+          { value: 'new', label: 'New body' },
+        ],
+      },
+    ];
+  }
+
+  hint() {
+    return 'Pick sketch shapes (text works well), then a flat or round face. Draw on a plane facing the face: on round faces the shapes are rolled on without stretching. A negative height engraves.';
+  }
+
+  async compute() {
+    const app = this.app;
+    const profiles = this.items('profiles');
+    const f = this.items('face')[0];
+    const height = this.values.height;
+    if (!f || !profiles.length || !height) return null;
+    await app.ensureRegions(profiles);
+    const body = app.doc.body(f.bodyId);
+    return app.kernel.call('emboss', { profiles: profiles.map((p) => app.profileRef(p)), target: { id: body.shapeId, face: f.index }, height, mode: this.values.mode || 'auto' });
   }
 }
 
@@ -584,13 +659,22 @@ export class SplitTool extends OpTool {
     return { origin: p.normal.map((n) => n * o), normal: p.normal };
   }
 
+  // For the history: where the plane came from.
+  planeFrom() {
+    const f = this.items('face')[0];
+    if (f && f.kind !== 'plane') return planeSource(this.app, f);
+    if (f) return { kind: 'fixed', plane: this.plane() };
+    const p = PLANES[this.values.plane || 'xy'];
+    return { kind: 'fixed', plane: { origin: [0, 0, 0], normal: p.normal }, offset: this.values.offset || 0 };
+  }
+
   updateHandles() {
     this.app.showPlaneOverlay('tool-plane', this.plane());
   }
 
   async compute() {
     const body = this.app.doc.body(this.items('body')[0].bodyId);
-    return this.app.kernel.call('split', { id: body.shapeId, plane: this.plane() });
+    return this.app.kernel.call('split', { id: body.shapeId, plane: this.plane(), planeFrom: this.planeFrom() });
   }
 }
 
@@ -645,13 +729,19 @@ export class MirrorTool extends OpTool {
     return PLANES[this.values.plane || 'yz'];
   }
 
+  planeFrom() {
+    const f = this.items('face')[0];
+    if (f && f.kind !== 'plane') return planeSource(this.app, f);
+    return { kind: 'fixed', plane: this.plane() };
+  }
+
   updateHandles() {
     this.app.showPlaneOverlay('tool-plane', this.plane());
   }
 
   async compute() {
     const ids = this.items('bodies').map((it) => this.app.doc.body(it.bodyId).shapeId);
-    return this.app.kernel.call('mirror', { ids, plane: this.plane(), copy: this.values.copy !== false, union: !!this.values.union });
+    return this.app.kernel.call('mirror', { ids, plane: this.plane(), planeFrom: this.planeFrom(), copy: this.values.copy !== false, union: !!this.values.union });
   }
 }
 
@@ -783,8 +873,8 @@ export class ScaleTool extends OpTool {
         c = [(bb.min.x + bb.max.x) / 2, (bb.min.y + bb.max.y) / 2, (bb.min.z + bb.max.z) / 2];
         if (this.values.about === 'base') c[2] = bb.min.z;
       }
-      const m = [f, 0, 0, 0, 0, f, 0, 0, 0, 0, f, 0, c[0] * (1 - f), c[1] * (1 - f), c[2] * (1 - f), 1];
-      out.push(await app.kernel.call('transform', { ids: [body.shapeId], matrix: m }));
+      const scale = { factor: f, center: c };
+      out.push(await app.kernel.call('transform', { ids: [body.shapeId], matrix: scaleMatrix(scale), scale }));
     }
     return merge(out);
   }
@@ -861,6 +951,8 @@ export class DraftTool extends OpTool {
     const bodyId = faces[0].bodyId;
     if (faces.some((f) => f.bodyId !== bodyId)) throw new Error('Pick faces from a single body');
     const body = this.app.doc.body(bodyId);
-    return this.app.kernel.call('draft', { id: body.shapeId, faces: faces.map((f) => f.index), angle: this.values.angle, plane: this.plane() });
+    const n = this.items('neutral')[0];
+    const planeFrom = n ? planeSource(this.app, n) : { kind: 'fixed', plane: this.plane() };
+    return this.app.kernel.call('draft', { id: body.shapeId, faces: faces.map((f) => f.index), angle: this.values.angle, plane: this.plane(), planeFrom });
   }
 }

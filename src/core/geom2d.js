@@ -297,7 +297,8 @@ export function trimEntity(ent, at, others) {
     const hi = Math.min(1, ...ts.filter((t) => t > tc));
     const keep = [];
     if (lo * L > 1e-6) keep.push({ ...ent, b: lerp(ent.a, ent.b, lo) });
-    if ((1 - hi) * L > 1e-6) keep.push({ ...ent, id: undefined, a: lerp(ent.a, ent.b, hi) });
+    // The new piece remembers the curve it came from (for the design history).
+    if ((1 - hi) * L > 1e-6) keep.push({ ...ent, id: undefined, src: ent.src || ent.id, a: lerp(ent.a, ent.b, hi) });
     return { keep, removed: { type: 'line', a: lerp(ent.a, ent.b, lo), b: lerp(ent.a, ent.b, hi) } };
   }
   if (ent.type === 'circle') {
@@ -330,7 +331,7 @@ export function trimEntity(ent, at, others) {
     const hi = Math.min(s, ...ts.filter((t) => t > tc));
     const keep = [];
     if (lo * ent.r > 1e-6) keep.push({ ...ent, a1: normAngle(ent.a0 + lo) });
-    if ((s - hi) * ent.r > 1e-6) keep.push({ ...ent, id: undefined, a0: normAngle(ent.a0 + hi) });
+    if ((s - hi) * ent.r > 1e-6) keep.push({ ...ent, id: undefined, src: ent.src || ent.id, a0: normAngle(ent.a0 + hi) });
     return { keep, removed: { type: 'arc', c: ent.c, r: ent.r, a0: normAngle(ent.a0 + lo), a1: normAngle(ent.a0 + hi) } };
   }
   // Splines, ellipses and points are removed whole.

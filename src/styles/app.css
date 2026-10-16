@@ -2999,3 +2999,38 @@ svg.icon {
   padding: 0 10px;
   font-size: 12px;
 }
+
+/* ---- items panel: folders ------------------------------------------------ */
+.items-group.folder {
+  margin-top: 4px;
+  border-radius: 8px;
+}
+
+.item.folder-head {
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 500;
+  gap: 6px;
+}
+
+.folder-head .folder-icon {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.folder-head .folder-icon svg.icon {
+  width: 16px;
+  height: 16px;
+}
+
+.folder-items {
+  margin-left: 14px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border);
+}
+
+.items-group.drop-on {
+  background: var(--accent-soft);
+  outline: 1px dashed var(--accent);
+  outline-offset: -1px;
+}

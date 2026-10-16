@@ -203,7 +203,10 @@ export class TransformTool extends OpTool {
     if (bodies.length) {
       try {
         app.busy(true, 'Moving…');
-        result = await app.kernel.call('transform', { ids: bodies.map((b) => app.doc.body(b.bodyId).shapeId), matrix: m.elements, copy: !!this.values.copy });
+        const v = this.values;
+        // The values themselves too, so the step can be changed in History.
+        const move = { t: [v.x || 0, v.y || 0, v.z || 0], r: [v.rx || 0, v.ry || 0, v.rz || 0], pivot: this.pivot.toArray() };
+        result = await app.kernel.call('transform', { ids: bodies.map((b) => app.doc.body(b.bodyId).shapeId), matrix: m.elements, copy: !!this.values.copy, move });
       } catch (err) {
         toast(err.message, { type: 'error' });
         return;

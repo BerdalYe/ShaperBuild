@@ -6,11 +6,11 @@
 //   { $c: { sk, ent, plane, attach, snap } }         a sketch curve
 // so the step can run again after earlier steps or sketches change.
 import { faceSig, edgeSig, matchFace, matchEdge, pickRegion, hashString } from './refs.js';
-import { planeFrame } from './plane.js';
+import { planeFrame, to2D } from './plane.js';
 
 // Kernel operations recorded as replayable steps. Everything else that
 // makes bodies (imports) becomes a fixed "base" step.
-export const RECORDED = new Set(['extrude', 'revolve', 'sweep', 'loft', 'fillet', 'chamfer', 'shell', 'draft', 'boolean', 'split', 'transform', 'mirror', 'pattern', 'primitive', 'meshToSolid']);
+export const RECORDED = new Set(['extrude', 'revolve', 'sweep', 'loft', 'fillet', 'chamfer', 'shell', 'draft', 'boolean', 'split', 'transform', 'mirror', 'pattern', 'primitive', 'meshToSolid', 'emboss']);
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -51,9 +51,19 @@ export function symbolize(method, args, ctx) {
       const r = ctx.region(p.sketchId, p.index);
       if (!sk || !r) throw new Error('unknown region');
       const ents = r.entities || [];
-      return { type: 'region', $r: { sk: sk.id, ents, c: r.centroid, a: r.area, plane: sk.plane, attach: sk.attach || null, snap: sk.entities.filter((e) => ents.includes(e.id)) } };
+      const c2 = to2D(planeFrame(sk.plane), r.centroid);
+      return { type: 'region', $r: { sk: sk.id, ents, c: r.centroid, c2, a: r.area, plane: sk.plane, attach: sk.attach || null, snap: sk.entities.filter((e) => ents.includes(e.id)) } };
     });
   }
+  // Where a plane came from: a body face (follows the face), or a fixed
+  // plane. Either way it can be moved along its normal later.
+  if (a.planeFrom) {
+    const pf = a.planeFrom;
+    delete a.planeFrom;
+    if (pf.kind === 'face') a.planeRef = { $f: fRef(body(pf.id), pf.index), offset: 0 };
+    else a.planeRef = { base: pf.plane || a.plane, offset: pf.offset || 0 };
+  }
+  if (a.target && typeof a.target.id === 'string') a.target = { $f: fRef(body(a.target.id), a.target.face) };
   if (Array.isArray(a.path)) {
     a.path = a.path.map((p) => {
       if (p.type === 'edge') return { type: 'edge', $e: eRef(body(p.id), p.edge) };
@@ -115,13 +125,51 @@ function meshBodies(args) {
   return out;
 }
 
+// Ids of a sketch's curves, and of the curves Trim cut them from.
+function presentIds(sk) {
+  const ids = new Set();
+  for (const e of sk.entities) {
+    ids.add(e.id);
+    if (e.src) ids.add(e.src);
+  }
+  return ids;
+}
+
+// Curves of the sketch that outline a region reference: the curves it was
+// made with, and the pieces Trim cut from them.
+function lineageEntities(ref, sk) {
+  const want = new Set(ref.ents);
+  // Pieces keep the id of the first curve they were cut from.
+  for (const e of ref.snap || []) if (e.src && want.has(e.id)) want.add(e.src);
+  return sk.entities.filter((e) => !e.construction && (want.has(e.id) || (e.src && want.has(e.src))));
+}
+
+const allPresent = (ref, sk) => {
+  const ids = presentIds(sk);
+  return ref.ents.every((id) => ids.has(id));
+};
+
 // Curves a reference uses now: the sketch's current version, or the copy
 // kept with the step if the sketch (or curve) was deleted.
 export function effectiveEntities(ref, sketches) {
   const sk = ref.sk ? sketches.get(ref.sk) : null;
-  if (ref.ents) return ref.ents.map((id) => sk?.entities.find((e) => e.id === id) || ref.snap?.find((e) => e.id === id)).filter(Boolean);
+  if (ref.ents) {
+    if (!sk) return ref.snap || [];
+    const ids = presentIds(sk);
+    return [...lineageEntities(ref, sk), ...(ref.snap || []).filter((e) => !ids.has(e.id) && !(e.src && ids.has(e.src)))];
+  }
   const en = sk?.entities.find((e) => e.id === ref.ent);
   return [en || ref.snap].filter(Boolean);
+}
+
+// What a reference's result depends on (for the step keys). When some of
+// its curves were replaced, the region is looked for in the whole sketch.
+function refDeps(ref, sketches) {
+  if (!ref.ents) return effectiveEntities(ref, sketches);
+  const sk = ref.sk ? sketches.get(ref.sk) : null;
+  if (!sk) return ref.snap || [];
+  if (allPresent(ref, sk)) return lineageEntities(ref, sk);
+  return [sk.entities.filter((e) => !e.construction), ref.snap || []];
 }
 
 const STRIP = new Set(['error', 'snap', 'label']);
@@ -130,7 +178,7 @@ const STRIP = new Set(['error', 'snap', 'label']);
 // before it. Sketch edits change the key of steps that use the sketch.
 export function featureKey(prev, f, sketches) {
   const own = JSON.stringify(f, (k, v) => (STRIP.has(k) ? undefined : v));
-  const deps = sketchRefs(f).map(({ r, c }) => effectiveEntities(r || c, sketches));
+  const deps = sketchRefs(f).map(({ r, c }) => refDeps(r || c, sketches));
   return hashString(`${prev}|${own}|${JSON.stringify(deps)}`);
 }
 
@@ -184,21 +232,33 @@ async function regionsOf(rc, plane, entities) {
 }
 
 async function resolveRegion(ref, rc) {
-  const entities = effectiveEntities(ref, rc.sketches);
-  if (!entities.length) throw new Error('the sketch shape it uses is gone');
   const plane = placedPlane(ref, rc);
-  const normal = planeFrame(plane).n;
-  // The region made by the curves it was outlined with...
-  let { id, regions } = await regionsOf(rc, plane, entities);
-  let i = pickRegion(ref, regions);
-  // ...or, if curves were split or replaced, the best match in the whole sketch.
+  const frame = planeFrame(plane);
   const sk = ref.sk ? rc.sketches.get(ref.sk) : null;
-  if (i < 0 && sk) {
-    ({ id, regions } = await regionsOf(rc, plane, sk.entities.filter((e) => !e.construction)));
-    i = pickRegion(ref, regions);
+  // Pieces cut by Trim count as the curve they came from.
+  const srcOf = new Map();
+  for (const e of [...(sk?.entities || []), ...(ref.snap || [])]) if (e.src) srcOf.set(e.id, e.src);
+  const root = (id) => srcOf.get(id) || id;
+  const want = { ...ref, ents: [...new Set((ref.ents || []).map(root))] };
+  const opts = { origin: root, at: (r) => (r.centroid ? to2D(frame, r.centroid) : null) };
+  const attempt = async (entities, geometric) => {
+    if (!entities.length) return null;
+    const { id, regions } = await regionsOf(rc, plane, entities);
+    const i = pickRegion(want, regions, { ...opts, geometric });
+    return i >= 0 ? { type: 'region', sketchId: id, index: regions[i].index, normal: frame.n } : null;
+  };
+  let out = null;
+  if (sk) {
+    // The region made by the curves it was outlined with (unrelated new
+    // curves in the sketch do not change it)...
+    if (allPresent(ref, sk)) out = await attempt(lineageEntities(ref, sk), false);
+    // ...or, if curves were replaced or cut, the best match in the whole sketch.
+    if (!out) out = await attempt(sk.entities.filter((e) => !e.construction), true);
   }
-  if (i < 0) throw new Error('the sketch shape it uses is no longer closed');
-  return { type: 'region', sketchId: id, index: regions[i].index, normal };
+  // The copy of its curves kept with the step.
+  if (!out) out = await attempt(effectiveEntities(ref, rc.sketches), true);
+  if (!out) throw new Error(sk || ref.snap?.length ? 'the sketch shape it uses is no longer closed' : 'the sketch shape it uses is gone');
+  return out;
 }
 
 export async function resolveArgs(sym, rc) {
@@ -229,6 +289,21 @@ export async function resolveArgs(sym, rc) {
     for (const p of a.profiles) out.push(p.$r ? await resolveRegion(p.$r, rc) : { type: 'face', id: shape(p.$f.b), face: face(p.$f) });
     a.profiles = out;
   }
+  if (a.planeRef) {
+    const pr = a.planeRef;
+    let base = pr.base;
+    if (pr.$f) {
+      const m = meshFor(rc, pr.$f.b);
+      const info = m.faceInfo[face(pr.$f)];
+      if (info.type !== 'plane') throw new Error('the face it used is no longer flat');
+      base = { origin: info.center, normal: info.normal };
+    }
+    const n = planeFrame(base).n;
+    const o = pr.offset || 0;
+    a.plane = { ...base, origin: base.origin.map((v, i) => v + n[i] * o) };
+    delete a.planeRef;
+  }
+  if (a.target?.$f) a.target = { id: shape(a.target.$f.b), face: face(a.target.$f) };
   if (Array.isArray(a.path)) {
     a.path = a.path.map((p) => {
       if (p.$e) return { type: 'edge', id: shape(p.$e.b), edge: edge(p.$e) };
@@ -281,38 +356,114 @@ export async function runFeature(f, rc) {
 
 // ---- editing ---------------------------------------------------------------
 
-// Numbers a step lets you change: [argument, kind, label].
+// Matrix (column-major, like three.js) of a move: rotate around `pivot`
+// (degrees, X then Y then Z like three.js 'XYZ'), then move by `t`.
+export function moveMatrix({ t = [0, 0, 0], r = [0, 0, 0], pivot = [0, 0, 0] }) {
+  const [x, y, z] = r.map((v) => (v * Math.PI) / 180);
+  const a = Math.cos(x);
+  const b = Math.sin(x);
+  const c = Math.cos(y);
+  const d = Math.sin(y);
+  const e = Math.cos(z);
+  const f = Math.sin(z);
+  const R = [
+    [c * e, -c * f, d],
+    [a * f + b * e * d, a * e - b * f * d, -b * c],
+    [b * f - a * e * d, b * e + a * f * d, a * c],
+  ];
+  const tr = [0, 1, 2].map((i) => pivot[i] + t[i] - (R[i][0] * pivot[0] + R[i][1] * pivot[1] + R[i][2] * pivot[2]));
+  return [R[0][0], R[1][0], R[2][0], 0, R[0][1], R[1][1], R[2][1], 0, R[0][2], R[1][2], R[2][2], 0, tr[0], tr[1], tr[2], 1];
+}
+
+// Matrix of a uniform scale around `center`.
+export function scaleMatrix({ factor, center = [0, 0, 0] }) {
+  const f = factor;
+  return [f, 0, 0, 0, 0, f, 0, 0, 0, 0, f, 0, center[0] * (1 - f), center[1] * (1 - f), center[2] * (1 - f), 1];
+}
+
+// Numbers a step lets you change: [argument path, kind, label, check].
+// check: 'positive' (> 0), 'nonzero', 'any'; counts are whole numbers ≥ 2.
 const PARAMS = {
   extrude: [
-    ['distance', 'length', 'Distance'],
+    ['distance', 'length', 'Distance', 'nonzero'],
     ['symmetric', 'toggle', 'Both directions'],
   ],
-  revolve: [['angle', 'angle', 'Angle']],
-  fillet: [['radius', 'length', 'Radius']],
-  chamfer: [['distance', 'length', 'Distance']],
-  shell: [['thickness', 'length', 'Wall thickness']],
-  draft: [['angle', 'angle', 'Angle']],
+  revolve: [['angle', 'angle', 'Angle', 'nonzero']],
+  sweep: [
+    ['twist', 'angle', 'Twist', 'any'],
+    ['endScale', 'number', 'Size at the end', 'positive'],
+  ],
+  fillet: [['radius', 'length', 'Radius', 'positive']],
+  chamfer: [['distance', 'length', 'Distance', 'positive']],
+  shell: [['thickness', 'length', 'Wall thickness', 'positive']],
+  draft: [
+    ['angle', 'angle', 'Angle', 'nonzero'],
+    ['planeRef.offset', 'length', 'Fixed plane offset', 'any'],
+  ],
+  split: [['planeRef.offset', 'length', 'Cut plane offset', 'any']],
+  mirror: [
+    ['planeRef.offset', 'length', 'Mirror plane offset', 'any'],
+    ['copy', 'toggle', 'Keep the original'],
+    ['union', 'toggle', 'Join copy and original'],
+  ],
+  emboss: [['height', 'length', 'Height (minus engraves)', 'nonzero']],
+  pattern: [
+    ['count', 'count', 'Copies'],
+    ['spacing', 'length', 'Spacing', 'nonzero'],
+    ['angle', 'angle', 'Total angle', 'nonzero'],
+    ['union', 'toggle', 'Join copies'],
+  ],
+  transform: [
+    ['move.t.0', 'length', 'Move X', 'any'],
+    ['move.t.1', 'length', 'Move Y', 'any'],
+    ['move.t.2', 'length', 'Move Z', 'any'],
+    ['move.r.0', 'angle', 'Rotate X', 'any'],
+    ['move.r.1', 'angle', 'Rotate Y', 'any'],
+    ['move.r.2', 'angle', 'Rotate Z', 'any'],
+    ['scale.factor', 'number', 'Scale factor', 'positive'],
+    ['copy', 'toggle', 'Make a copy'],
+  ],
 };
 const PRIMITIVE_LABELS = { width: 'Width', depth: 'Depth', height: 'Height', radius: 'Radius', topRadius: 'Top radius', major: 'Ring radius', minor: 'Tube radius' };
 
-// Editable values of a step: [{ key, type, label, value }]. Keys of
-// primitive sizes are "params.<name>".
+function getPath(obj, path) {
+  let v = obj;
+  for (const k of path.split('.')) {
+    if (v == null || typeof v !== 'object' || !(k in v)) return undefined;
+    v = v[k];
+  }
+  return v;
+}
+
+function setPath(obj, path, value) {
+  const ks = path.split('.');
+  let v = obj;
+  for (const k of ks.slice(0, -1)) {
+    if (v == null || typeof v !== 'object' || !(k in v)) return false;
+    v = v[k];
+  }
+  if (v == null || typeof v !== 'object' || !(ks.at(-1) in v)) return false;
+  v[ks.at(-1)] = value;
+  return true;
+}
+
+// Editable values of a step: [{ key, type, label, value, check }]. Keys are
+// argument paths, e.g. "distance", "params.width" or "move.t.0".
 export function editableParams(f) {
   const call = f.calls?.[0];
   if (!call) return [];
   const a = call.args;
-  if (call.method === 'pattern') {
-    const out = [{ key: 'count', type: 'count', label: 'Copies', value: a.count }];
-    if (a.kind === 'circular') out.push({ key: 'angle', type: 'angle', label: 'Total angle', value: a.angle });
-    else out.push({ key: 'spacing', type: 'length', label: 'Spacing', value: a.spacing });
-    return out;
-  }
   if (call.method === 'primitive') {
     return Object.entries(a.params || {})
       .filter(([, v]) => typeof v === 'number')
-      .map(([k, v]) => ({ key: `params.${k}`, type: 'length', label: PRIMITIVE_LABELS[k] || k, value: v }));
+      .map(([k, v]) => ({ key: `params.${k}`, type: 'length', label: PRIMITIVE_LABELS[k] || k, value: v, check: 'positive' }));
   }
-  return (PARAMS[call.method] || []).filter(([k]) => k in a).map(([key, type, label]) => ({ key, type, label, value: a[key] }));
+  // A plain copy (Duplicate) has nothing to change.
+  if (call.method === 'transform' && !a.move && !a.scale) return [];
+  return (PARAMS[call.method] || [])
+    .filter(([key]) => getPath(a, key) !== undefined)
+    .filter(([key]) => !(call.method === 'pattern' && key === (a.kind === 'circular' ? 'spacing' : 'angle')))
+    .map(([key, type, label, check]) => ({ key, type, label, value: getPath(a, key), check: check || (type === 'count' ? 'count' : 'any') }));
 }
 
 // A copy of the step with new values (applied to every call of the step).
@@ -321,11 +472,10 @@ export function withParams(f, values) {
     ...f,
     calls: f.calls.map((c) => {
       const args = clone(c.args);
-      for (const [k, v] of Object.entries(values)) {
-        if (k.startsWith('params.')) {
-          if (args.params) args.params[k.slice(7)] = v;
-        } else if (k in args) args[k] = v;
-      }
+      for (const [k, v] of Object.entries(values)) setPath(args, k, v);
+      // Values that a matrix is made from.
+      if (args.move) args.matrix = moveMatrix(args.move);
+      if (args.scale) args.matrix = scaleMatrix(args.scale);
       return { ...c, args };
     }),
   };
@@ -333,11 +483,22 @@ export function withParams(f, values) {
 
 // Short description of a step's main value, e.g. "20 mm".
 export function stepSummary(f, fmtLength) {
-  const p = editableParams(f);
+  const call = f.calls?.[0];
+  const a = call?.args;
+  if (call?.method === 'transform' && a.move) {
+    const d = Math.hypot(...a.move.t);
+    const rot = Math.max(...a.move.r.map(Math.abs));
+    if (d > 1e-9) return fmtLength(d);
+    if (rot > 1e-9) return `${+rot.toFixed(2)}°`;
+    return '';
+  }
+  if (call?.method === 'transform' && a.scale) return `× ${+(+a.scale.factor).toFixed(4)}`;
+  const p = editableParams(f).filter((x) => x.type !== 'toggle');
   if (!p.length) return '';
   const v = p[0];
   if (v.type === 'length') return fmtLength(v.value);
   if (v.type === 'angle') return `${+(+v.value).toFixed(2)}°`;
   if (v.type === 'count') return `× ${v.value}`;
+  if (v.type === 'number') return `${+(+v.value).toFixed(4)}`;
   return '';
 }

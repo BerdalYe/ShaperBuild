@@ -41,8 +41,16 @@ export class ItemsPanel {
       t.addEventListener('click', () => this.setTab(key));
       tabs.append(t);
     }
-    if (this.tab === 'history') showAll.hidden = true;
-    const head = h('div.items-head', tabs, h('span.ih-actions', showAll, hide));
+    const newFolder = h('button.ih-btn', { title: 'New folder (puts the selected items in it)', html: icon('folder2') });
+    newFolder.dataset.action = 'new-folder';
+    newFolder.addEventListener('click', () => {
+      const picked = app.selection.list.filter((it) => ['body', 'sketch', 'plane', 'image'].includes(it.kind));
+      const id = app.cmd.newFolder(picked);
+      this.renaming = id;
+      this.render();
+    });
+    if (this.tab === 'history') showAll.hidden = newFolder.hidden = true;
+    const head = h('div.items-head', tabs, h('span.ih-actions', newFolder, showAll, hide));
     const scroll = h('div.items-scroll');
     if (this.tab === 'history') {
       this.historyList.render(scroll);
@@ -53,12 +61,14 @@ export class ItemsPanel {
     }
     const q = this.query.trim().toLowerCase();
     const match = (x) => !q || x.name.toLowerCase().includes(q);
-    const solids = doc.bodies.filter((b) => b.kind !== 'mesh');
-    const meshes = doc.bodies.filter((b) => b.kind === 'mesh');
-    const sketches = doc.sketches;
-    const planes = doc.planes;
-    const images = doc.images;
-    const total = doc.bodies.length + sketches.length + planes.length + images.length;
+    // Items in a folder are listed in it, not in the groups below.
+    const loose = (x) => !x.folder || !doc.folder(x.folder);
+    const solids = doc.bodies.filter((b) => b.kind !== 'mesh' && loose(b));
+    const meshes = doc.bodies.filter((b) => b.kind === 'mesh' && loose(b));
+    const sketches = doc.sketches.filter(loose);
+    const planes = doc.planes.filter(loose);
+    const images = doc.images.filter(loose);
+    const total = doc.bodies.length + doc.sketches.length + doc.planes.length + doc.images.length;
 
     if (total > 6 || q) {
       const inp = h('input.items-filter', { type: 'text', placeholder: 'Find items', value: this.query, spellcheck: false });
@@ -81,6 +91,10 @@ export class ItemsPanel {
           inp.setSelectionRange(inp.value.length, inp.value.length);
         });
     }
+    for (const f of doc.folders) {
+      const g = this.folderGroup(f, q, match);
+      if (g) scroll.append(g);
+    }
     scroll.append(this.group('bodies', 'Bodies', solids, 'body', () => solids.filter(match).map((b) => this.bodyRow(b))));
     if (meshes.length) scroll.append(this.group('meshes', 'Meshes', meshes, 'body', () => meshes.filter(match).map((b) => this.bodyRow(b))));
     scroll.append(this.group('sketches', 'Sketches', sketches, 'sketch', () => sketches.filter(match).map((s) => this.sketchRow(s))));
@@ -94,8 +108,10 @@ export class ItemsPanel {
       );
     }
     const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+    const nSolids = doc.bodies.filter((b) => b.kind !== 'mesh').length;
+    const nMeshes = doc.bodies.length - nSolids;
     const foot = h('div.items-foot', {
-      text: total ? `${n(solids.length, 'body', 'bodies')} · ${meshes.length ? `${n(meshes.length, 'mesh', 'meshes')} · ` : ''}${n(sketches.length, 'sketch', 'sketches')}${planes.length ? ` · ${n(planes.length, 'plane', 'planes')}` : ''}${images.length ? ` · ${n(images.length, 'image', 'images')}` : ''} — double-click a name to rename` : 'Tip: right-click an item for more options',
+      text: total ? `${n(nSolids, 'body', 'bodies')} · ${nMeshes ? `${n(nMeshes, 'mesh', 'meshes')} · ` : ''}${n(doc.sketches.length, 'sketch', 'sketches')}${doc.planes.length ? ` · ${n(doc.planes.length, 'plane', 'planes')}` : ''}${doc.images.length ? ` · ${n(doc.images.length, 'image', 'images')}` : ''} — double-click a name to rename, drag items into folders` : 'Tip: right-click an item for more options',
     });
     this.el.append(head, scroll, foot);
     scroll.querySelector('.item.selected')?.scrollIntoView({ block: 'nearest' });
@@ -123,13 +139,147 @@ export class ItemsPanel {
       this.collapsed[key] = !this.collapsed[key];
       this.render();
     });
+    // Dropping items here takes them out of their folder.
+    this.dropTarget(g, null);
     g.append(head);
     if (!this.collapsed[key]) {
       const r = rows();
+      const doc = this.app.doc;
+      const all = { bodies: doc.bodies.filter((b) => b.kind !== 'mesh'), sketches: doc.sketches }[key];
       if (r.length) g.append(...r);
-      else if (!list.length && this.app.doc.bodies.length + this.app.doc.sketches.length) g.append(h('div.items-none', { text: { bodies: 'No bodies yet — extrude a sketch or add a shape.', sketches: 'No sketches yet — draw with the sketch tools.', meshes: '' }[key] }));
+      else if (all && !all.length && doc.bodies.length + doc.sketches.length) g.append(h('div.items-none', { text: { bodies: 'No bodies yet — extrude a sketch or add a shape.', sketches: 'No sketches yet — draw with the sketch tools.' }[key] }));
     }
     return g;
+  }
+
+  // ---- folders ---------------------------------------------------------------
+
+  folderGroup(f, q, match) {
+    const app = this.app;
+    const doc = app.doc;
+    const inside = (x) => x.folder === f.id;
+    const content = [
+      ...doc.bodies.filter(inside).map((x) => ({ x, row: () => this.bodyRow(x) })),
+      ...doc.sketches.filter(inside).map((x) => ({ x, row: () => this.sketchRow(x) })),
+      ...doc.planes.filter(inside).map((x) => ({ x, row: () => this.refRow('plane', x) })),
+      ...doc.images.filter(inside).map((x) => ({ x, row: () => this.refRow('image', x) })),
+    ];
+    const nameHit = !q || f.name.toLowerCase().includes(q);
+    const shown = nameHit ? content : content.filter((c) => match(c.x));
+    if (q && !shown.length && !nameHit) return null;
+    const key = `folder:${f.id}`;
+    const g = h('div.items-group.folder');
+    g.dataset.folder = f.id;
+    const head = h('div.item.folder-head');
+    const chevron = h('span.ig-chev', { html: icon(this.collapsed[key] ? 'chevron' : 'chevronDown') });
+    const ic = h('span.folder-icon', { html: icon('folder') });
+    const allHidden = content.length > 0 && content.every((c) => c.x.visible === false);
+    const eye = h(`button.item-btn${allHidden ? '.on' : ''}`, { title: allHidden ? 'Show everything in this folder' : 'Hide everything in this folder', html: icon(allHidden ? 'eyeOff' : 'eye') });
+    eye.hidden = !content.length;
+    eye.addEventListener('click', (e) => {
+      e.stopPropagation();
+      app.cmd.setFolderVisible(f.id, allHidden);
+    });
+    const more = h('button.item-btn', { title: 'More', html: icon('more') });
+    more.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.folderMenu(e, f);
+    });
+    head.append(chevron, ic, this.nameEl(f, 'folder'), h('span.tag', { text: String(content.length), title: 'Items in this folder' }), eye, more);
+    head.addEventListener('click', () => {
+      if (this.renaming === f.id) return;
+      this.collapsed[key] = !this.collapsed[key];
+      this.render();
+    });
+    head.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      this.renaming = f.id;
+      this.render();
+    });
+    head.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      this.folderMenu(e, f);
+    });
+    this.dropTarget(g, f.id);
+    g.append(head);
+    if (!this.collapsed[key]) {
+      const box = h('div.folder-items');
+      if (shown.length) box.append(...shown.map((c) => c.row()));
+      else box.append(h('div.items-none', { text: 'Empty — drag items here, or right-click an item → Move to folder.' }));
+      g.append(box);
+    }
+    return g;
+  }
+
+  folderMenu(e, f) {
+    const app = this.app;
+    const cmd = app.cmd;
+    const items = cmd.folderItems(f.id);
+    const hidden = items.length && cmd.folderTargets(items).every(({ kind, id }) => (kind === 'body' ? app.doc.body(id) : kind === 'sketch' ? app.doc.sketch(id) : kind === 'plane' ? app.doc.plane(id) : app.doc.image(id))?.visible === false);
+    showMenu(e.clientX, e.clientY, [
+      { label: 'Rename', icon: 'sketch', action: () => ((this.renaming = f.id), this.render()) },
+      items.length && { label: 'Select everything in it', icon: 'select', action: () => app.selection.set(items) },
+      items.length && { label: hidden ? 'Show everything in it' : 'Hide everything in it', icon: hidden ? 'eye' : 'eyeOff', action: () => cmd.setFolderVisible(f.id, !!hidden) },
+      '-',
+      { label: 'Delete folder (keep what is in it)', icon: 'folder', action: () => cmd.deleteFolder(f.id) },
+      items.length && { label: 'Delete folder and everything in it', icon: 'trash', danger: true, action: () => cmd.deleteFolder(f.id, { contents: true }) },
+    ].filter(Boolean));
+  }
+
+  // Menu to move items (the selection, if the item is part of it) to a folder.
+  moveMenu(e, item, current) {
+    const app = this.app;
+    const sel = app.selection;
+    const items = sel.has(item) && sel.size > 1 ? sel.list : [item];
+    const entries = app.doc.folders.filter((f) => f.id !== current).map((f) => ({ label: f.name, icon: 'folder', action: () => app.cmd.moveToFolder(items, f.id) }));
+    if (entries.length) entries.push('-');
+    entries.push({
+      label: 'New folder',
+      icon: 'folder2',
+      action: () => {
+        this.renaming = app.cmd.newFolder(items);
+        this.render();
+      },
+    });
+    if (current) entries.push({ label: 'Take out of folder', icon: 'close', action: () => app.cmd.moveToFolder(items, null) });
+    showMenu(e.clientX, e.clientY, entries);
+  }
+
+  // Rows can be dragged onto folders (the whole selection if the row is in it).
+  draggable(row, item) {
+    row.draggable = true;
+    row.addEventListener('dragstart', (e) => {
+      const sel = this.app.selection;
+      this.dragging = sel.has(item) && sel.size > 1 ? sel.list : [item];
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', 'shaperbuild-items');
+    });
+    row.addEventListener('dragend', () => {
+      this.dragging = null;
+      this.el.querySelectorAll('.drop-on').forEach((x) => x.classList.remove('drop-on'));
+    });
+  }
+
+  dropTarget(el, folderId) {
+    el.addEventListener('dragover', (e) => {
+      if (!this.dragging) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'move';
+      el.classList.add('drop-on');
+    });
+    el.addEventListener('dragleave', (e) => {
+      if (!el.contains(e.relatedTarget)) el.classList.remove('drop-on');
+    });
+    el.addEventListener('drop', (e) => {
+      if (!this.dragging) return;
+      e.preventDefault();
+      e.stopPropagation();
+      el.classList.remove('drop-on');
+      const items = this.dragging;
+      this.dragging = null;
+      this.app.cmd.moveToFolder(items, folderId);
+    });
   }
 
   nameEl(item, kind) {
@@ -182,6 +332,7 @@ export class ItemsPanel {
     });
     row.append(swatch, kindIcon, this.nameEl(b, 'body'));
     row.append(eye, more);
+    if (this.renaming !== b.id) this.draggable(row, { kind: 'body', bodyId: b.id });
     row.addEventListener('click', (e) => this.select({ kind: 'body', bodyId: b.id }, e));
     row.addEventListener('dblclick', () => {
       this.renaming = b.id;
@@ -213,6 +364,7 @@ export class ItemsPanel {
       this.sketchMenu(e, s);
     });
     row.append(ic, this.nameEl(s, 'sketch'), h('span.tag', { text: `${s.entities.length} curve${s.entities.length === 1 ? '' : 's'}`, title: 'Curves in this sketch' }), eye, more);
+    if (this.renaming !== s.id) this.draggable(row, { kind: 'sketch', sketchId: s.id });
     row.addEventListener('click', (e) => this.select({ kind: 'sketch', sketchId: s.id }, e));
     row.addEventListener('dblclick', () => {
       this.renaming = s.id;
@@ -247,6 +399,7 @@ export class ItemsPanel {
         { label: 'Look at', icon: 'lookAt', action: () => app.vp.lookAtPlane(p.plane) },
         { label: 'Move…', icon: 'move', action: () => (app.selection.set([item]), app.tools.activate('move', { force: true })) },
         { label: p.visible === false ? 'Show' : 'Hide', icon: p.visible === false ? 'eye' : 'eyeOff', action: () => app.cmd.setVisible(kind, p.id, p.visible === false) },
+        { label: 'Move to folder…', icon: 'folder', action: () => this.moveMenu(e, item, p.folder) },
         '-',
         { label: 'Delete', icon: 'trash', danger: true, action: () => app.cmd.deleteItems([item]) },
       ]);
@@ -255,6 +408,7 @@ export class ItemsPanel {
       menu(e);
     });
     row.append(ic, this.nameEl(p, kind), eye, more);
+    if (this.renaming !== p.id) this.draggable(row, item);
     row.addEventListener('click', (e) => this.select(item, e));
     row.addEventListener('dblclick', () => {
       this.renaming = p.id;
@@ -298,6 +452,7 @@ export class ItemsPanel {
       { label: b.visible === false ? 'Show' : 'Hide', icon: b.visible === false ? 'eye' : 'eyeOff', action: () => cmd.setVisible('body', b.id, b.visible === false) },
       { label: 'Show only this', icon: 'eye', action: () => cmd.isolate(b.id) },
       { label: 'Colour…', icon: 'color', action: () => this.colorMenu(e, [b.id]) },
+      { label: 'Move to folder…', icon: 'folder', action: () => this.moveMenu(e, { kind: 'body', bodyId: b.id }, b.folder) },
       '-',
     ];
     if (b.kind === 'mesh') items.push({ label: 'Convert to solid', icon: 'convert', action: () => cmd.convertToSolid([b.id]) });
@@ -324,6 +479,7 @@ export class ItemsPanel {
         },
       },
       { label: s.visible === false ? 'Show' : 'Hide', icon: s.visible === false ? 'eye' : 'eyeOff', action: () => cmd.setVisible('sketch', s.id, s.visible === false) },
+      { label: 'Move to folder…', icon: 'folder', action: () => this.moveMenu(e, { kind: 'sketch', sketchId: s.id }, s.folder) },
       '-',
       { label: 'Delete', icon: 'trash', danger: true, action: () => cmd.deleteItems([{ kind: 'sketch', sketchId: s.id }]) },
     ]);

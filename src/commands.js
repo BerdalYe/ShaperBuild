@@ -170,7 +170,7 @@ export class Commands {
           outIds.push(byShape.get(r.replaces).id);
         } else {
           const src = r.from ? byShape.get(r.from) : null;
-          const nb = d.addBody({ shapeId: r.id, kind, color: src?.color ?? null, ...(opts.newBody || {}) });
+          const nb = d.addBody({ shapeId: r.id, kind, color: src?.color ?? null, ...(src?.folder ? { folder: src.folder } : {}), ...(opts.newBody || {}) });
           created.push(nb.id);
           outIds.push(nb.id);
         }
@@ -256,6 +256,65 @@ export class Commands {
     }
   }
 
+  // ---- folders ---------------------------------------------------------------
+
+  // Selection entries that can go in a folder, as { kind, id }.
+  folderTargets(items) {
+    const out = new Map();
+    for (const it of items) {
+      const pair =
+        it.kind === 'body' || it.kind === 'face' || it.kind === 'edge' ? ['body', it.bodyId] : it.kind === 'sketch' || it.kind === 'region' || it.kind === 'curve' ? ['sketch', it.sketchId] : it.kind === 'plane' ? ['plane', it.planeId] : it.kind === 'image' ? ['image', it.imageId] : null;
+      if (pair?.[1]) out.set(pair.join(':'), { kind: pair[0], id: pair[1] });
+    }
+    return [...out.values()];
+  }
+
+  // What is in a folder, as selection entries.
+  folderItems(folderId) {
+    const doc = this.doc;
+    return [
+      ...doc.bodies.filter((x) => x.folder === folderId).map((x) => ({ kind: 'body', bodyId: x.id })),
+      ...doc.sketches.filter((x) => x.folder === folderId).map((x) => ({ kind: 'sketch', sketchId: x.id })),
+      ...doc.planes.filter((x) => x.folder === folderId).map((x) => ({ kind: 'plane', planeId: x.id })),
+      ...doc.images.filter((x) => x.folder === folderId).map((x) => ({ kind: 'image', imageId: x.id })),
+    ];
+  }
+
+  // A new folder, holding `items` if given. Returns its id.
+  newFolder(items = []) {
+    let id = null;
+    this.doc.apply('New folder', (d) => {
+      id = d.addFolder().id;
+      for (const t of this.folderTargets(items)) updateItem(d, t.kind, t.id, { folder: id });
+    });
+    return id;
+  }
+
+  // Put items in a folder (or take them out with folderId = null).
+  moveToFolder(items, folderId) {
+    const targets = this.folderTargets(items);
+    if (!targets.length) return;
+    const name = folderId ? this.doc.folder(folderId)?.name : null;
+    this.doc.apply(folderId ? `Move to ${name || 'folder'}` : 'Take out of folder', (d) => {
+      for (const t of targets) updateItem(d, t.kind, t.id, { folder: folderId || null });
+    });
+  }
+
+  renameFolder(id, name) {
+    this.doc.apply('Rename folder', (d) => d.updateFolder(id, { name }));
+  }
+
+  // Delete a folder; with `contents`, also everything in it.
+  deleteFolder(id, { contents = false } = {}) {
+    if (contents) this.deleteItems(this.folderItems(id), { also: (d) => d.removeFolder(id), label: 'Delete folder' });
+    else this.doc.apply('Delete folder', (d) => d.removeFolder(id));
+  }
+
+  setFolderVisible(id, visible) {
+    const items = this.folderTargets(this.folderItems(id));
+    this.setVisibleMany(items, visible);
+  }
+
   isolate(bodyId) {
     this.doc.apply('Show only', (d) => {
       for (const b of d.bodies) d.updateBody(b.id, { visible: b.id === bodyId });
@@ -311,7 +370,8 @@ export class Commands {
   }
 
   // Delete bodies, sketches or sketch curves. Faces/edges delete their body.
-  deleteItems(items) {
+  // opts.also(d): more changes in the same undo step; opts.label.
+  deleteItems(items, opts = {}) {
     const bodies = new Set();
     const sketches = new Set();
     const planes = new Set();
@@ -336,9 +396,10 @@ export class Commands {
       else if (it.kind === 'plane') planes.add(it.planeId);
       else if (it.kind === 'image') images.add(it.imageId);
     }
-    if (!bodies.size && !sketches.size && !curves.size && !planes.size && !images.size) return;
+    if (!bodies.size && !sketches.size && !curves.size && !planes.size && !images.size && !opts.also) return;
     const history = this.app.history;
-    this.doc.apply('Delete', (d) => {
+    this.doc.apply(opts.label || 'Delete', (d) => {
+      opts.also?.(d);
       // Steps that use deleted sketch curves keep their current shape.
       history.keepSketchShapes(d, [...sketches, ...curves.keys()]);
       for (const id of planes) d.removePlane(id);
@@ -416,6 +477,7 @@ export function transformPlane(plane, m) {
 // Patch a body, sketch, plane or image by kind.
 function updateItem(d, kind, id, patch) {
   if (kind === 'body') return d.updateBody(id, patch);
+  if (kind === 'folder') return d.updateFolder(id, patch);
   if (kind === 'plane') return d.updatePlane(id, patch);
   if (kind === 'image') return d.updateImage(id, patch);
   return d.updateSketch(id, patch);

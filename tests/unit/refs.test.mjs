@@ -57,3 +57,31 @@ test('step keys change only when something the step uses changes', () => {
   assert.equal(hashString('abc'), hashString('abc'));
   assert.notEqual(hashString('abc'), hashString('abd'));
 });
+
+test('move matrices match the Move tool (three.js)', async () => {
+  const THREE = await import('three');
+  const { moveMatrix, scaleMatrix } = await import('../../src/core/replay.js');
+  const move = { t: [3, -4, 5], r: [10, 20, 30], pivot: [1, 2, 3] };
+  const DEG = Math.PI / 180;
+  const pivot = new THREE.Vector3(...move.pivot);
+  const pos = pivot.clone().add(new THREE.Vector3(...move.t));
+  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(10 * DEG, 20 * DEG, 30 * DEG, 'XYZ'));
+  const m = new THREE.Matrix4().compose(pos, q, new THREE.Vector3(1, 1, 1)).multiply(new THREE.Matrix4().makeTranslation(-1, -2, -3));
+  moveMatrix(move).forEach((v, i) => assert.ok(Math.abs(v - m.elements[i]) < 1e-9, `element ${i}`));
+  const s = scaleMatrix({ factor: 2, center: [1, 1, 1] });
+  assert.deepEqual([s[0], s[12], s[13], s[14]], [2, -1, -1, -1]);
+});
+
+test('Trim keeps track of the curve a piece came from', async () => {
+  const { trimEntity } = await import('../../src/core/geom2d.js');
+  const line = { id: 'e1', type: 'line', a: [0, 0], b: [10, 0] };
+  const cut = { id: 'e2', type: 'line', a: [5, -1], b: [5, 1] };
+  const cut2 = { id: 'e3', type: 'line', a: [7, -1], b: [7, 1] };
+  const { keep } = trimEntity(line, [6, 0], [line, cut, cut2]);
+  assert.equal(keep[0].id, 'e1');
+  assert.equal(keep[1].id, undefined);
+  assert.equal(keep[1].src, 'e1');
+  // Cutting a piece again still points at the first curve.
+  const again = trimEntity({ ...keep[1], id: 'e9' }, [9, 0], [cut2, { id: 'e4', type: 'line', a: [8, -1], b: [8, 1] }]);
+  assert.equal(again.keep.find((e) => !e.id)?.src ?? 'e1', 'e1');
+});

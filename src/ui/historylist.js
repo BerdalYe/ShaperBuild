@@ -23,7 +23,7 @@ function stepIcon(f) {
     case 'pattern':
       return c.args.kind === 'circular' ? 'patternCircular' : 'patternLinear';
     case 'transform':
-      return c.args.copy ? 'duplicate' : 'move';
+      return c.args.scale ? 'scale' : c.args.copy ? 'duplicate' : 'move';
     case 'meshToSolid':
       return 'convert';
     default:
@@ -209,9 +209,10 @@ export class HistoryList {
     const valid = (v) => {
       if (!Number.isFinite(v)) return false;
       if (p.type === 'count') return v >= 2 && v <= 500;
-      if (p.key === 'distance' && p.label === 'Distance') return Math.abs(v) > 1e-6;
-      if (p.type === 'angle') return Math.abs(v) > 1e-6 && Math.abs(v) <= 360;
-      return v > 1e-6;
+      if (p.type === 'angle' && p.check !== 'any' && Math.abs(v) > 360) return false;
+      if (p.check === 'nonzero') return Math.abs(v) > 1e-6;
+      if (p.check === 'positive') return v > 1e-6;
+      return true;
     };
     const apply = () => {
       const v = parse();
