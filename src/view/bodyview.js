@@ -239,6 +239,17 @@ export class BodyView {
     this.material.needsUpdate = true;
   }
 
+  // See-through faces so hidden edges and inner parts show.
+  setXray(on) {
+    const m = this.material;
+    m.transparent = on;
+    m.opacity = on ? 0.22 : 1;
+    m.depthWrite = !on;
+    this.mesh.castShadow = !on;
+    this.mesh.renderOrder = on ? 1 : 0;
+    m.needsUpdate = true;
+  }
+
   setEdgesVisible(v) {
     if (this.edges) this.edges.visible = v;
   }

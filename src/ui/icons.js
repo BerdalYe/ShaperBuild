@@ -84,6 +84,7 @@ const P = {
   learn: '<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c2 2 10 2 12 0v-5M22 9v6"/>',
   items: '<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1.2" fill="currentColor"/><circle cx="4" cy="12" r="1.2" fill="currentColor"/><circle cx="4" cy="18" r="1.2" fill="currentColor"/>',
   printer: '<path d="M3 3h18v4H3z"/><path d="M5 7v14M19 7v14"/><path d="M10 7v2.5l2 2 2-2V7"/><path d="M8.5 20.5h7v-4h-7z"/>',
+  xray: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9" stroke-dasharray="2 2" opacity=".7"/><circle cx="12" cy="11" r="2.6" fill="currentColor" opacity=".45" stroke="none"/>',
   save: '<path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/>',
 };
 

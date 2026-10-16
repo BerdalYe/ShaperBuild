@@ -886,6 +886,13 @@ export class App {
     document.querySelector('[data-vc="grid"]').classList.toggle('on', this.settings.showGrid);
   }
 
+  toggleXray() {
+    const on = !this.vp.xray;
+    this.vp.setXray(on);
+    this.viewControls.btns.xray.classList.toggle('on', on);
+    toast(on ? 'X-ray on: bodies are see-through' : 'X-ray off', { ms: 1200 });
+  }
+
   toggleSnap() {
     this.settings.snap = !this.settings.snap;
     this.saveSettings();
@@ -1001,6 +1008,7 @@ export class App {
       if (k === '+' || k === '=') return this.vp.stepZoom(1 / 1.25);
       if (k === '-' || k === '_') return this.vp.stepZoom(1.25);
       if (k === '?') return this.dialogs.shortcuts();
+      if (e.shiftKey && k.toLowerCase() === 'x') return this.toggleXray();
       if (k === 'Delete' || k === 'Backspace') {
         e.preventDefault();
         this.cmd.deleteSelection();
@@ -1157,6 +1165,8 @@ export class App {
         return this.toggleSection();
       case 'toggle-grid':
         return this.toggleGrid();
+      case 'toggle-xray':
+        return this.toggleXray();
       case 'toggle-edges':
         this.settings.showEdges = !this.settings.showEdges;
         this.saveSettings();

@@ -214,6 +214,7 @@ export class Viewport extends Emitter {
         this.pickBodies.add(view.pickGroup);
         view.setEdgesVisible(this.showEdges && !this.visualization);
         if (this.visualization) view.setVisualization?.(true);
+        if (this.xray) view.setXray(true);
       }
       view.setBody(body);
     }
@@ -249,6 +250,12 @@ export class Viewport extends Emitter {
         this.sketchViews.delete(id);
       }
     }
+    this.requestRender();
+  }
+
+  setXray(on) {
+    this.xray = on;
+    for (const view of this.bodyViews.values()) view.setXray(on);
     this.requestRender();
   }
 

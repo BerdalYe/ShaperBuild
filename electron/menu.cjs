@@ -106,6 +106,7 @@ function buildMenu({ send, recent = [], isDev = false }) {
         hint('Perspective / Orthographic', 'toggle-ortho', 'O'),
         hint('Visualization Mode', 'toggle-visualization', 'V'),
         hint('Section View', 'toggle-section', 'X'),
+        hint('X-ray', 'toggle-xray', 'Shift+X'),
         hint('Show Grid', 'toggle-grid', 'G'),
         cmd('Show Edges', 'toggle-edges'),
         cmd('Light / Dark Theme', 'toggle-theme'),

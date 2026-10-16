@@ -114,7 +114,7 @@ export class Dialogs {
     const groups = [
       ['Sketch', [['Line', 'L'], ['Rectangle', 'R'], ['Circle', 'C'], ['Arc', 'A'], ['Polygon', 'P'], ['Spline', 'B'], ['Trim', 'T'], ['Dimension', 'D'], ['Type exact sizes while drawing', '0–9, Tab, Enter'], ['Skip snapping', 'hold Alt']]],
       ['Model', [['Extrude / push-pull', 'E'], ['Revolve', 'Q'], ['Fillet', 'F'], ['Shell', 'H'], ['Union', 'U'], ['Move / rotate', 'M'], ['Measure', 'K'], ['Section view', 'X']]],
-      ['View', [['Orbit', 'Right-drag / Space+drag / arrows'], ['Pan', 'Middle-drag / Shift+right-drag / Shift+Space+drag'], ['Zoom', 'Scroll / pinch / + and −'], ['Zoom to fit (selection)', 'Z'], ['Look at face or sketch', 'N'], ['Iso / Front / Right / Top', '0 / 1 / 3 / 7'], ['Perspective / orthographic', 'O'], ['Grid', 'G'], ['Visualization', 'V'], ['Items panel', 'Tab']]],
+      ['View', [['Orbit', 'Right-drag / Space+drag / arrows'], ['Pan', 'Middle-drag / Shift+right-drag / Shift+Space+drag'], ['Zoom', 'Scroll / pinch / + and −'], ['Zoom to fit (selection)', 'Z'], ['Look at face or sketch', 'N'], ['Iso / Front / Right / Top', '0 / 1 / 3 / 7'], ['Perspective / orthographic', 'O'], ['Grid', 'G'], ['Visualization', 'V'], ['X-ray', 'Shift+X'], ['Items panel', 'Tab']]],
       ['Edit', [['Undo / Redo', 'Ctrl+Z / Ctrl+Y'], ['Delete', 'Del'], ['Duplicate', 'Ctrl+D'], ['Select all bodies', 'Ctrl+A'], ['Clear selection / cancel', 'Esc'], ['Apply tool', 'Enter'], ['Select a whole body', 'Double-click']]],
       ['File', [['New / Open / Save', 'Ctrl+N / Ctrl+O / Ctrl+S'], ['Import', 'Ctrl+I'], ['Export STL', 'Ctrl+E']]],
       ['Help', [['Find a tool or command', 'Ctrl+K'], ['This list', '? or Ctrl+/']]],

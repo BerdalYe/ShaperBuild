@@ -34,6 +34,7 @@ export function appCommands(app) {
     view('bottom', 'Bottom view', '8'),
     { id: 'look-at', label: 'Look at selected face or sketch', icon: 'lookAt', kbd: 'N', keywords: 'normal view straight flat', run: () => app.lookAtSelection() },
     { id: 'ortho', label: 'Perspective / orthographic', icon: 'ortho', kbd: 'O', keywords: 'projection camera view', run: () => app.toggleOrtho() },
+    { id: 'xray', label: 'X-ray (see-through bodies)', icon: 'xray', kbd: 'Shift+X', keywords: 'transparent see through inside hidden ghost', run: () => app.toggleXray() },
     { id: 'grid', label: 'Show or hide the grid', icon: 'grid', kbd: 'G', keywords: 'view floor', run: () => app.toggleGrid() },
     { id: 'snap', label: 'Snapping on / off', icon: 'check', kbd: 'S', keywords: 'grid align magnet', run: () => app.toggleSnap() },
     { id: 'visual', label: 'Visualization mode', icon: 'sparkle', kbd: 'V', keywords: 'render materials shadows realistic look', run: () => app.setVisualization(!app.visual) },

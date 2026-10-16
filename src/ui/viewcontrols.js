@@ -36,6 +36,7 @@ export class ViewControls {
       add('ortho', 'ortho', 'Perspective / orthographic', 'O', () => app.toggleOrtho(), 'Orthographic shows true sizes without depth.'),
       add('grid', 'grid', 'Grid', 'G', () => app.toggleGrid()),
       add('section', 'section', 'Section view', 'X', () => app.toggleSection(), 'Cut through the design to look inside.'),
+      add('xray', 'xray', 'X-ray', 'Shift+X', () => app.toggleXray(), 'See through bodies to check inside shapes and hidden edges.'),
       sep(),
       add('help', 'mouse', 'How to move around', '', () => app.navHelp.toggle(), 'Mouse, trackpad and keyboard controls.'),
     );

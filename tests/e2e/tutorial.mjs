@@ -190,6 +190,17 @@ try {
   await win.locator('.items-head .ih-btn[title="Show all items"]').click();
   assert.equal(await A(() => window.__shaper.doc.bodies[0].visible), true);
 
+  step('X-ray makes bodies see-through');
+  await A(() => document.getElementById('viewport').querySelector('canvas').focus());
+  await win.keyboard.press('Shift+X');
+  assert.equal(await A(() => window.__shaper.vp.xray), true);
+  assert.equal(await A(() => [...window.__shaper.vp.bodyViews.values()][0].material.transparent), true);
+  await A(() => window.__shaper.vp.fit());
+  await win.waitForTimeout(500);
+  await shot(win, '68-xray');
+  await win.locator('[data-vc="xray"]').click();
+  assert.equal(await A(() => window.__shaper.vp.xray), false);
+
   step('tutorial is not offered again');
   assert.equal(await A(() => window.__shaper.tutorial.seen), true);
 
