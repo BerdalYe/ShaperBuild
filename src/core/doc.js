@@ -9,7 +9,7 @@ export function emptyState() {
   return {
     bodies: [],
     sketches: [],
-    seq: { body: 0, sketch: 0, entity: 0 },
+    seq: { body: 0, sketch: 0, entity: 0, constraint: 0 },
     units: 'mm',
   };
 }
@@ -32,7 +32,7 @@ export class Draft {
 
   nextId(kind) {
     this.seq[kind] = (this.seq[kind] || 0) + 1;
-    const prefix = { body: 'b', sketch: 's', entity: 'e' }[kind] || kind;
+    const prefix = { body: 'b', sketch: 's', entity: 'e', constraint: 'k' }[kind] || kind;
     return `${prefix}${this.seq[kind]}`;
   }
 
@@ -64,7 +64,7 @@ export class Draft {
 
   addSketch(props) {
     const id = this.nextId('sketch');
-    const sk = { name: `Sketch ${this.seq.sketch}`, visible: true, entities: [], ...props, id };
+    const sk = { name: `Sketch ${this.seq.sketch}`, visible: true, entities: [], constraints: [], ...props, id };
     this.sketches.push(sk);
     return sk;
   }
@@ -83,6 +83,10 @@ export class Draft {
   // Give new entities ids.
   withIds(entities) {
     return entities.map((e) => (e.id ? e : { ...e, id: this.nextId('entity') }));
+  }
+
+  withConstraintIds(constraints = []) {
+    return constraints.map((c) => (c.id ? c : { ...c, id: this.nextId('constraint') }));
   }
 
   toState() {

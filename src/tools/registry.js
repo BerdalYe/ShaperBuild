@@ -2,6 +2,7 @@
 import { SelectTool } from './select.js';
 import { LineTool, RectTool, CircleTool, ArcTool, PolygonTool, SplineTool, EllipseTool, PointTool } from './sketch.js';
 import { TrimTool, OffsetTool, toggleConstruction } from './sketchedit.js';
+import { DimensionTool } from './dimension.js';
 import { ExtrudeTool, RevolveTool, SweepTool, LoftTool, FilletTool, ChamferTool, ShellTool, UnionTool, SubtractTool, IntersectTool, SplitTool, MirrorTool, LinearPatternTool, CircularPatternTool, ScaleTool } from './model.js';
 import { TransformTool } from './transform.js';
 import { PrimitiveTool } from './primitive.js';
@@ -23,6 +24,7 @@ export const TOOL_SECTIONS = [
       def('point', 'Point', 'point', PointTool, { desc: 'Reference point for snapping.' }),
       def('trim', 'Trim', 'trim', TrimTool, { key: 'T', desc: 'Remove pieces of curves between intersections.' }),
       def('offset', 'Offset', 'offset', OffsetTool, { desc: 'Copy curves at a distance.' }),
+      def('dimension', 'Dimension', 'dimension', DimensionTool, { key: 'D', desc: 'Add sizes that drive the sketch. Select curves to add constraints like parallel or tangent.' }),
       { id: 'construction', label: 'Construction', icon: 'construction', action: (app) => toggleConstruction(app), desc: 'Turn selected curves into construction geometry (ignored for profiles).' },
     ],
   },

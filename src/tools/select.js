@@ -2,7 +2,8 @@
 // drag sketch points and curves, box selection, and the direct extrude
 // arrow on selected profiles.
 import { Tool } from './base.js';
-import { moveSketchPoint, translateEntity, sub } from '../core/geom2d.js';
+import { moveSketchPoint, translateEntity, sub, add } from '../core/geom2d.js';
+import { solveSketch, refsAt, entityPoints } from '../core/solver.js';
 import { planeFrame, to2D, rayPlane } from '../core/plane.js';
 import { sampleEntity } from '../core/geom2d.js';
 
@@ -162,13 +163,24 @@ export class SelectTool extends Tool {
     let p = this.sketchPointer(g.sketch, e);
     if (!p) return;
     p = app.snapSketchPoint(g.sketch, p, e, { exclude: g.kind === 'point' ? g.from : null });
-    if (g.kind === 'point') g.entities = moveSketchPoint(g.sketch.entities, g.from, p);
+    const sk = g.sketch;
+    if (g.kind === 'curve' && !g.start) return;
+    if (sk.constraints?.length) {
+      // Let the constraint solver decide how the rest of the sketch follows.
+      let drags;
+      if (g.kind === 'point') drags = refsAt(sk.entities, g.from).slice(0, 1).map((ref) => ({ ref, to: p }));
+      else {
+        const d = sub(p, g.start);
+        drags = sk.entities.filter((en) => g.ids.has(en.id)).flatMap((en) => entityPoints(en).map((pt) => ({ ref: { e: en.id, p: pt.p }, to: add(pt.at, d) })));
+      }
+      const res = solveSketch(sk.entities, sk.constraints, { drags });
+      if (res.ok) g.entities = res.entities;
+    } else if (g.kind === 'point') g.entities = moveSketchPoint(sk.entities, g.from, p);
     else {
-      if (!g.start) return;
       const d = sub(p, g.start);
-      g.entities = g.sketch.entities.map((en) => (g.ids.has(en.id) ? translateEntity(en, d) : en));
+      g.entities = sk.entities.map((en) => (g.ids.has(en.id) ? translateEntity(en, d) : en));
     }
-    app.previewSketch(g.sketch.id, g.entities);
+    if (g.entities) app.previewSketch(sk.id, g.entities);
   }
 
   // ---- box selection -----------------------------------------------------

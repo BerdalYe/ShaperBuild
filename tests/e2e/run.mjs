@@ -2,7 +2,7 @@
 // Linux needs a display: xvfb-run -a npm run test:e2e
 import { spawnSync } from 'node:child_process';
 
-const suites = ['smoke.mjs', 'workflow.mjs', 'tools.mjs'];
+const suites = ['smoke.mjs', 'workflow.mjs', 'tools.mjs', 'constraints.mjs'];
 let failed = 0;
 for (const s of suites) {
   console.log(`\n=== ${s}`);

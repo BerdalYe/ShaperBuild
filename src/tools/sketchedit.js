@@ -47,7 +47,7 @@ export class TrimTool extends Tool {
       if (en.id !== r.ent.id) ents.push(en);
       else ents.push(...r.keep);
     }
-    this.app.cmd.setSketchEntities(r.sk.id, ents, 'Trim');
+    this.app.cmd.setSketchEntities(r.sk.id, ents, 'Trim', { dropFor: [r.ent.id] });
   }
 
   onKeyDown(e) {

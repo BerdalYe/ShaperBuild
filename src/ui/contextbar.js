@@ -2,8 +2,9 @@
 // plus quick size edits for single sketch curves.
 import { h, clear } from './dom.js';
 import { icon } from './icons.js';
+import { showMenu } from './overlays.js';
 import { formatLength, parseLength } from '../core/units.js';
-import { dist, angleOf, polar } from '../core/geom2d.js';
+import { dist } from '../core/geom2d.js';
 
 export class ContextBar {
   constructor(el, app) {
@@ -55,13 +56,30 @@ export class ContextBar {
     }
     const counts = {};
     for (const it of list) counts[it.kind] = (counts[it.kind] || 0) + 1;
-    const NAMES = { body: ['body', 'bodies'], face: ['face', 'faces'], edge: ['edge', 'edges'], region: ['region', 'regions'], curve: ['curve', 'curves'], spoint: ['point', 'points'], sketch: ['sketch', 'sketches'], vertex: ['vertex', 'vertices'] };
+    const NAMES = { constraint: ['constraint', 'constraints'], body: ['body', 'bodies'], face: ['face', 'faces'], edge: ['edge', 'edges'], region: ['region', 'regions'], curve: ['curve', 'curves'], spoint: ['point', 'points'], sketch: ['sketch', 'sketches'], vertex: ['vertex', 'vertices'] };
     const label = Object.entries(counts)
       .map(([k, n]) => `${n} ${(NAMES[k] || [k, k])[n === 1 ? 0 : 1]}`)
       .join(', ');
     this.el.append(h('span.cb-label', { text: label }));
     const props = this.quickProps(list);
     if (props) this.el.append(h('span.cb-sep'), props);
+    const cons = app.constraints.options();
+    if (cons.length) {
+      this.el.append(h('span.cb-sep'));
+      const b = h('button.cb-btn', { html: `<span class="glyph">⊥</span><span>Constrain</span>${icon('chevronDown')}` });
+      b.querySelector('svg').style.cssText = 'width:14px;height:14px';
+      b.addEventListener('click', () => {
+        const r = b.getBoundingClientRect();
+        const menu = showMenu(
+          r.left,
+          r.top,
+          cons.map((o) => ({ label: `<span class="glyph">${o.glyph}</span>${o.label}`, action: () => app.cmd.addConstraint(o.sketchId, o.constraint) })),
+        );
+        const mr = menu.getBoundingClientRect();
+        menu.style.top = `${r.top - mr.height - 6}px`;
+      });
+      this.el.append(b);
+    }
     const sug = this.suggestions();
     if (sug.length) this.el.append(h('span.cb-sep'));
     for (const s of sug) {
@@ -76,36 +94,27 @@ export class ContextBar {
     this.el.hidden = false;
   }
 
-  // Editable size for a single selected line, circle or arc.
+  // Editable size for a single selected line, circle or arc. Setting it adds
+  // (or updates) a dimension constraint, like typing into a Shapr3D label.
   quickProps(list) {
-    if (list.length !== 1 || list[0].kind !== 'curve') return null;
     const app = this.app;
+    if (list.length === 1 && list[0].kind === 'constraint') return null;
+    if (list.length !== 1 || list[0].kind !== 'curve') return null;
     const it = list[0];
     const sk = app.doc.sketch(it.sketchId);
     const en = sk?.entities.find((e) => e.id === it.entityId);
     if (!en) return null;
-    let label;
-    let value;
-    let applyFn;
-    if (en.type === 'line') {
-      label = 'Length';
-      value = dist(en.a, en.b);
-      applyFn = (v) => ({ ...en, b: polar(en.a, v, angleOf([en.b[0] - en.a[0], en.b[1] - en.a[1]])) });
-    } else if (en.type === 'circle') {
-      label = 'Diameter';
-      value = en.r * 2;
-      applyFn = (v) => ({ ...en, r: v / 2 });
-    } else if (en.type === 'arc') {
-      label = 'Radius';
-      value = en.r;
-      applyFn = (v) => ({ ...en, r: v });
-    } else return null;
+    const type = { line: 'length', circle: 'diameter', arc: 'radius' }[en.type];
+    if (!type) return null;
+    const label = { length: 'Length', diameter: 'Diameter', radius: 'Radius' }[type];
+    const value = type === 'length' ? dist(en.a, en.b) : type === 'diameter' ? en.r * 2 : en.r;
+    const existing = (sk.constraints || []).find((c) => c.type === type && c.e === en.id);
     const inp = h('input.num-input', { type: 'text', value: formatLength(value, app.units, { suffix: false }) });
     const commit = () => {
       const v = parseLength(inp.value, app.units);
       if (!(v > 0) || Math.abs(v - value) < 1e-9) return;
-      const ents = sk.entities.map((e) => (e.id === en.id ? applyFn(v) : e));
-      app.cmd.setSketchEntities(sk.id, ents, `Set ${label.toLowerCase()}`);
+      if (existing) app.cmd.setConstraintValue(sk.id, existing.id, v);
+      else app.cmd.addConstraint(sk.id, { type, e: en.id, value: v });
       app.selection.set([it]);
     };
     inp.addEventListener('keydown', (e) => {

@@ -14,6 +14,7 @@ const P = {
   point: '<circle cx="12" cy="12" r="2.6" fill="currentColor"/><path d="M12 3.5v4M12 16.5v4M3.5 12h4M16.5 12h4"/>',
   trim: '<circle cx="6" cy="6.5" r="2.6"/><circle cx="6" cy="17.5" r="2.6"/><path d="M8.2 8l11.8 10M8.2 16L20 6"/>',
   offset: '<path d="M4 18c4-9 12-9 16 0"/><path d="M4 12c4-7 12-7 16 0" stroke-dasharray="2.2 2.4"/>',
+  dimension: '<path d="M4 6v12M20 6v12M4 12h16M7.5 9L4.5 12l3 3M16.5 9l3 3-3 3"/>',
   construction: '<path d="M4 20L20 4" stroke-dasharray="3 3"/><circle cx="4" cy="20" r="1.5"/><circle cx="20" cy="4" r="1.5"/>',
   extrude: '<path d="M3.5 16.5l8.5 4 8.5-4-8.5-4z"/><path d="M12 12.5V3M8.8 6.2L12 3l3.2 3.2"/>',
   revolve: '<path d="M12 2.5v19" stroke-dasharray="2 2"/><path d="M8 5c-3 2-3 5 0 7s3 5 0 7"/><path d="M17 8a6 2.6 0 11-1.6-1.9"/><path d="M15.2 4.6l.4 1.8-1.8.5"/>',

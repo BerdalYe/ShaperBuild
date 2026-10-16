@@ -28,6 +28,8 @@ export function itemKey(it) {
       return `sketch:${it.sketchId}`;
     case 'handle':
       return `handle:${it.key}`;
+    case 'constraint':
+      return `constraint:${it.sketchId}:${it.cid}`;
     default:
       return JSON.stringify(it);
   }

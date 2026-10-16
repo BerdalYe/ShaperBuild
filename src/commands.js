@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { toast, confirmDialog } from './ui/overlays.js';
 import { samePlane, GROUND } from './core/plane.js';
+import { solveSketch, measure, pruneConstraints, dropConstraintsFor, pointOf, CONSTRAINT_INFO } from './core/solver.js';
 
 export class Commands {
   constructor(app) {
@@ -32,8 +33,9 @@ export class Commands {
   // ---- sketches ----------------------------------------------------------
 
   // Add entities to the sketch on `plane` (creating it if needed).
+  // `constraints` may refer to the new entities as '#0', '#1', …
   // Returns the sketch id.
-  addSketchEntities(plane, sketchId, entities, label = 'Sketch') {
+  addSketchEntities(plane, sketchId, entities, label = 'Sketch', constraints = []) {
     const app = this.app;
     return this.doc.apply(label, (d) => {
       let sk = sketchId ? d.sketch(sketchId) : null;
@@ -60,16 +62,75 @@ export class Commands {
         sk = d.addSketch({ plane, sourceBody });
       }
       const ents = d.withIds(entities);
-      d.updateSketch(sk.id, (s) => ({ entities: [...s.entities, ...ents] }));
+      const ref = (v) => (typeof v === 'string' && v[0] === '#' ? ents[+v.slice(1)]?.id : v);
+      const refP = (p) => (p ? { ...p, e: ref(p.e) } : p);
+      const cons = d.withConstraintIds(constraints.map((c) => ({ ...c, e: ref(c.e), e2: ref(c.e2), p: refP(c.p), p2: refP(c.p2) })).map(stripUndefined));
+      d.updateSketch(sk.id, (s) => ({ entities: [...s.entities, ...ents], constraints: [...(s.constraints || []), ...cons] }));
       return sk.id;
     });
   }
 
-  setSketchEntities(sketchId, entities, label = 'Edit sketch') {
+  // Replace a sketch's entities. Constraints on removed entities (and on
+  // ids in `dropFor`) are dropped.
+  setSketchEntities(sketchId, entities, label = 'Edit sketch', { dropFor = [] } = {}) {
     this.doc.apply(label, (d) => {
       const ents = d.withIds(entities);
-      if (!ents.length) d.removeSketch(sketchId);
-      else d.updateSketch(sketchId, { entities: ents });
+      if (!ents.length) return d.removeSketch(sketchId);
+      const sk = d.sketch(sketchId);
+      const cons = pruneConstraints(dropConstraintsFor(sk.constraints, dropFor), ents);
+      d.updateSketch(sketchId, { entities: ents, constraints: cons });
+    });
+  }
+
+  // ---- constraints ---------------------------------------------------------
+
+  // Solve and store; returns false (and changes nothing) if impossible.
+  solveAndStore(sketchId, entities, constraints, label, opts = {}) {
+    const res = solveSketch(entities, constraints, opts);
+    if (!res.ok) {
+      toast(opts.failMessage || 'That conflicts with the existing constraints', { type: 'error' });
+      return false;
+    }
+    this.doc.apply(label, (d) => d.updateSketch(sketchId, { entities: res.entities, constraints: d.withConstraintIds(res.constraints) }));
+    return true;
+  }
+
+  addConstraint(sketchId, c) {
+    const sk = this.doc.sketch(sketchId);
+    if (!sk) return false;
+    const info = CONSTRAINT_INFO[c.type];
+    const con = stripUndefined({ ...c });
+    const askValue = info?.dimension && con.value === undefined;
+    if (askValue) con.value = measure(con, sk.entities);
+    if (con.type === 'fix' && !con.value) con.value = pointOf(sk.entities, con.p);
+    const ok = this.solveAndStore(sketchId, sk.entities, [...(sk.constraints || []), con], info?.label || 'Constraint');
+    if (ok && askValue) {
+      const added = this.doc.sketch(sketchId).constraints.at(-1);
+      setTimeout(() => this.app.constraints.edit(sketchId, added.id), 50);
+    }
+    return ok;
+  }
+
+  setConstraintValue(sketchId, cid, value) {
+    const sk = this.doc.sketch(sketchId);
+    const c = sk?.constraints?.find((x) => x.id === cid);
+    if (!c || !Number.isFinite(value)) return false;
+    if (c.type !== 'angle' && !(value > 0)) {
+      toast('The value must be greater than zero', { type: 'error' });
+      return false;
+    }
+    const cons = sk.constraints.map((x) => (x.id === cid ? { ...x, value } : x));
+    return this.solveAndStore(sketchId, sk.entities, cons, `Set ${CONSTRAINT_INFO[c.type].label.toLowerCase()}`, { failMessage: 'That value is not possible with the other constraints' });
+  }
+
+  removeConstraints(items) {
+    const bySketch = new Map();
+    for (const it of items) {
+      if (!bySketch.has(it.sketchId)) bySketch.set(it.sketchId, new Set());
+      bySketch.get(it.sketchId).add(it.cid);
+    }
+    this.doc.apply('Delete constraint', (d) => {
+      for (const [sid, ids] of bySketch) d.updateSketch(sid, (sk) => ({ constraints: (sk.constraints || []).filter((c) => !ids.has(c.id)) }));
     });
   }
 
@@ -101,7 +162,7 @@ export class Commands {
         const sk = d.sketch(st.id);
         if (!sk) continue;
         const plane = transformPlane(sk.plane, st.matrix);
-        if (st.copy) d.addSketch({ plane, entities: sk.entities, name: `${sk.name} copy` });
+        if (st.copy) d.addSketch({ plane, entities: sk.entities, constraints: sk.constraints || [], name: `${sk.name} copy` });
         else d.updateSketch(st.id, { plane });
       }
     });
@@ -173,6 +234,15 @@ export class Commands {
     const bodies = new Set();
     const sketches = new Set();
     const curves = new Map();
+    const cons = items.filter((it) => it.kind === 'constraint');
+    if (cons.length) {
+      this.removeConstraints(cons);
+      items = items.filter((it) => it.kind !== 'constraint');
+      if (!items.length) {
+        this.app.selection.clear();
+        return;
+      }
+    }
     for (const it of items) {
       if (it.bodyId) bodies.add(it.bodyId);
       else if (it.kind === 'sketch') sketches.add(it.sketchId);
@@ -190,7 +260,7 @@ export class Commands {
         const sk = d.sketch(sid);
         if (!sk) continue;
         const rest = sk.entities.filter((e) => !ids.has(e.id));
-        if (rest.length) d.updateSketch(sid, { entities: rest });
+        if (rest.length) d.updateSketch(sid, { entities: rest, constraints: pruneConstraints(sk.constraints, rest) });
         else d.removeSketch(sid);
       }
     });
@@ -234,6 +304,11 @@ export class Commands {
   exportBodies(ids, format) {
     this.app.files.exportDialog(format, ids);
   }
+}
+
+function stripUndefined(o) {
+  for (const k of Object.keys(o)) if (o[k] === undefined) delete o[k];
+  return o;
 }
 
 // Apply a column-major 4x4 to a sketch plane.

@@ -224,15 +224,25 @@ export class Overlay {
 
   // ---- HTML labels -------------------------------------------------------
 
-  label(key, world, text, { className = '', offset = [0, 0] } = {}) {
-    let el = this.labels.get(key)?.el;
+  label(key, world, text, { className = '', offset = [0, 0], interactive = false, onClick = null, title = '' } = {}) {
+    const prev = this.labels.get(key);
+    let el = prev?.el;
     if (!el) {
       el = document.createElement('div');
-      el.className = `vp-label ${className}`;
       this.labelLayer.appendChild(el);
+      if (interactive) {
+        el.style.pointerEvents = 'auto';
+        el.addEventListener('pointerdown', (e) => e.stopPropagation());
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.labels.get(key)?.onClick?.(e);
+        });
+      }
     }
-    el.textContent = text;
-    this.labels.set(key, { el, world, offset });
+    el.className = `vp-label ${className}`;
+    if (title) el.title = title;
+    if (!el.classList.contains('editing') && el.textContent !== text) el.textContent = text;
+    this.labels.set(key, { el, world, offset, onClick });
     this.positionLabel(this.labels.get(key));
   }
 

@@ -188,9 +188,10 @@ export class SketchTool extends Tool {
   }
 
   // Add entities (plane coordinates) to the sketch on the current plane.
-  async commit(entities, label) {
+  // Constraints may refer to the new entities as '#0', '#1', …
+  commit(entities, label, constraints = []) {
     const ents = entities.map((en) => ({ ...en, construction: this.construction || undefined }));
-    this.sketchId = this.app.cmd.addSketchEntities(this.plane, this.sketchId, ents, label || this.def.label);
+    this.sketchId = this.app.cmd.addSketchEntities(this.plane, this.sketchId, ents, label || this.def.label, constraints);
   }
 
   // Rubber-band drawing helpers.
@@ -271,7 +272,12 @@ export class LineTool extends SketchTool {
     const a = this.pts[this.pts.length - 1];
     if (dist(a, b) < 1e-6) return;
     const closing = this.pts.length > 1 && samePoint(b, this.pts[0], 1e-6);
-    this.commit([{ type: 'line', a, b }], 'Line');
+    // Lines drawn level or upright stay that way; typed lengths become dimensions.
+    const cons = [];
+    if (Math.abs(b[1] - a[1]) < 1e-9) cons.push({ type: 'horizontal', e: '#0' });
+    else if (Math.abs(b[0] - a[0]) < 1e-9) cons.push({ type: 'vertical', e: '#0' });
+    if ('length' in this.locked) cons.push({ type: 'length', e: '#0', value: dist(a, b) });
+    this.commit([{ type: 'line', a, b }], 'Line', cons);
     this.app.dim.hide();
     if (closing) {
       this.reset();
@@ -359,9 +365,18 @@ export class RectTool extends SketchTool {
     const [c0, c1] = this.corners(p);
     if (Math.abs(c1[0] - c0[0]) < 1e-6 || Math.abs(c1[1] - c0[1]) < 1e-6) return;
     const o = this.outline(c0, c1);
+    const cons = [
+      { type: 'horizontal', e: '#0' },
+      { type: 'vertical', e: '#1' },
+      { type: 'horizontal', e: '#2' },
+      { type: 'vertical', e: '#3' },
+    ];
+    if ('width' in this.locked) cons.push({ type: 'length', e: '#0', value: Math.abs(c1[0] - c0[0]) });
+    if ('height' in this.locked) cons.push({ type: 'length', e: '#1', value: Math.abs(c1[1] - c0[1]) });
     this.commit(
       o.slice(0, 4).map((a, i) => ({ type: 'line', a, b: o[i + 1] })),
       'Rectangle',
+      cons,
     );
     this.reset();
   }
@@ -397,7 +412,8 @@ export class CircleTool extends SketchTool {
   place(p) {
     const r = this.radius(p);
     if (r < 1e-6) return;
-    this.commit([{ type: 'circle', c: this.pts[0], r }], 'Circle');
+    const cons = 'diameter' in this.locked ? [{ type: 'diameter', e: '#0', value: r * 2 }] : [];
+    this.commit([{ type: 'circle', c: this.pts[0], r }], 'Circle', cons);
     this.reset();
   }
 }
@@ -546,9 +562,11 @@ export class PolygonTool extends SketchTool {
   place(p) {
     const v = this.verts(p);
     if (dist(v[0], this.pts[0]) < 1e-6) return;
+    const cons = v.slice(1).map((_, i) => ({ type: 'equal', e: '#0', e2: `#${i + 1}` }));
     this.commit(
       v.map((a, i) => ({ type: 'line', a, b: v[(i + 1) % v.length] })),
       'Polygon',
+      cons,
     );
     this.reset();
   }

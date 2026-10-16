@@ -22,6 +22,8 @@ The installers are not code-signed yet, so the first launch shows a warning:
 
 **Sketch** – Line, Rectangle, Circle, Arc, Polygon, Spline, Ellipse, Point, Trim, Offset and Construction lines. Click the grid, any flat face or an existing sketch to draw on it. Points snap to ends, midpoints, centers, body corners, alignments and the grid. Start typing while drawing to enter exact sizes (Tab moves between boxes, Enter applies). Closed shapes turn into regions you can click.
 
+**Constraints and dimensions** – Sizes you type become dimensions you can click and change later; the sketch follows. Lines drawn level or upright stay that way, and rectangles stay rectangles when you drag them. Select curves or points and use **Constrain** for parallel, perpendicular, equal, tangent, concentric, midpoint, on-curve, coincident, fixed, angle and distance. The **Dimension** tool (D) adds lengths, diameters, radii and distances.
+
 **Model** – Extrude (also push/pull of faces: grow a body or cut into it), Revolve, Sweep, Loft, Fillet, Chamfer, Shell, Split, Union, Subtract and Intersect. Every tool shows a live preview before you apply it. Select a region or face and drag its blue arrow to extrude directly.
 
 **Transform** – Move/Rotate with a gizmo or exact values, Scale, Mirror, Linear and Circular patterns, Duplicate.
@@ -46,14 +48,14 @@ The geometry engine is [OpenCascade](https://dev.opencascade.org/) (a real B-rep
 | Select | Click (adds to the selection) · double-click a face for its whole body · drag on empty space for a box |
 | Standard views | View cube, or keys 0 (iso), 1 (front), 3 (right), 7 (top) |
 | Zoom to fit | Z |
-| Tools | L line · R rectangle · C circle · A arc · P polygon · B spline · T trim · E extrude · Q revolve · F fillet · H shell · U union · M move · K measure · X section |
+| Tools | L line · R rectangle · C circle · A arc · P polygon · B spline · T trim · D dimension · E extrude · Q revolve · F fillet · H shell · U union · M move · K measure · X section |
 | Undo / redo | Ctrl+Z / Ctrl+Y (⌘ on Mac) |
 
 *Help → Keyboard Shortcuts* in the app lists everything.
 
 ## How it compares to Shapr3D
 
-It follows Shapr3D's workflow and layout closely, but it is not a copy of Shapr3D and does not have everything yet. Not included so far: sketch constraints and editable dimensions, parametric history (editing earlier steps), 2D drawings, text in sketches, and AR/iPad features.
+It follows Shapr3D's workflow and layout closely, but it is not a copy of Shapr3D and does not have everything yet. Not included so far: parametric history (going back to edit earlier steps), 2D drawings, text in sketches, and AR/iPad features.
 
 ## Run from source
 
@@ -79,7 +81,7 @@ src/
   app.js         app controller: document, selection, snapping, previews, shortcuts
   commands.js    document changes (apply kernel results, delete, duplicate, …)
   fileops.js     open / save / import / export
-  core/          pure logic: units & expressions, 2D geometry, planes, document + undo, file formats
+  core/          pure logic: units & expressions, 2D geometry, constraint solver, planes, document + undo, file formats
   kernel/        geometry kernel (OpenCascade + Manifold) running in a Web Worker
   view/          three.js viewport: camera, grid, view cube, GPU picking, bodies, sketches, overlays
   tools/         interactive tools (select, sketch, modelling, transform, measure, section)

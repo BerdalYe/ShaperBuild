@@ -15,6 +15,7 @@ import { Commands } from './commands.js';
 import { FileOps } from './fileops.js';
 import { Dialogs } from './ui/dialogs.js';
 import { Home } from './ui/home.js';
+import { ConstraintLayer } from './ui/constraints.js';
 import { toast, showMenu } from './ui/overlays.js';
 import { icon } from './ui/icons.js';
 import { isTyping } from './ui/dom.js';
@@ -66,6 +67,8 @@ export class App {
     this.toolsMenu = new ToolsMenu(document.getElementById('tools'), this);
     this.context = new ContextBar(document.getElementById('context-bar'), this);
     this.home = new Home(document.getElementById('home'), this);
+    this.constraints = new ConstraintLayer(this);
+    this.tools.on('change', () => this.constraints.update());
 
     this.doc.on('change', (ev) => this.onDocChange(ev));
     this.doc.on('saved', () => this.updateTitle());
@@ -223,6 +226,8 @@ export class App {
       case 'spoint':
       case 'sketch':
         return !!doc.sketch(it.sketchId);
+      case 'constraint':
+        return !!doc.sketch(it.sketchId)?.constraints?.some((c) => c.id === it.cid);
       default:
         return true;
     }
@@ -300,6 +305,7 @@ export class App {
       const h = sketchH.get(id) || {};
       view.setHighlight(h);
     }
+    this.constraints?.update();
     this.vp.requestRender();
   }
 
@@ -561,6 +567,11 @@ export class App {
     }
     if (onGrid) return { p: g, snap: { kind: 'grid' } };
     return { p, snap: null };
+  }
+
+  // Snapped position for dragging a point of an existing sketch.
+  snapSketchPoint(sketch, p, e, opts = {}) {
+    return this.snapPoint(sketch.plane, p, e, { sketchId: sketch.id, ...opts }).p;
   }
 
   // Grid step in mm that matches the display unit.
