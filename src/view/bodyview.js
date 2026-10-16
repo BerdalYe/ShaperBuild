@@ -8,6 +8,19 @@ import { makePickMeshMaterial, makePickLineMaterial, makePickPointMaterial, fill
 
 const tmpColor = new THREE.Color();
 
+// Surface finishes for visualization mode (body.material).
+export const MATERIALS = {
+  plastic: { label: 'Plastic', roughness: 0.32, metalness: 0.06 },
+  matte: { label: 'Matte', roughness: 0.85, metalness: 0 },
+  glossy: { label: 'Glossy', roughness: 0.1, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.04 },
+  rubber: { label: 'Rubber', roughness: 1, metalness: 0 },
+  metal: { label: 'Metal', roughness: 0.36, metalness: 1 },
+  brushed: { label: 'Brushed metal', roughness: 0.55, metalness: 1 },
+  chrome: { label: 'Chrome', roughness: 0.03, metalness: 1 },
+  glass: { label: 'Glass', roughness: 0.04, metalness: 0, transmission: 1, thickness: 4, ior: 1.5 },
+};
+const MODELING_LOOK = { roughness: 0.55, metalness: 0.05, clearcoat: 0, clearcoatRoughness: 0, transmission: 0 };
+
 export class BodyView {
   constructor(body, data, ctx) {
     this.body = body;
@@ -87,7 +100,7 @@ export class BodyView {
     g.computeBoundingBox();
     g.computeBoundingSphere();
 
-    this.material = new THREE.MeshStandardMaterial({
+    this.material = new THREE.MeshPhysicalMaterial({
       color: 0xffffff,
       vertexColors: true,
       roughness: 0.55,
@@ -172,10 +185,12 @@ export class BodyView {
   }
 
   setBody(body) {
+    const looked = this.body?.material;
     this.body = body;
     this.group.visible = body.visible !== false;
     this.pickGroup.visible = this.group.visible;
     this.applyColors();
+    if (this.visual && body.material !== looked) this.applyLook();
   }
 
   // highlight: { body: color|null, faces: Map(index -> color), edges: Map(index -> color) }
@@ -232,11 +247,24 @@ export class BodyView {
     }
   }
 
-  // Glossier look for visualization mode.
+  // Visualization mode shows each body's material; modeling mode keeps
+  // one plain finish so faces and edges stay easy to read.
   setVisualization(on) {
-    this.material.roughness = on ? 0.32 : 0.55;
-    this.material.metalness = on ? 0.08 : 0.05;
-    this.material.needsUpdate = true;
+    this.visual = on;
+    this.applyLook();
+  }
+
+  applyLook() {
+    const look = this.visual ? MATERIALS[this.body.material] || MATERIALS.plastic : MODELING_LOOK;
+    const m = this.material;
+    m.roughness = look.roughness;
+    m.metalness = look.metalness;
+    m.clearcoat = look.clearcoat || 0;
+    m.clearcoatRoughness = look.clearcoatRoughness || 0;
+    m.transmission = look.transmission || 0;
+    m.thickness = look.thickness || 0;
+    m.ior = look.ior || 1.5;
+    m.needsUpdate = true;
   }
 
   // See-through faces so hidden edges and inner parts show.

@@ -227,6 +227,10 @@ export class Commands {
     });
   }
 
+  setMaterial(ids, material) {
+    this.doc.apply('Material', (d) => ids.forEach((id) => d.updateBody(id, { material })));
+  }
+
   setColor(ids, color) {
     this.doc.apply('Colour', (d) => ids.forEach((id) => d.updateBody(id, { color })));
   }

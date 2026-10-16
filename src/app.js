@@ -22,6 +22,7 @@ import { Tutorial } from './ui/tutorial.js';
 import { PrintDialog } from './ui/printdialog.js';
 import { Updates } from './ui/updates.js';
 import { DrawingDialog } from './ui/drawingdialog.js';
+import { MaterialsPanel } from './ui/materials.js';
 import { toast, showMenu, hideTooltip } from './ui/overlays.js';
 import { icon } from './ui/icons.js';
 import { isTyping, modKey } from './ui/dom.js';
@@ -82,6 +83,7 @@ export class App {
     this.print = new PrintDialog(this);
     this.updates = new Updates(this);
     this.drawing = new DrawingDialog(this);
+    this.materials = new MaterialsPanel(document.getElementById('materials'), this);
     this.starter = new StarterCard(document.getElementById('starter'), this);
 
     this.doc.on('change', (ev) => this.onDocChange(ev));
@@ -882,7 +884,9 @@ export class App {
     for (const b of document.querySelectorAll('#mode-seg button')) b.classList.toggle('on', (b.dataset.mode === 'visual') === on);
     if (on) this.tools.activate('select');
     document.getElementById('tools').style.display = on ? 'none' : '';
+    this.materials.show(on);
     this.vp.setVisualization(on);
+    setTimeout(() => this.vp.resize(), 30);
     this.refreshHighlights();
     this.starter?.update();
   }
