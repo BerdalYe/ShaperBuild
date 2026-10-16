@@ -1,7 +1,8 @@
 // Sketch editing: trim, offset and construction toggling.
 import { Tool } from './base.js';
+import { OpTool } from './optool.js';
 import { trimEntity, sampleEntity, offsetEntity, lineLoop, offsetPolygon } from '../core/geom2d.js';
-import { planeFrame, to2D, to3D, rayPlane } from '../core/plane.js';
+import { planeFrame, to2D, to3D, rayPlane, makePlane, GROUND } from '../core/plane.js';
 import { toast } from '../ui/overlays.js';
 
 export class TrimTool extends Tool {
@@ -189,4 +190,121 @@ export function toggleConstruction(app) {
       });
     }
   });
+}
+
+// Project body edges onto a sketch plane as sketch curves.
+export class ProjectTool extends OpTool {
+  inputs() {
+    return [
+      { key: 'edges', label: 'Edges', kinds: ['edge'], multiple: true, placeholder: 'Click body edges', summary: (items) => `${items.length} edge${items.length === 1 ? '' : 's'}` },
+      {
+        key: 'onto',
+        label: 'Onto',
+        kinds: ['face', 'region', 'curve'],
+        multiple: false,
+        optional: true,
+        fromSelection: false,
+        placeholder: 'A flat face or sketch (default: ground)',
+        accept: (it) => (it.kind !== 'face' || this.app.faceInfo(it.bodyId, it.index)?.type === 'plane' ? it : null),
+      },
+    ];
+  }
+
+  params() {
+    return [];
+  }
+
+  hint() {
+    return 'Copies body edges into a sketch so you can build on them.';
+  }
+
+  get okLabel() {
+    return 'Project';
+  }
+
+  plane() {
+    const app = this.app;
+    const o = this.items('onto')[0];
+    if (o?.kind === 'face') {
+      const info = app.faceInfo(o.bodyId, o.index);
+      return makePlane(info.center, info.normal, info.xDir);
+    }
+    if (o?.sketchId) return app.doc.sketch(o.sketchId)?.plane || GROUND;
+    return GROUND;
+  }
+
+  // Projected sketch entities for the selected edges.
+  entities() {
+    const app = this.app;
+    const plane = this.plane();
+    const f = planeFrame(plane);
+    const out = [];
+    for (const it of this.items('edges')) {
+      const info = app.edgeInfo(it.bodyId, it.index);
+      const view = app.vp.bodyViews.get(it.bodyId);
+      if (!info || !view) continue;
+      const poly = [];
+      const segs = view.data.edgeSegments;
+      for (const [start, count] of view.edgeSegRanges[it.index] || []) {
+        for (let s = start; s < start + count; s++) {
+          if (!poly.length) poly.push([segs[s * 6], segs[s * 6 + 1], segs[s * 6 + 2]]);
+          poly.push([segs[s * 6 + 3], segs[s * 6 + 4], segs[s * 6 + 5]]);
+        }
+      }
+      const p2 = poly.map((P) => to2D(f, P));
+      if (info.type === 'line') {
+        const a = to2D(f, info.a);
+        const b = to2D(f, info.b);
+        if (Math.hypot(b[0] - a[0], b[1] - a[1]) > 1e-6) out.push({ type: 'line', a, b });
+        continue;
+      }
+      const parallel = info.type === 'circle' && Math.abs(info.axisDir[0] * f.n[0] + info.axisDir[1] * f.n[1] + info.axisDir[2] * f.n[2]) > 0.9999;
+      if (parallel) {
+        const c = to2D(f, info.center);
+        if (info.closed) {
+          out.push({ type: 'circle', c, r: info.radius });
+          continue;
+        }
+        const ang = (q) => Math.atan2(q[1] - c[1], q[0] - c[0]);
+        const a0 = ang(to2D(f, info.a));
+        const a1 = ang(to2D(f, info.b));
+        const mid = p2[Math.floor(p2.length / 2)] || to2D(f, info.a);
+        const norm = (x) => ((x % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+        const inside = norm(ang(mid) - a0) <= norm(a1 - a0);
+        out.push(inside ? { type: 'arc', c, r: info.radius, a0: norm(a0), a1: norm(a1) } : { type: 'arc', c, r: info.radius, a0: norm(a1), a1: norm(a0) });
+        continue;
+      }
+      if (p2.length >= 2) {
+        const step = Math.max(1, Math.ceil(p2.length / 24));
+        const pts = p2.filter((_, i) => i % step === 0);
+        const last = p2[p2.length - 1];
+        const closed = Math.hypot(last[0] - p2[0][0], last[1] - p2[0][1]) < 1e-6;
+        if (!closed && pts[pts.length - 1] !== last) pts.push(last);
+        out.push(closed ? { type: 'spline', pts: [...pts, pts[0]], closed: true } : { type: 'spline', pts });
+      }
+    }
+    return out;
+  }
+
+  schedule() {
+    this.app.panel.refreshOk();
+    const ov = this.app.vp.overlay;
+    ov.remove('tool-proj');
+    const f = planeFrame(this.plane());
+    const lines = this.entities().map((en) => sampleEntity(en, 48).map((p) => to3D(f, p)));
+    if (lines.length) ov.lines('tool-proj', lines, { color: this.app.vp.theme.preview, width: 2.2, depthTest: false });
+  }
+
+  ready() {
+    return this.items('edges').length > 0;
+  }
+
+  async apply() {
+    const ents = this.entities();
+    if (!ents.length) return toast('Nothing to project', { type: 'error' });
+    const plane = this.plane();
+    const onto = this.items('onto')[0];
+    this.app.cmd.addSketchEntities(plane, onto?.sketchId || null, ents, 'Project');
+    this.done();
+  }
 }

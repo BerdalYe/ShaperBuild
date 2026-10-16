@@ -90,13 +90,17 @@ export class App {
       return;
     }
     document.getElementById('boot').hidden = true;
-    this.ready = true;
     if (window.native) {
       window.native.onMenu((cmd, arg) => this.onMenu(cmd, arg));
       window.native.onOpenPath((p) => this.files.openPath(p));
-      window.native.ready();
     }
-    if (this.doc.isEmpty && !this.files.path) this.home.show();
+    // Decide on recovery and the home screen before reporting ready, so the
+    // home screen never pops up over work that has already started.
+    const recovered = await this.files.offerRecovery().catch(() => false);
+    if (!recovered && this.doc.isEmpty && !this.files.path) this.home.show();
+    this.ready = true;
+    window.native?.ready();
+    this.files.startAutosave();
   }
 
   get units() {

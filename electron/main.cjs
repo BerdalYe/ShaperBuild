@@ -1,7 +1,7 @@
 // Electron main process: window, native menu, the app:// protocol that serves
 // the renderer, file dialogs and recent files. All CAD logic lives in the
 // renderer (src/) and its geometry worker.
-const { app, BrowserWindow, Menu, dialog, ipcMain, protocol, shell, nativeTheme } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, protocol, shell, nativeTheme, screen } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { buildMenu } = require('./menu.cjs');
@@ -67,6 +67,64 @@ function addRecent(p) {
   return list;
 }
 
+// ---- window size and position -------------------------------------------
+
+function windowStateFile() {
+  return path.join(app.getPath('userData'), 'window.json');
+}
+
+function loadWindowState() {
+  try {
+    const st = JSON.parse(fs.readFileSync(windowStateFile(), 'utf8'));
+    // Only reuse the position if it is still on a connected screen.
+    const visible = screen.getAllDisplays().some((d) => {
+      const a = d.workArea;
+      return st.x < a.x + a.width - 50 && st.x + st.width > a.x + 50 && st.y < a.y + a.height - 50 && st.y + st.height > a.y;
+    });
+    if (!visible) return { width: st.width, height: st.height, maximized: st.maximized };
+    return st;
+  } catch {
+    return null;
+  }
+}
+
+function saveWindowState() {
+  if (!win || win.isDestroyed()) return;
+  const b = win.getNormalBounds();
+  try {
+    fs.mkdirSync(path.dirname(windowStateFile()), { recursive: true });
+    fs.writeFileSync(windowStateFile(), JSON.stringify({ ...b, maximized: win.isMaximized() }));
+  } catch {}
+}
+
+// ---- autosave / recovery ---------------------------------------------------
+
+function recoveryFile() {
+  return path.join(app.getPath('userData'), 'recovery.shaperbuild');
+}
+
+ipcMain.handle('recovery:write', async (_e, data, meta) => {
+  await fs.promises.mkdir(path.dirname(recoveryFile()), { recursive: true });
+  await fs.promises.writeFile(recoveryFile(), Buffer.from(data));
+  await fs.promises.writeFile(`${recoveryFile()}.json`, JSON.stringify({ ...meta, saved: Date.now() }));
+  return true;
+});
+
+ipcMain.handle('recovery:read', async () => {
+  try {
+    const data = await fs.promises.readFile(recoveryFile());
+    const meta = JSON.parse(await fs.promises.readFile(`${recoveryFile()}.json`, 'utf8'));
+    return { data: new Uint8Array(data.buffer, data.byteOffset, data.byteLength), meta };
+  } catch {
+    return null;
+  }
+});
+
+ipcMain.handle('recovery:clear', async () => {
+  for (const f of [recoveryFile(), `${recoveryFile()}.json`]) await fs.promises.rm(f, { force: true });
+  return true;
+});
+
 function sendMenu(command, arg) {
   if (win && !win.isDestroyed()) win.webContents.send('menu', command, arg);
 }
@@ -94,9 +152,11 @@ function filesFromArgv(argv) {
 function createWindow() {
   closeConfirmed = false;
   dirty = false;
+  const state = loadWindowState();
   win = new BrowserWindow({
-    width: 1440,
-    height: 900,
+    width: state?.width || 1440,
+    height: state?.height || 900,
+    ...(state && state.x !== undefined ? { x: state.x, y: state.y } : {}),
     minWidth: 900,
     minHeight: 600,
     backgroundColor: '#1c1d21',
@@ -111,7 +171,17 @@ function createWindow() {
       spellcheck: false,
     },
   });
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => {
+    if (state?.maximized) win.maximize();
+    win.show();
+  });
+  let saveTimer = null;
+  const scheduleSave = () => {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveWindowState, 500);
+  };
+  win.on('resize', scheduleSave);
+  win.on('move', scheduleSave);
   win.loadURL(`${SCHEME}://${HOST}/src/index.html`);
 
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -123,6 +193,7 @@ function createWindow() {
   });
 
   win.on('close', (e) => {
+    saveWindowState();
     if (!dirty || closeConfirmed) return;
     e.preventDefault();
     const choice = dialog.showMessageBoxSync(win, {
@@ -142,6 +213,9 @@ function createWindow() {
   win.on('closed', () => {
     win = null;
     rendererReady = false;
+    // A normal close (saved or deliberately discarded) needs no recovery copy;
+    // only crashes leave one behind.
+    for (const f of [recoveryFile(), `${recoveryFile()}.json`]) fs.rmSync(f, { force: true });
   });
 }
 

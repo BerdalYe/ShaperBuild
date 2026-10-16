@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const OUT = path.join(ROOT, 'test-output');
 
-export async function launch({ userData } = {}) {
+export async function launch({ userData, waitReady = true } = {}) {
   fs.mkdirSync(OUT, { recursive: true });
   const dataDir = userData || fs.mkdtempSync(path.join(OUT, 'profile-'));
   // require('electron') returns the binary path and downloads it if needed.
@@ -32,13 +32,17 @@ export async function launch({ userData } = {}) {
   });
   win.on('pageerror', (e) => errors.push(`pageerror: ${e.message}\n${e.stack || ''}`));
   await win.setViewportSize?.({ width: 1440, height: 900 }).catch(() => {});
-  await win.waitForFunction(() => window.__shaper && window.__shaper.ready, null, { timeout: 90000 });
+  if (waitReady) await waitForReady(win);
   // Quit without the "save changes?" prompt.
   const close = async () => {
     await app.evaluate(({ app: a }) => a.exit(0)).catch(() => {});
     await app.close().catch(() => {});
   };
   return { app, win, errors, close };
+}
+
+export function waitForReady(win) {
+  return win.waitForFunction(() => window.__shaper && window.__shaper.ready, null, { timeout: 90000 });
 }
 
 export async function shot(win, name) {

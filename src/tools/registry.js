@@ -1,9 +1,9 @@
 // Every tool, its icon, shortcut and where it sits in the tools menu.
 import { SelectTool } from './select.js';
 import { LineTool, RectTool, CircleTool, ArcTool, PolygonTool, SplineTool, EllipseTool, PointTool } from './sketch.js';
-import { TrimTool, OffsetTool, toggleConstruction } from './sketchedit.js';
+import { TrimTool, OffsetTool, ProjectTool, toggleConstruction } from './sketchedit.js';
 import { DimensionTool } from './dimension.js';
-import { ExtrudeTool, RevolveTool, SweepTool, LoftTool, FilletTool, ChamferTool, ShellTool, UnionTool, SubtractTool, IntersectTool, SplitTool, MirrorTool, LinearPatternTool, CircularPatternTool, ScaleTool } from './model.js';
+import { ExtrudeTool, RevolveTool, SweepTool, LoftTool, FilletTool, ChamferTool, ShellTool, DraftTool, UnionTool, SubtractTool, IntersectTool, SplitTool, MirrorTool, LinearPatternTool, CircularPatternTool, ScaleTool } from './model.js';
 import { TransformTool } from './transform.js';
 import { PrimitiveTool } from './primitive.js';
 import { MeasureTool, SectionTool } from './inspect.js';
@@ -24,6 +24,7 @@ export const TOOL_SECTIONS = [
       def('point', 'Point', 'point', PointTool, { desc: 'Reference point for snapping.' }),
       def('trim', 'Trim', 'trim', TrimTool, { key: 'T', desc: 'Remove pieces of curves between intersections.' }),
       def('offset', 'Offset', 'offset', OffsetTool, { desc: 'Copy curves at a distance.' }),
+      def('project', 'Project', 'project', ProjectTool, { desc: 'Copy body edges into a sketch.' }),
       def('dimension', 'Dimension', 'dimension', DimensionTool, { key: 'D', desc: 'Add sizes that drive the sketch. Select curves to add constraints like parallel or tangent.' }),
       { id: 'construction', label: 'Construction', icon: 'construction', action: (app) => toggleConstruction(app), desc: 'Turn selected curves into construction geometry (ignored for profiles).' },
     ],
@@ -38,6 +39,7 @@ export const TOOL_SECTIONS = [
       def('fillet', 'Fillet', 'fillet', FilletTool, { key: 'F', desc: 'Round edges.' }),
       def('chamfer', 'Chamfer', 'chamfer', ChamferTool, { desc: 'Bevel edges.' }),
       def('shell', 'Shell', 'shell', ShellTool, { key: 'H', desc: 'Hollow out a body, leaving walls.' }),
+      def('draft', 'Draft', 'draft', DraftTool, { desc: 'Tilt side faces by an angle (for moulds and easy printing).' }),
       def('split', 'Split', 'split', SplitTool, { desc: 'Cut a body in two with a plane or face.' }),
       def('union', 'Union', 'union', UnionTool, { key: 'U', desc: 'Join bodies into one.' }),
       def('subtract', 'Subtract', 'subtract', SubtractTool, { desc: 'Cut bodies out of another.' }),

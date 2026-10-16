@@ -782,3 +782,77 @@ export class ScaleTool extends OpTool {
   }
 }
 
+
+// ---- Draft -------------------------------------------------------------------
+
+export class DraftTool extends OpTool {
+  inputs() {
+    return [
+      {
+        key: 'faces',
+        label: 'Faces',
+        kinds: ['face'],
+        multiple: true,
+        placeholder: 'Click the side faces to tilt',
+        accept: (it) => (this.app.doc.body(it.bodyId)?.kind === 'solid' ? it : null),
+        summary: (items) => `${items.length} face${items.length === 1 ? '' : 's'}`,
+      },
+      {
+        key: 'neutral',
+        label: 'Fixed face',
+        kinds: ['face'],
+        multiple: false,
+        optional: true,
+        fromSelection: false,
+        placeholder: 'Face that keeps its size (optional)',
+        accept: (it) => (this.app.faceInfo(it.bodyId, it.index)?.type === 'plane' ? it : null),
+      },
+    ];
+  }
+
+  params() {
+    const v = this.values || {};
+    return [
+      { type: 'angle', key: 'angle', label: 'Angle', value: v.angle ?? 3 },
+      {
+        type: 'choice',
+        key: 'pull',
+        label: 'Pull direction',
+        value: v.pull ?? 'z',
+        options: [
+          { value: 'x', label: 'X' },
+          { value: 'y', label: 'Y' },
+          { value: 'z', label: 'Z' },
+        ],
+      },
+    ];
+  }
+
+  hint() {
+    return 'Tilts faces so a part can come out of a mould. The fixed face (or the bottom of the body) keeps its size.';
+  }
+
+  plane() {
+    const app = this.app;
+    const n = this.items('neutral')[0];
+    if (n) {
+      const info = app.faceInfo(n.bodyId, n.index);
+      return { origin: info.center, normal: info.normal };
+    }
+    const axis = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] }[this.values.pull || 'z'];
+    const f = this.items('faces')[0];
+    const bb = f ? app.bodyBox(f.bodyId) : null;
+    const k = { x: 'x', y: 'y', z: 'z' }[this.values.pull || 'z'];
+    const origin = [0, 0, 0];
+    if (bb) origin[['x', 'y', 'z'].indexOf(k)] = bb.min[k];
+    return { origin, normal: axis };
+  }
+
+  async compute() {
+    const faces = this.items('faces');
+    const bodyId = faces[0].bodyId;
+    if (faces.some((f) => f.bodyId !== bodyId)) throw new Error('Pick faces from a single body');
+    const body = this.app.doc.body(bodyId);
+    return this.app.kernel.call('draft', { id: body.shapeId, faces: faces.map((f) => f.index), angle: this.values.angle, plane: this.plane() });
+  }
+}

@@ -61,6 +61,7 @@ export class FileOps {
     await app.kernel.call('retainOnly', []).catch(() => {});
     this.path = null;
     this.name = name;
+    this.clearRecovery();
     app.vp.rig.fromJSON({ az: 35 * (Math.PI / 180), el: 28 * (Math.PI / 180), dist: 220, target: [0, 0, 0], ortho: app.vp.rig.useOrtho });
     app.vp.requestRender();
     app.updateTitle();
@@ -194,7 +195,7 @@ export class FileOps {
 
   // ---- project files -------------------------------------------------------
 
-  async serialize() {
+  async serialize({ thumbnail: withThumb = true } = {}) {
     const app = this.app;
     const state = app.doc.state;
     const ids = [...new Set(state.bodies.map((b) => b.shapeId))];
@@ -205,7 +206,7 @@ export class FileOps {
     }
     let thumbnail = null;
     try {
-      thumbnail = app.vp.capture({ width: 360, height: 240 });
+      if (withThumb) thumbnail = app.vp.capture({ width: 360, height: 240 });
     } catch {}
     return {
       format: 'shaperbuild',
@@ -239,6 +240,7 @@ export class FileOps {
       this.name = this.stem(target);
       app.doc.markSaved();
       app.updateTitle();
+      this.clearRecovery();
       await this.native.addRecent(target);
       this.native.setRepresentedFile(target);
       storeThumb(target, json.thumbnail);
@@ -285,6 +287,60 @@ export class FileOps {
     } finally {
       app.busy(false);
     }
+  }
+
+  // ---- autosave / recovery ---------------------------------------------------
+
+  // Every minute, keep a copy of unsaved work so a crash loses little.
+  startAutosave(ms = 60000) {
+    if (!this.native?.writeRecovery) return;
+    clearInterval(this.autosaveTimer);
+    this.autosaveTimer = setInterval(() => this.autosave(), ms);
+  }
+
+  async autosave() {
+    const app = this.app;
+    if (!app.doc.dirty || app.doc.isEmpty || this.autosaving) return;
+    this.autosaving = true;
+    try {
+      const json = await this.serialize({ thumbnail: false });
+      const bytes = await gzip(new TextEncoder().encode(JSON.stringify(json)));
+      await this.native.writeRecovery(bytes, { name: this.name, path: this.path });
+    } catch (err) {
+      console.warn('autosave failed', err);
+    } finally {
+      this.autosaving = false;
+    }
+  }
+
+  clearRecovery() {
+    return this.native?.clearRecovery?.();
+  }
+
+  // Offer to restore work from a session that ended without saving.
+  async offerRecovery() {
+    const rec = await this.native?.readRecovery?.();
+    if (!rec) return false;
+    const when = new Date(rec.meta.saved).toLocaleString();
+    const v = await modal({
+      title: 'Recover unsaved work?',
+      body: h('div', { text: `ShaperBuild closed before "${rec.meta.name || 'Untitled'}" was saved. A copy from ${when} is available.` }),
+      buttons: [
+        { label: 'Discard', value: 'discard', danger: true },
+        { label: 'Recover', value: 'recover', primary: true },
+      ],
+    });
+    if (v !== 'recover') {
+      await this.clearRecovery();
+      return false;
+    }
+    await this.loadProject(rec.data, null, `${rec.meta.name || 'Recovered'}.${PROJECT_EXT}`);
+    this.path = rec.meta.path || null;
+    // Keep it marked unsaved so the user saves it properly.
+    this.app.doc.saved = null;
+    this.app.updateTitle();
+    await this.clearRecovery();
+    return true;
   }
 
   // ---- export ----------------------------------------------------------------

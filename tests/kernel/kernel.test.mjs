@@ -301,6 +301,19 @@ test('loft between two profiles and sweep along a path', () => {
   near(volume(sw.bodies[0].id), Math.PI * 20, 0.05);
 });
 
+test('draft tilts side faces about a neutral plane', () => {
+  const a = makeBox(20, 20, 10);
+  const mesh = k.tessellate(a);
+  const sides = mesh.faceInfo.map((f, i) => ({ f, i })).filter(({ f }) => f.type === 'plane' && Math.abs(f.normal[2]) < 0.01).map(({ i }) => i);
+  assert.equal(sides.length, 4);
+  const res = k.draft({ id: a, faces: sides, angle: 5, plane: { origin: [0, 0, 0], normal: [0, 0, 1] } });
+  const v = volume(res.bodies[0].id);
+  // Tapering inwards going up removes material.
+  assert.ok(v < 4000 && v > 3000, `draft volume ${v}`);
+  const bb = res.bodies[0].mesh.bbox;
+  near(bb.min[0], -10, 1e-3);
+});
+
 test('memory management: retainOnly frees unused shapes', () => {
   const a = makeBox();
   const before = k.store.size;

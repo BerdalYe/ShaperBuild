@@ -958,6 +958,33 @@ export class Kernel {
     return this.result(ids.map((nid, i) => (i === 0 ? { id: nid, replaces: id } : { id: nid, from: id })));
   }
 
+  // Tilt faces by `angle` degrees about their line on a neutral plane
+  // (draft for moulded or 3D-printed parts).
+  draft({ id, faces, angle, plane }) {
+    const oc = this.oc;
+    if (!faces.length) throw new Error('Select the faces to tilt');
+    const shape = this.solid(id);
+    const res = this.guard('Draft', () => {
+      const r = this.scope();
+      try {
+        const b = r(new oc.BRepOffsetAPI_DraftAngle(shape));
+        const dir = this.dir(r, plane.normal);
+        const pln = r(new oc.gp_Pln(this.pnt(r, plane.origin), dir));
+        for (const i of faces) {
+          b.Add(this.face(id, i), dir, (angle * Math.PI) / 180, pln, true);
+          if (!b.AddDone()) throw new Error('a selected face cannot be tilted from this plane');
+        }
+        b.Build(r(new oc.Message_ProgressRange()));
+        if (!b.IsDone()) throw new Error('could not compute the draft');
+        return b.Shape();
+      } finally {
+        r.free();
+      }
+    });
+    const ids = this.storeSolids(res);
+    return this.result(ids.map((nid, i) => (i === 0 ? { id: nid, replaces: id } : { id: nid, from: id })));
+  }
+
   // Boolean between bodies. `targets` keep their identity; `tools` are
   // consumed unless keepTools is set.
   boolean({ op, targets, tools = [], keepTools = false }) {
