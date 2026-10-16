@@ -287,7 +287,13 @@ test('loft between two profiles and sweep along a path', () => {
   k.sketchRegions(s2);
   const lo = k.loft({ profiles: [{ type: 'region', sketchId: 'lo1', index: 0 }, { type: 'region', sketchId: 'lo2', index: 0 }] });
   const v = volume(lo.bodies[0].id);
-  assert.ok(v > Math.PI * 9 * 10 && v < 1000, `loft volume ${v}`);
+  // Close to a frustum between the two areas (a twisted loft is much smaller).
+  const A1 = 100;
+  const A2 = Math.PI * 9;
+  const frustum = (10 * (A1 + A2 + Math.sqrt(A1 * A2))) / 3;
+  assert.ok(Math.abs(v - frustum) / frustum < 0.03, `loft volume ${v} vs ${frustum}`);
+  const shape = k.get(lo.bodies[0].id).shape;
+  assert.ok(new k.oc.BRepCheck_Analyzer(shape, true, false).IsValid(), 'loft is a valid solid');
   const prof = { id: 'sw1', plane: { origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, 0, 1] }, entities: [{ id: 'c', type: 'circle', c: [0, 0], r: 1 }] };
   k.sketchRegions(prof);
   const path = [{ type: 'curve', plane: { origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, -1, 0] }, entity: { type: 'line', a: [0, 0], b: [0, 20] } }];

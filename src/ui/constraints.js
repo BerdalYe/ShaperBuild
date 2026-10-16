@@ -56,7 +56,7 @@ export class ConstraintLayer {
           const sel = selected.has(`${sk.id}:${c.id}`);
           const text = info.dimension ? this.dimText(c) : info.glyph;
           this.overlay.label(key, to3D(f, place.at), text, {
-            className: `${info.dimension ? 'dim-label' : 'cons-glyph'}${sel ? ' selected' : ''}`,
+            className: `${info.dimension ? 'dim-label' : 'cons-glyph'}${sel ? ' selected' : ''}${active.has(sk.id) ? '' : ' faint'}`,
             offset: [place.offset[0] + (info.dimension ? 0 : n * 17), place.offset[1]],
             interactive: true,
             title: `${info.label}${info.dimension ? ' — click to edit' : ' — click to select, Delete to remove'}`,

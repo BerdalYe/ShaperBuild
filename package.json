@@ -57,8 +57,7 @@
       {
         "ext": "shaperbuild",
         "name": "ShaperBuild Design",
-        "role": "Editor",
-        "icon": "icon"
+        "role": "Editor"
       },
       {
         "ext": "stl",

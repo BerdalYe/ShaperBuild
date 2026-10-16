@@ -297,6 +297,10 @@ svg.icon {
   color: var(--text);
 }
 
+.vp-label.faint {
+  opacity: 0.55;
+}
+
 .vp-label.selected {
   background: var(--accent);
   border-color: var(--accent);

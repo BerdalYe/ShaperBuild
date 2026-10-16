@@ -801,12 +801,14 @@ export class Kernel {
       const r = this.scope();
       try {
         const ts = r(new oc.BRepOffsetAPI_ThruSections(true, false, 1e-6));
+        let refDir = null;
         for (const ref of profiles) {
           const { face } = this.profile(ref);
-          const outer = oc.BRepTools.OuterWire(face);
-          ts.AddWire(outer);
+          const aligned = this.alignedWire(face, refDir, r);
+          refDir = aligned.startDir;
+          ts.AddWire(aligned.wire);
         }
-        ts.CheckCompatibility(false);
+        ts.CheckCompatibility(true);
         ts.Build(r(new oc.Message_ProgressRange()));
         return ts.Shape();
       } finally {
@@ -814,6 +816,86 @@ export class Kernel {
       }
     });
     return this.applyTool(tool, mode, targets, 'Loft');
+  }
+
+  // Outer wire of a planar face, rebuilt counter-clockwise (about the face
+  // normal) and starting at the point whose direction from the centre best
+  // matches refDir, so lofts between profiles do not twist.
+  alignedWire(face, refDir, r) {
+    const oc = this.oc;
+    const info = this.faceInfo(face);
+    const n = info.normal || [0, 0, 1];
+    const c = info.center;
+    const wire = r(oc.BRepTools.OuterWire(face));
+    const edges = this.explore(wire, this.T.TopAbs_EDGE).map((e) => oc.TopoDS.Edge(e));
+    const ends = (e) => {
+      const ad = r(new oc.BRepAdaptor_Curve(e));
+      const p0 = r(ad.Value(ad.FirstParameter()));
+      const p1 = r(ad.Value(ad.LastParameter()));
+      const a = [p0.X(), p0.Y(), p0.Z()];
+      const b = [p1.X(), p1.Y(), p1.Z()];
+      return e.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED ? [b, a] : [a, b];
+    };
+    const unit = (v) => norm(v);
+    const toDir = (P) => {
+      const v = sub(P, c);
+      const d = dot(v, n);
+      return unit([v[0] - n[0] * d, v[1] - n[1] * d, v[2] - n[2] * d]);
+    };
+    // A single closed curve: rebuild circles so they start where we want.
+    if (edges.length === 1) {
+      const ad = r(new oc.BRepAdaptor_Curve(edges[0]));
+      if (ad.GetType() === oc.GeomAbs_CurveType.GeomAbs_Circle) {
+        const circ = r(ad.Circle());
+        const pos = r(circ.Position());
+        const ax = r(pos.Direction());
+        const X = r(pos.XDirection());
+        const Y = r(pos.YDirection());
+        const axis = [ax.X(), ax.Y(), ax.Z()];
+        const want = refDir || toDir(ends(edges[0])[0]);
+        const u0 = Math.atan2(dot(want, [Y.X(), Y.Y(), Y.Z()]), dot(want, [X.X(), X.Y(), X.Z()]));
+        let edge = r(new oc.BRepBuilderAPI_MakeEdge(circ, u0, u0 + Math.PI * 2)).Edge();
+        if (dot(axis, n) < 0) edge = oc.TopoDS.Edge(edge.Reversed());
+        const w = r(new oc.BRepBuilderAPI_MakeWire(edge)).Wire();
+        return { wire: w, startDir: want };
+      }
+      return { wire, startDir: refDir || toDir(ends(edges[0])[0]) };
+    }
+    // Chain the edges end to start.
+    const items = edges.map((e) => ({ e, ends: ends(e) }));
+    const chain = [items.shift()];
+    while (items.length) {
+      const last = chain[chain.length - 1].ends[1];
+      let best = 0;
+      let bestD = Infinity;
+      let flip = false;
+      items.forEach((it, i) => {
+        const d0 = dist2(it.ends[0], last);
+        const d1 = dist2(it.ends[1], last);
+        if (d0 < bestD) [best, bestD, flip] = [i, d0, false];
+        if (d1 < bestD) [best, bestD, flip] = [i, d1, true];
+      });
+      const it = items.splice(best, 1)[0];
+      chain.push(flip ? { e: oc.TopoDS.Edge(it.e.Reversed()), ends: [it.ends[1], it.ends[0]] } : it);
+    }
+    // Counter-clockwise about the normal.
+    let area = 0;
+    for (const it of chain) area += dot(cross(sub(it.ends[0], c), sub(it.ends[1], c)), n);
+    let ordered = chain;
+    if (area < 0) ordered = chain.slice().reverse().map((it) => ({ e: oc.TopoDS.Edge(it.e.Reversed()), ends: [it.ends[1], it.ends[0]] }));
+    // Start at the vertex that best matches the previous profile.
+    let k = 0;
+    if (refDir) {
+      let bestDot = -Infinity;
+      ordered.forEach((it, i) => {
+        const d = dot(toDir(it.ends[0]), refDir);
+        if (d > bestDot) [bestDot, k] = [d, i];
+      });
+    }
+    const rotated = [...ordered.slice(k), ...ordered.slice(0, k)];
+    const wb = r(new oc.BRepBuilderAPI_MakeWire());
+    for (const it of rotated) wb.Add(it.e);
+    return { wire: wb.Wire(), startDir: toDir(rotated[0].ends[0]) };
   }
 
   fillet({ id, edges, radius }) {
