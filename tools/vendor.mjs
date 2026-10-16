@@ -44,6 +44,7 @@ fs.copyFileSync('node_modules/@expo-google-fonts/inter/LICENSE_FONT', 'src/fonts
 // files). OCCT_LGPL_EXCEPTION.txt is kept in the repository (from the OCCT
 // sources).
 fs.mkdirSync('src/licenses', { recursive: true });
+fs.copyFileSync('LICENSE', 'src/licenses/ShaperBuild.txt');
 fs.copyFileSync('node_modules/replicad-opencascadejs/LICENSE', 'src/licenses/LGPL-2.1.txt');
 fs.copyFileSync('node_modules/electron/LICENSE', 'src/licenses/electron.txt');
 // The update checker and the packages it needs, in one file.

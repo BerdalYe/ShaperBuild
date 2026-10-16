@@ -128,6 +128,7 @@ export const PRESETS = {
       'tool:fillet': 'F',
       'tool:shell': 'H',
       'tool:move': 'M',
+      'tool:translate': 'N',
       'tool:project': 'P',
       'tool:scale': 'S',
       'tool:revolve': 'V',
@@ -181,8 +182,6 @@ export function normalizeCombo(text) {
 
 // The keys in use: { preset, keys: { action: combo|'' } } -> lookups.
 export function buildKeymap(presetId = 'shaperbuild', overrides = {}) {
-  // Settings from before the alternative set was renamed.
-  if (presetId === 'shapr') presetId = 'tablet';
   const preset = PRESETS[presetId] || PRESETS.shaperbuild;
   const keys = { ...preset.keys };
   for (const [action, combo] of Object.entries(overrides || {})) {

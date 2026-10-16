@@ -6,7 +6,12 @@ summary, not legal advice; for a business launch, have a lawyer check it.
 
 ## Done in the project
 
-- **Open-source licences.** Every library the app ships is listed in
+- **ShaperBuild's own licence: MIT.** ShaperBuild is free and open-source
+  software under the MIT licence ([LICENSE](LICENSE)). Anyone may use,
+  copy, change, share and even sell it, as long as the copyright notice
+  and the licence text stay with it; there is no warranty. The MIT licence
+  fits with every library below, including the LGPL geometry engine.
+- **Open-source licences of the libraries.** Every library the app ships is listed in
   [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and inside the app
   (*Help → Open-source licences*), and the licence texts are included in
   the installers. All are permissive (MIT, Apache-2.0, ISC, BSD-style,
@@ -16,16 +21,13 @@ summary, not legal advice; for a business launch, have a lawyer check it.
   archive, so people can replace it with their own build. Where to get its
   source code is written in the notices. This is what the LGPL asks for;
   the rest of ShaperBuild does not have to be open source because of it.
-- **Trademarks.** The app does not use Shapr3D's name, logo or artwork. The
-  README and notices say that ShaperBuild is independent and not endorsed
-  by Shapr3D Zrt. Other product names are only used to say which files
-  and programs it works with. The keyboard-shortcut set that follows
-  Shapr3D's layout is called "Alternative (tablet CAD style)" in the app.
-- **Look and workflow.** ShaperBuild has its own code, icons, texts and
-  design. Copying how a program works (its functions and workflow) is
-  allowed in the EU (EU Court of Justice, *SAS Institute*, C-406/10);
-  copying its code, icons, artwork or manual text is not, and none of that
-  has been copied.
+- **No other company's names or material.** ShaperBuild does not use
+  another CAD program's name, logo, artwork, icons, code or manual text.
+  Names of file formats and programs it works with (STEP, PrusaSlicer…)
+  are only used to say so. Making a program that works in a similar way is
+  allowed: functions and workflows are not protected by copyright in the
+  EU (EU Court of Justice, *SAS Institute*, C-406/10); code, artwork and
+  texts are, and all of ShaperBuild's are its own.
 - **Privacy (GDPR).** ShaperBuild has no accounts, no tracking and no
   analytics. Designs, settings, versions and recovery copies stay on the
   computer. The only network use is the update check, which asks GitHub
@@ -33,27 +35,19 @@ summary, not legal advice; for a business launch, have a lawyer check it.
   be turned off in Settings. This is stated in the app (*Help → Privacy*)
   and in [PRIVACY.md](PRIVACY.md).
 
-## Your decisions before sharing
+## Still to check before sharing widely
 
-1. **Choose a licence for ShaperBuild itself.** `package.json` says
-   `UNLICENSED`, which means "all rights reserved": people may look at a
-   public repository but not use, change or share the code. Common
-   choices:
-   - **MIT** – anyone may use it, also commercially; simplest.
-   - **GPL-3.0** – changed versions that are shared must stay open source.
-   - **Keep it closed** – fine too; then share only the installers.
-   Any of these works with the libraries above. Add a `LICENSE` file and
-   set `"license"` in `package.json` to match.
-2. **Check the name "ShaperBuild".** "Shaper" is used by Shaper Tools, Inc.
+1. **Check the name "ShaperBuild".** "Shaper" is used by Shaper Tools, Inc.
    (Shaper Origin, Shaper Studio), which also makes design software, and
-   "Shapr" is Shapr3D's mark. Before publishing widely or selling, search
-   the registers for similar names in classes 9 and 42:
+   other registered names for 3D software are close to it. Before
+   publishing widely, search the registers for similar names in classes 9
+   and 42:
    [Patentstyret](https://search.patentstyret.no/),
    [EUIPO eSearch](https://euipo.europa.eu/eSearch/),
    [WIPO Brand Database](https://branddb.wipo.int/) (and the
    [USPTO](https://tmsearch.uspto.gov/) for the USA). If a similar name
    is registered for software, pick another name.
-3. **Who publishes it.** The copyright line says "BerdalYe". If a company
+2. **Who publishes it.** The copyright line says "BerdalYe". If a company
    will publish it, change the copyright and the publisher name in
    `package.json` (`build.copyright`) to the company.
 

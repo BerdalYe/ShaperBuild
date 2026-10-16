@@ -126,6 +126,15 @@ export class FileOps {
       if (!opts.force && !(await this.confirmDiscard())) return;
       return this.loadProject(data, path, name);
     }
+    // .shapr designs keep their shapes in a closed format (Parasolid) that
+    // no open-source library can read.
+    if (ext === 'shapr') {
+      modal({
+        title: 'This file cannot be opened',
+        body: h('div', h('p', { text: '.shapr files store their shapes in a closed format that ShaperBuild cannot read.' }), h('p', { text: 'Open the design in the program that made it and export it as STEP (best: the shapes stay editable) or 3MF/STL. Then import that file here.' })),
+      });
+      return;
+    }
     if (!['stl', 'obj', '3mf', 'step', 'stp', 'dxf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'].includes(ext)) {
       toast(t('Unsupported file type: .{ext}', { ext }), { type: 'error' });
       return;

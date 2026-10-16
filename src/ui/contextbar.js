@@ -153,7 +153,7 @@ export class ContextBar {
   }
 
   // Editable size for a single selected line, circle or arc. Setting it adds
-  // (or updates) a dimension constraint, like typing into a Shapr3D label.
+  // (or updates) a dimension constraint, like typing into a dimension label.
   quickProps(list) {
     const app = this.app;
     if (list.length === 1 && list[0].kind === 'image') return this.imageProps(list[0].imageId);

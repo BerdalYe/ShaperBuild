@@ -1500,9 +1500,7 @@ export const NB = {
   'Open-source licences': 'Lisenser for åpen kildekode',
   Privacy: 'Personvern',
   '"preset" is shaperbuild or tablet; "keys" changes single actions, like "tool:extrude": "E". An empty text removes a key.': '«preset» er shaperbuild eller tablet; «keys» endrer enkelthandlinger, for eksempel "tool:extrude": "E". En tom tekst fjerner en tast.',
-  'ShaperBuild uses this open-source software. Click one to read its licence. The geometry engine is a separate, unchanged library that can be replaced; its source code is at github.com/sgenoud/replicad and github.com/Open-Cascade-SAS/OCCT.': 'ShaperBuild bruker denne programvaren med åpen kildekode. Klikk på en for å lese lisensen. Geometrimotoren er et eget, uendret bibliotek som kan byttes ut; kildekoden finnes på github.com/sgenoud/replicad og github.com/Open-Cascade-SAS/OCCT.',
   'Settings…': 'Innstillinger …',
-  'ShaperBuild is an independent project. It is not made, endorsed or supported by Shapr3D Zrt.; Shapr3D is their trademark.': 'ShaperBuild er et uavhengig prosjekt. Det er ikke laget, godkjent eller støttet av Shapr3D Zrt.; Shapr3D er deres varemerke.',
   'The licence is at the top of the file src/vendor/three-addons/libs/fflate.module.js.': 'Lisensen står øverst i filen src/vendor/three-addons/libs/fflate.module.js.',
   'Alternative (tablet CAD style)': 'Alternativt (som CAD på nettbrett)',
   'Open CASCADE Technology (replicad-opencascadejs 1.1.0)': 'Open CASCADE Technology (replicad-opencascadejs 1.1.0)',
@@ -1519,6 +1517,11 @@ export const NB = {
   'MIT; Chromium and Node.js have their own licences (LICENSES.chromium.html next to the app)': 'MIT; Chromium og Node.js har egne lisenser (LICENSES.chromium.html ved siden av appen)',
   'MIT, ISC, BlueOak-1.0.0, 0BSD, Python-2.0': 'MIT, ISC, BlueOak-1.0.0, 0BSD, Python-2.0',
   'electron-updater 6.8.9 and the packages it uses': 'electron-updater 6.8.9 og pakkene den bruker',
+  'This file cannot be opened': 'Denne filen kan ikke åpnes',
+  '.shapr files store their shapes in a closed format that ShaperBuild cannot read.': '.shapr-filer lagrer formene i et lukket format som ShaperBuild ikke kan lese.',
+  'Open the design in the program that made it and export it as STEP (best: the shapes stay editable) or 3MF/STL. Then import that file here.': 'Åpne modellen i programmet som laget den, og eksporter den som STEP (best: formene kan fortsatt redigeres) eller 3MF/STL. Importer så den filen her.',
+  'ShaperBuild is open source (MIT) and uses this open-source software. Click one to read its licence. The geometry engine is a separate, unchanged library that can be replaced; its source code is at github.com/sgenoud/replicad and github.com/Open-Cascade-SAS/OCCT.': 'ShaperBuild har åpen kildekode (MIT) og bruker denne programvaren med åpen kildekode. Klikk på en for å lese lisensen. Geometrimotoren er et eget, uendret bibliotek som kan byttes ut; kildekoden finnes på github.com/sgenoud/replicad og github.com/Open-Cascade-SAS/OCCT.',
+  'Free and open-source software under the MIT licence.': 'Gratis programvare med åpen kildekode under MIT-lisensen.',
 };
 
 const upper = (s) => s.charAt(0).toUpperCase() + s.slice(1);

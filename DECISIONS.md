@@ -1,7 +1,7 @@
 # Decisions
 
-Where the Shapr3D-style specification leaves a gap, or where ShaperBuild
-works differently on purpose, the choice is written down here.
+Where the specification leaves a gap, or where ShaperBuild works
+differently on purpose, the choice is written down here.
 
 ## Languages
 
@@ -56,9 +56,8 @@ works differently on purpose, the choice is written down here.
 ## Keyboard shortcuts
 
 - Two ready-made sets: **ShaperBuild** (the keys the app always had) and
-  **Alternative (tablet CAD style)**, laid out like Shapr3D's keys (spec
-  parts 4.1 and 4.2). Its name does not use the Shapr3D trademark; settings
-  saved with the old name still work. Any key can be changed in
+  **Alternative (tablet CAD style)** (spec parts 4.1 and 4.2). Any key can
+  be changed in
   Settings > Keyboard shortcuts, or as JSON. A key given to one action is
   taken away from the action that had it.
 - Both sets: Ctrl+1–7 for the standard views, Ctrl+Shift+A clears the
@@ -66,10 +65,10 @@ works differently on purpose, the choice is written down here.
 - Conflicts in the spec's key list are resolved like this: E and
   F stay Extrude and Fillet; the face and edge filters are Shift+F and
   Shift+G, B selects bodies only, and Tab cycles the filter. While dragging
-  a selection box, B, F, E and A switch the filter (as in Shapr3D).
+  a selection box, B, F, E and A switch the filter.
   Ctrl+I is Intersect in that set (Import stays in the File menu), and
   Select Through is Ctrl+Shift+S (Save As stays in the File menu).
-- Translate (N) has no key yet because there is no Translate tool yet.
+- Translate is N in the alternative set.
 - The native menus show the ShaperBuild keys.
 - A short tap on Space over a flat face looks straight at it (spec "zoom
   to face"); holding Space and dragging still orbits.

@@ -234,12 +234,22 @@ try {
   await win.waitForTimeout(200);
   assert.equal(await A(() => window.__shaper.selection.list[0]?.bodyId), box, 'a tap selects');
 
+  step('a .shapr file explains how to bring the design in');
+  await A(() => {
+    window.__shaper.files.openData('Part.shapr', new Uint8Array([80, 75, 3, 4]), null);
+  });
+  await win.waitForSelector('.modal-head:has-text("This file cannot be opened")');
+  assert.match(await win.locator('.modal-body').innerText(), /export it as STEP/);
+  await win.locator('.modal .btn.primary').click();
+
   step('open-source licences and privacy');
   await A(() => {
     window.__shaper.dialogs.licences();
   });
   await win.waitForSelector('.lic-row');
-  assert.equal(await win.locator('.lic-row').count(), 8);
+  assert.equal(await win.locator('.lic-row').count(), 9);
+  await win.waitForFunction(() => document.querySelector('.lic-text')?.textContent.includes('MIT License'));
+  await win.locator('.lic-row', { hasText: 'Open CASCADE' }).click();
   await win.waitForFunction(() => document.querySelector('.lic-text')?.textContent.includes('GNU LESSER GENERAL PUBLIC LICENSE'));
   await win.locator('.lic-row', { hasText: 'Manifold' }).click();
   await win.waitForFunction(() => document.querySelector('.lic-text')?.textContent.includes('Apache License'));

@@ -1,6 +1,7 @@
 # Third-party software in ShaperBuild
 
-ShaperBuild includes the open-source software listed below. Each part keeps
+ShaperBuild itself is open source under the MIT licence ([LICENSE](LICENSE)).
+It includes the open-source software listed below. Each part keeps
 its own licence. The licence texts are in this repository (paths below),
 in the installed app's `resources/licenses` folder, and in the app under
 *Help → Open-source licences*.
@@ -39,8 +40,7 @@ Source code:
 
 ## Trademarks
 
-Shapr3D is a trademark of Shapr3D Zrt. ShaperBuild is an independent
-project; it is not made, endorsed or supported by Shapr3D Zrt. Other names
-(STEP, glTF, USDZ, iPhone, iPad, PrusaSlicer, Bambu Studio, OrcaSlicer,
-Cura, Creality Print and others) belong to their owners and are only used
-to say which files and programs ShaperBuild works with.
+Names of file formats and programs (STEP, glTF, USDZ, iPhone, iPad,
+PrusaSlicer, Bambu Studio, OrcaSlicer, Cura, Creality Print and others)
+belong to their owners and are only used to say which files and programs
+ShaperBuild works with.
