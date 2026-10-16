@@ -19,6 +19,7 @@
       <header class="topbar">
         <div class="tb-group">
           <button id="btn-home" class="tb-btn" title="Home – your designs"></button>
+          <button id="btn-items" class="tb-btn on" title="Show / hide the items list (Tab)"></button>
           <div class="doc-title" id="doc-title" title="Rename design">
             <span id="doc-name">Untitled</span><span id="doc-dirty" class="dirty-dot" hidden></span>
           </div>
@@ -37,6 +38,7 @@
         <div class="tb-group">
           <button id="btn-import" class="tb-btn wide" title="Import STL, OBJ, 3MF or STEP (Ctrl+I)"><span class="ic"></span><span>Import</span></button>
           <button id="btn-export" class="tb-btn wide primary" title="Export (Ctrl+E)"><span class="ic"></span><span>Export</span></button>
+          <button id="btn-help" class="tb-btn" title="Help, tutorial and shortcuts"></button>
           <button id="btn-settings" class="tb-btn" title="Settings"></button>
         </div>
       </header>
@@ -46,6 +48,8 @@
           <div id="tool-panel" class="tool-panel" hidden></div>
           <div id="context-bar" class="context-bar" hidden></div>
           <div id="view-controls" class="view-controls"></div>
+          <div id="tool-hint" class="tool-hint" hidden></div>
+          <div id="starter" class="starter" hidden></div>
           <div id="busy" class="busy" hidden><span class="spinner"></span><span id="busy-text">Working…</span></div>
           <div id="toasts" class="toasts"></div>
           <div id="boot" class="boot"><div class="boot-card"><div class="spinner big"></div><div>Starting the geometry engine…</div></div></div>

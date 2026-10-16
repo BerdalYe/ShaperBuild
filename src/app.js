@@ -16,9 +16,12 @@ import { FileOps } from './fileops.js';
 import { Dialogs } from './ui/dialogs.js';
 import { Home } from './ui/home.js';
 import { ConstraintLayer } from './ui/constraints.js';
-import { toast, showMenu } from './ui/overlays.js';
+import { ViewControls, NavHelp } from './ui/viewcontrols.js';
+import { StarterCard, ToolHint } from './ui/starter.js';
+import { Tutorial } from './ui/tutorial.js';
+import { toast, showMenu, hideTooltip } from './ui/overlays.js';
 import { icon } from './ui/icons.js';
-import { isTyping } from './ui/dom.js';
+import { isTyping, modKey } from './ui/dom.js';
 import { TOOL_KEYS } from './tools/registry.js';
 import { UNITS, formatLength, formatArea, formatVolume, niceStep } from './core/units.js';
 import { planeFrame, to3D, to2D, samePlane } from './core/plane.js';
@@ -38,6 +41,7 @@ const DEFAULT_SETTINGS = {
   stlQuality: 'fine',
   stlBinary: true,
   autoLookAt: false,
+  toolLabels: true,
 };
 
 export class App {
@@ -58,7 +62,7 @@ export class App {
     this.applyViewSettings();
     this.panel = new ToolPanel(document.getElementById('tool-panel'), this);
     this.dim = new DimInput(document.getElementById('viewport'), this);
-    this.status = new Status();
+    this.status = new Status(this);
     this.cmd = new Commands(this);
     this.files = new FileOps(this);
     this.dialogs = new Dialogs(this);
@@ -69,6 +73,9 @@ export class App {
     this.home = new Home(document.getElementById('home'), this);
     this.constraints = new ConstraintLayer(this);
     this.tools.on('change', () => this.constraints.update());
+    this.navHelp = new NavHelp(this);
+    this.tutorial = new Tutorial(this);
+    this.starter = new StarterCard(document.getElementById('starter'), this);
 
     this.doc.on('change', (ev) => this.onDocChange(ev));
     this.doc.on('saved', () => this.updateTitle());
@@ -101,6 +108,10 @@ export class App {
     this.ready = true;
     window.native?.ready();
     this.files.startAutosave();
+    this.starter.update();
+    // First launch: offer the interactive tutorial.
+    const info = await window.native?.info().catch(() => null);
+    if (!recovered && !this.tutorial.seen && !info?.noTutorial) this.tutorial.offer();
   }
 
   get units() {
@@ -778,6 +789,10 @@ export class App {
   setupChrome() {
     const $ = (id) => document.getElementById(id);
     $('btn-home').innerHTML = icon('logo');
+    $('btn-items').innerHTML = icon('items');
+    $('btn-help').innerHTML = icon('help');
+    $('btn-items').addEventListener('click', () => this.toggleItems());
+    $('btn-help').addEventListener('click', (e) => this.helpMenu(e));
     $('btn-undo').innerHTML = icon('undo');
     $('btn-redo').innerHTML = icon('redo');
     $('btn-settings').innerHTML = icon('settings');
@@ -801,22 +816,22 @@ export class App {
     snapBtn.classList.toggle('on', this.settings.snap);
     snapBtn.addEventListener('click', () => this.toggleSnap());
 
-    const vc = $('view-controls');
-    const add = (name, title, action, key) => {
-      const b = document.createElement('button');
-      b.className = 'vc-btn';
-      b.title = title;
-      b.dataset.vc = key || name;
-      b.innerHTML = icon(name);
-      b.addEventListener('click', action);
-      vc.append(b);
-      return b;
-    };
-    add('fit', 'Zoom to fit (Z)', () => this.vp.fit(this.selectionBox()));
-    this.orthoBtn = add('ortho', 'Perspective / orthographic (O)', () => this.toggleOrtho());
-    add('grid', 'Grid (G)', () => this.toggleGrid()).classList.toggle('on', this.settings.showGrid);
-    add('section', 'Section view (X)', () => this.toggleSection(), 'section');
-    add('sidebar', 'Items panel (Tab)', () => this.toggleItems());
+    this.viewControls = new ViewControls($('view-controls'), this);
+    this.toolHint = new ToolHint($('tool-hint'), this);
+  }
+
+  helpMenu(e) {
+    const r = e.currentTarget.getBoundingClientRect();
+    const m = modKey();
+    showMenu(r.left, r.bottom + 6, [
+      { label: 'Interactive tutorial', icon: 'learn', action: () => this.tutorial.start() },
+      { label: 'How to move around', icon: 'mouse', action: () => this.navHelp.toggle(true) },
+      { label: 'Find a tool', icon: 'search', kbd: `${m}K`, action: () => this.toolsMenu.focusSearch() },
+      { label: 'Keyboard shortcuts', icon: 'keyboard', kbd: `${m}/`, action: () => this.dialogs.shortcuts() },
+      { label: 'Getting started', icon: 'help', action: () => this.dialogs.gettingStarted() },
+      '-',
+      { label: 'About ShaperBuild', icon: 'logo', action: () => this.dialogs.about() },
+    ]);
   }
 
   renameDesign() {
@@ -851,12 +866,12 @@ export class App {
     document.getElementById('tools').style.display = on ? 'none' : '';
     this.vp.setVisualization(on);
     this.refreshHighlights();
+    this.starter?.update();
   }
 
   toggleOrtho() {
     this.vp.setOrtho(!this.vp.rig.useOrtho);
-    this.orthoBtn.innerHTML = icon(this.vp.rig.useOrtho ? 'persp' : 'ortho');
-    this.orthoBtn.classList.toggle('on', this.vp.rig.useOrtho);
+    this.viewControls.setOrtho(this.vp.rig.useOrtho);
     toast(this.vp.rig.useOrtho ? 'Orthographic view' : 'Perspective view', { ms: 1000 });
   }
 
@@ -880,8 +895,16 @@ export class App {
   }
 
   toggleItems() {
-    document.getElementById('items').classList.toggle('collapsed');
+    const collapsed = document.getElementById('items').classList.toggle('collapsed');
+    document.getElementById('btn-items').classList.toggle('on', !collapsed);
     setTimeout(() => this.vp.resize(), 200);
+  }
+
+  toggleToolLabels() {
+    this.settings.toolLabels = this.settings.toolLabels === false;
+    this.saveSettings();
+    this.toolsMenu.setLabels(this.settings.toolLabels);
+    setTimeout(() => this.vp.resize(), 50);
   }
 
   toggleTheme() {
@@ -917,6 +940,7 @@ export class App {
           w: 'close-design',
           ',': 'settings',
           '/': 'shortcuts',
+          k: 'find-tool',
         };
         const textEdit = typing && (k === 'z' || k === 'y');
         if (map[k] && !textEdit) {
@@ -926,6 +950,21 @@ export class App {
         }
       }
       if (typing) return;
+      // Hold Space and drag to orbit (Shift+Space to pan).
+      if (e.key === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        if (!e.repeat) {
+          document.activeElement?.blur?.();
+          this.vp.setSpaceHeld(true);
+        }
+        return;
+      }
+      // Esc first closes the navigation card and leaves orbit/pan mode.
+      if (e.key === 'Escape' && (this.navHelp.open || this.vp.navMode)) {
+        if (this.navHelp.open) this.navHelp.close();
+        else this.vp.setNavMode(null);
+        return;
+      }
       const ev = { key: e.key, shift: e.shiftKey, ctrl: mod, alt: e.altKey, native: e };
       if (this.tools.active?.onKeyDown(ev)) {
         e.preventDefault();
@@ -940,10 +979,23 @@ export class App {
       }
       const k = e.key;
       if (k === 'Escape') {
+        hideTooltip();
         if (!this.tools.isSelect) this.tools.cancel();
         else this.selection.clear();
         return;
       }
+      // Arrow keys orbit, Shift+arrows pan, + and - zoom.
+      const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] };
+      if (arrows[k]) {
+        e.preventDefault();
+        const [ax, ay] = arrows[k];
+        if (e.shiftKey) this.vp.stepPan(-ax * 0.12, ay * 0.12);
+        else this.vp.stepOrbit((-ax * Math.PI) / 12, (ay * Math.PI) / 12);
+        return;
+      }
+      if (k === '+' || k === '=') return this.vp.stepZoom(1 / 1.25);
+      if (k === '-' || k === '_') return this.vp.stepZoom(1.25);
+      if (k === '?') return this.dialogs.shortcuts();
       if (k === 'Delete' || k === 'Backspace') {
         e.preventDefault();
         this.cmd.deleteSelection();
@@ -978,6 +1030,11 @@ export class App {
       }
       if (TOOL_KEYS[lower] && !this.visual) this.tools.activate(TOOL_KEYS[lower]);
     });
+    const release = () => this.vp.setSpaceHeld(false);
+    window.addEventListener('keyup', (e) => {
+      if (e.key === ' ' || e.code === 'Space') release();
+    });
+    window.addEventListener('blur', release);
   }
 
   selectionBox() {
@@ -1107,6 +1164,14 @@ export class App {
         return this.dialogs.shortcuts();
       case 'getting-started':
         return this.dialogs.gettingStarted();
+      case 'tutorial':
+        return this.tutorial.start();
+      case 'navigation-help':
+        return this.navHelp.toggle(true);
+      case 'find-tool':
+        return this.toolsMenu.focusSearch();
+      case 'toggle-tool-labels':
+        return this.toggleToolLabels();
       case 'about':
         return this.dialogs.about();
       default:
@@ -1115,9 +1180,16 @@ export class App {
   }
 }
 
+// Hints for the current tool: in the view while a tool is active, in the
+// status bar otherwise.
 class Status {
+  constructor(app) {
+    this.app = app;
+  }
+
   hint(html) {
-    document.getElementById('status-hint').innerHTML = html || '';
+    const inView = this.app.toolHint?.set(html);
+    document.getElementById('status-hint').innerHTML = inView ? '' : html || '';
   }
 }
 

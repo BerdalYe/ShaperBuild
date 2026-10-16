@@ -181,6 +181,18 @@ export class Commands {
     if (!visible) this.app.selection.prune((it) => (kind === 'body' ? it.bodyId !== id : it.sketchId !== id));
   }
 
+  // Show or hide several items in one undo step: items = [{ kind, id }].
+  setVisibleMany(items, visible) {
+    if (!items.length) return;
+    this.doc.apply(visible ? 'Show' : 'Hide', (d) => {
+      for (const { kind, id } of items) kind === 'body' ? d.updateBody(id, { visible }) : d.updateSketch(id, { visible });
+    });
+    if (!visible) {
+      const gone = new Set(items.map((x) => x.id));
+      this.app.selection.prune((it) => !gone.has(it.bodyId) && !gone.has(it.sketchId));
+    }
+  }
+
   isolate(bodyId) {
     this.doc.apply('Show only', (d) => {
       for (const b of d.bodies) d.updateBody(b.id, { visible: b.id === bodyId });

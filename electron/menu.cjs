@@ -110,6 +110,7 @@ function buildMenu({ send, recent = [], isDev = false }) {
         cmd('Light / Dark Theme', 'toggle-theme'),
         { type: 'separator' },
         hint('Items Panel', 'toggle-items', 'Tab'),
+        cmd('Tool Names in Tools Menu', 'toggle-tool-labels'),
         { role: 'togglefullscreen' },
         ...(isDev ? [{ type: 'separator' }, { role: 'reload' }, { role: 'toggleDevTools' }] : []),
       ],
@@ -117,6 +118,10 @@ function buildMenu({ send, recent = [], isDev = false }) {
     {
       label: 'Help',
       submenu: [
+        cmd('Interactive Tutorial', 'tutorial'),
+        cmd('How to Move Around', 'navigation-help'),
+        cmd('Find a Tool…', 'find-tool', 'CmdOrCtrl+K'),
+        { type: 'separator' },
         cmd('Keyboard Shortcuts', 'shortcuts', 'CmdOrCtrl+/'),
         cmd('Getting Started', 'getting-started'),
         ...(mac ? [] : [{ type: 'separator' }, cmd('About ShaperBuild', 'about')]),

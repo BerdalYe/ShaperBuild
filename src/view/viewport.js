@@ -28,6 +28,8 @@ export class Viewport extends Emitter {
     this.needsRender = true;
     this.showEdges = true;
     this.scrollMode = 'zoom';
+    this.navMode = null;
+    this.spaceHeld = false;
     this.unitFactor = 1;
     this.sectionPlane = null;
 
@@ -355,12 +357,15 @@ export class Viewport extends Emitter {
       c.focus({ preventScroll: true });
       const { x, y } = this.local(e);
       moved = false;
-      const navButton = e.button === 2 || e.button === 1;
+      // Left-drag navigates while an orbit/pan mode is on or Space is held.
+      const leftMode = e.button === 0 ? this.leftDragMode(e) : null;
+      const navButton = e.button === 2 || e.button === 1 || !!leftMode;
       if (navButton) {
         c.setPointerCapture(e.pointerId);
-        const pan = e.button === 1 || e.shiftKey;
+        const pan = e.button === 1 || e.shiftKey || leftMode === 'pan';
         const pivot = pan ? null : this.raycastAny(x, y);
         nav = { pan, x, y, sx: x, sy: y, pivot, button: e.button, panAt: pan ? this.raycastAny(x, y) : null };
+        this.container.classList.add('navigating');
         return;
       }
       if (e.button === 0) {
@@ -380,6 +385,7 @@ export class Viewport extends Emitter {
         if (nav.pan) this.rig.pan(dx, dy, this.height, nav.panAt ? new THREE.Vector3(...nav.panAt.toArray()) : null);
         else this.rig.orbit(dx, dy, nav.pivot);
         this.requestRender();
+        if (dx || dy) this.emit('nav', nav.pan ? 'pan' : 'orbit');
         return;
       }
       // Handle at most one move per frame: picking big scenes is not free.
@@ -394,6 +400,7 @@ export class Viewport extends Emitter {
         const wasMoved = moved;
         const button = nav.button;
         nav = null;
+        this.container.classList.remove('navigating');
         c.releasePointerCapture?.(e.pointerId);
         if (!wasMoved && button === 2) this.emit('contextmenu', this.event(e));
         return;
@@ -418,6 +425,7 @@ export class Viewport extends Emitter {
           if (e.shiftKey) this.rig.pan(-e.deltaX, -e.deltaY, this.height);
           else this.rig.orbit(e.deltaX * 0.6, e.deltaY * 0.6, this.raycastAny(this.width / 2, this.height / 2));
           this.requestRender();
+          this.emit('nav', e.shiftKey ? 'pan' : 'orbit');
           return;
         }
         let delta = e.deltaY;
@@ -434,9 +442,57 @@ export class Viewport extends Emitter {
         this.zoomCache = { t: now, x, y, point };
         this.rig.zoom(factor, point);
         this.requestRender();
+        this.emit('nav', 'zoom');
       },
       { passive: false },
     );
+  }
+
+  // Navigation for the left button: 'orbit', 'pan' or null.
+  leftDragMode(e) {
+    if (this.spaceHeld) return e.shiftKey ? 'pan' : 'orbit';
+    return this.navMode || null;
+  }
+
+  // Sticky orbit / pan mode for the left button (on-screen buttons).
+  setNavMode(mode) {
+    this.navMode = mode || null;
+    this.updateNavCursor();
+    this.emit('navmode', this.navMode);
+  }
+
+  setSpaceHeld(on) {
+    this.spaceHeld = on;
+    this.updateNavCursor();
+  }
+
+  updateNavCursor() {
+    this.container.classList.toggle('nav-grab', !!(this.navMode || this.spaceHeld));
+  }
+
+  // Keyboard / button steps.
+  stepOrbit(daz, del) {
+    const r = this.rig;
+    const base = r.anim ? r.anim.to : r;
+    r.animateTo({ az: base.az + daz, el: Math.max(-Math.PI / 2, Math.min(Math.PI / 2, base.el + del)), target: base.target, dist: base.dist }, 180);
+    this.requestRender();
+    this.emit('nav', 'orbit');
+  }
+
+  stepPan(fx, fy) {
+    // Finish a running step animation first so it is not cut short.
+    if (this.rig.anim) this.rig.tick(performance.now() + 1e6);
+    this.rig.pan(fx * this.width, fy * this.height, this.height);
+    this.requestRender();
+    this.emit('nav', 'pan');
+  }
+
+  stepZoom(factor) {
+    const r = this.rig;
+    const base = r.anim ? r.anim.to : r;
+    r.animateTo({ az: base.az, el: base.el, target: base.target, dist: Math.max(0.05, base.dist * factor) }, 160);
+    this.requestRender();
+    this.emit('nav', 'zoom');
   }
 
   flushMove() {

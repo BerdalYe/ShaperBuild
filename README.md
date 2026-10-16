@@ -18,6 +18,18 @@ The installers are not code-signed yet, so the first launch shows a warning:
 - **Windows:** "Windows protected your PC" → *More info* → *Run anyway*.
 - **macOS:** right-click the app → *Open* → *Open*.
 
+## Getting started
+
+The first time you open ShaperBuild it offers an **interactive tutorial** (about 3 minutes). It shows you how to move around, draw a rectangle, pull it into 3D and round its edges, and it waits for you to try each step. You can start it again any time from **Help → Interactive tutorial** or the home screen.
+
+Finding your way around:
+
+- **Tools** are on the right, with names, grouped into Sketch, Model, Transform, Shapes and Inspect. Hover one to see what it does.
+- **Search tools** (Ctrl+K / ⌘K) finds any tool or command by name or purpose — try "hole", "round" or "print".
+- **Items** on the left lists everything in your design: bodies, meshes and sketches. Hide, rename, recolour or delete them there.
+- The **bar at the bottom** suggests tools for whatever you selected. While a tool is active, a hint there tells you what to do next.
+- The **buttons under the view cube** fit the view, jump to standard views, zoom, and switch on **Orbit** or **Pan** mode for dragging with the left button. The **mouse** button explains every way to move around.
+
 ## What it does
 
 **Sketch** – Line, Rectangle, Circle, Arc, Polygon, Spline, Ellipse, Point, Trim, Offset and Construction lines. Click the grid, any flat face or an existing sketch to draw on it. Points snap to ends, midpoints, centers, body corners, alignments and the grid. Start typing while drawing to enter exact sizes (Tab moves between boxes, Enter applies). Closed shapes turn into regions you can click.
@@ -42,16 +54,17 @@ The geometry engine is [OpenCascade](https://dev.opencascade.org/) (a real B-rep
 
 | | |
 |---|---|
-| Orbit | Right-drag (trackpad: two-finger swipe) |
-| Pan | Middle-drag or Shift + right-drag |
-| Zoom | Scroll wheel or pinch |
+| Orbit | Right-drag · hold Space and drag · arrow keys (trackpad: two-finger swipe) |
+| Pan | Middle-drag or Shift + right-drag · Shift + Space and drag · Shift + arrow keys |
+| Zoom | Scroll wheel or pinch · + and − |
 | Select | Click (adds to the selection) · double-click a face for its whole body · drag on empty space for a box |
 | Standard views | View cube, or keys 0 (iso), 1 (front), 3 (right), 7 (top) |
 | Zoom to fit | Z |
 | Tools | L line · R rectangle · C circle · A arc · P polygon · B spline · T trim · D dimension · E extrude · Q revolve · F fillet · H shell · U union · M move · K measure · X section |
 | Undo / redo | Ctrl+Z / Ctrl+Y (⌘ on Mac) |
+| Find a tool | Ctrl+K (⌘K on Mac) |
 
-*Help → Keyboard Shortcuts* in the app lists everything.
+Press **?** or use *Help → Keyboard Shortcuts* in the app to see everything. Laptop without a mouse? Use the Orbit and Pan buttons, or set *Settings → Scroll wheel / two-finger swipe* to orbit.
 
 ## How it compares to Shapr3D
 

@@ -46,3 +46,8 @@ export function isTyping() {
   const a = document.activeElement;
   return !!a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || a.isContentEditable);
 }
+
+export const isMac = () => /mac/i.test(window.native?.platform || navigator.platform || '');
+
+// Modifier key label for shortcuts: "⌘" on macOS, "Ctrl+" elsewhere.
+export const modKey = () => (isMac() ? '⌘' : 'Ctrl+');

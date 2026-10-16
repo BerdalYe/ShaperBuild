@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const OUT = path.join(ROOT, 'test-output');
 
-export async function launch({ userData, waitReady = true } = {}) {
+export async function launch({ userData, waitReady = true, tutorial = false } = {}) {
   fs.mkdirSync(OUT, { recursive: true });
   const dataDir = userData || fs.mkdtempSync(path.join(OUT, 'profile-'));
   // require('electron') returns the binary path and downloads it if needed.
@@ -22,7 +22,8 @@ export async function launch({ userData, waitReady = true } = {}) {
     // Software rendering keeps screenshots identical on machines without a GPU.
     args: packaged ? flags : [ROOT, ...flags],
     cwd: ROOT,
-    env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: '1' },
+    // The first-run tutorial would cover the window, so suites opt in to it.
+    env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: '1', SHAPER_NO_TUTORIAL: tutorial ? '0' : '1' },
   });
   const win = await app.firstWindow();
   const errors = [];

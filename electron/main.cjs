@@ -303,6 +303,8 @@ ipcMain.handle('app:info', () => ({
   version: app.getVersion(),
   platform: process.platform,
   dark: nativeTheme.shouldUseDarkColors,
+  // Automated tests start without the first-run tutorial.
+  noTutorial: process.env.SHAPER_NO_TUTORIAL === '1',
 }));
 
 ipcMain.on('app:ready', () => {

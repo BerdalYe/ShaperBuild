@@ -30,6 +30,14 @@ export class Home {
         action('', 'import', 'Import STL / OBJ / 3MF / STEP', 'Open a 3D file as a new design', () => this.app.files.importDialog()),
       ),
     );
+    const learn = h(
+      'button.home-learn',
+      h('div.hl-icon', { html: icon('learn') }),
+      h('div', h('b', { text: 'New here? Take the interactive tutorial' }), h('span', { text: 'Learn to move around, sketch, extrude and fillet in about 3 minutes.' })),
+      h('span.hl-go', { html: `<span>Start</span>${icon('chevron')}` }),
+    );
+    learn.addEventListener('click', () => this.app.tutorial.start());
+    inner.append(learn);
     if (!app.doc.isEmpty || app.files.path) {
       const back = h('button.btn', { html: `${icon('chevron')}<span>Back to ${app.files.name}</span>` });
       back.querySelector('svg').style.cssText = 'width:16px;height:16px;transform:rotate(180deg)';
@@ -53,10 +61,12 @@ export class Home {
     }
     this.el.append(inner);
     this.el.hidden = false;
+    app.starter?.update();
   }
 
   hide() {
     this.el.hidden = true;
     this.app.vp.resize();
+    this.app.starter?.update();
   }
 }

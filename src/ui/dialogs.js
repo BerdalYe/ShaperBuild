@@ -1,5 +1,5 @@
 // Settings, shortcuts, help, about and the export menu.
-import { h } from './dom.js';
+import { h, modKey } from './dom.js';
 import { modal, showMenu } from './overlays.js';
 import { UNITS } from '../core/units.js';
 
@@ -12,14 +12,14 @@ export class Dialogs {
     const f = this.app.files;
     const r = e.currentTarget.getBoundingClientRect();
     showMenu(r.left, r.bottom + 6, [
-      { label: 'STL — 3D printing', icon: 'export', kbd: 'Ctrl+E', action: () => f.exportDialog('stl') },
+      { label: 'STL — 3D printing', icon: 'export', kbd: `${modKey()}E`, action: () => f.exportDialog('stl') },
       { label: '3MF — 3D printing', icon: 'export', action: () => f.exportDialog('3mf') },
       { label: 'OBJ — mesh', icon: 'export', action: () => f.exportDialog('obj') },
       { label: 'STEP — CAD exchange', icon: 'export', action: () => f.exportDialog('step') },
       '-',
       { label: 'Image (PNG)', icon: 'sparkle', action: () => f.exportPNG() },
       '-',
-      { label: 'Save design', icon: 'file', kbd: 'Ctrl+S', action: () => f.save() },
+      { label: 'Save design', icon: 'file', kbd: `${modKey()}S`, action: () => f.save() },
     ]);
   }
 
@@ -55,7 +55,7 @@ export class Dialogs {
           save();
         }),
       ),
-      h('div', { style: { fontSize: '12px', color: 'var(--muted)', margin: '-2px 0 6px 160px' }, text: 'Right-drag orbits, middle-drag or Shift+right-drag pans. Pinch to zoom on a trackpad.' }),
+      h('div', { style: { fontSize: '12px', color: 'var(--muted)', margin: '-2px 0 6px 160px' }, text: 'Right-drag orbits, middle-drag or Shift+right-drag pans. Hold Space and drag to orbit with the left button. Pinch to zoom on a trackpad.' }),
       h('h4', { text: 'Selection & drawing' }),
       check(s.additiveSelect, 'Clicking adds to the selection (like Shapr3D). Off: click replaces, Shift/Ctrl adds.', (v) => {
         s.additiveSelect = v;
@@ -85,6 +85,10 @@ export class Dialogs {
         s.showEdges = v;
         save();
       }),
+      h('div', { style: { height: '8px' } }),
+      check(s.toolLabels !== false, 'Show tool names in the tools menu', (v) => {
+        if (v !== (s.toolLabels !== false)) app.toggleToolLabels();
+      }),
       h('h4', { text: 'Export' }),
       row(
         'STL / 3MF / OBJ quality',
@@ -108,15 +112,16 @@ export class Dialogs {
     const groups = [
       ['Sketch', [['Line', 'L'], ['Rectangle', 'R'], ['Circle', 'C'], ['Arc', 'A'], ['Polygon', 'P'], ['Spline', 'B'], ['Trim', 'T'], ['Dimension', 'D'], ['Type exact sizes while drawing', '0–9, Tab, Enter'], ['Skip snapping', 'hold Alt']]],
       ['Model', [['Extrude / push-pull', 'E'], ['Revolve', 'Q'], ['Fillet', 'F'], ['Shell', 'H'], ['Union', 'U'], ['Move / rotate', 'M'], ['Measure', 'K'], ['Section view', 'X']]],
-      ['View', [['Orbit', 'Right-drag'], ['Pan', 'Middle-drag / Shift+right-drag'], ['Zoom', 'Scroll / pinch'], ['Zoom to fit (selection)', 'Z'], ['Look at face or sketch', 'N'], ['Iso / Front / Right / Top', '0 / 1 / 3 / 7'], ['Perspective / orthographic', 'O'], ['Grid', 'G'], ['Visualization', 'V'], ['Items panel', 'Tab']]],
+      ['View', [['Orbit', 'Right-drag / Space+drag / arrows'], ['Pan', 'Middle-drag / Shift+right-drag / Shift+Space+drag'], ['Zoom', 'Scroll / pinch / + and −'], ['Zoom to fit (selection)', 'Z'], ['Look at face or sketch', 'N'], ['Iso / Front / Right / Top', '0 / 1 / 3 / 7'], ['Perspective / orthographic', 'O'], ['Grid', 'G'], ['Visualization', 'V'], ['Items panel', 'Tab']]],
       ['Edit', [['Undo / Redo', 'Ctrl+Z / Ctrl+Y'], ['Delete', 'Del'], ['Duplicate', 'Ctrl+D'], ['Select all bodies', 'Ctrl+A'], ['Clear selection / cancel', 'Esc'], ['Apply tool', 'Enter'], ['Select a whole body', 'Double-click']]],
       ['File', [['New / Open / Save', 'Ctrl+N / Ctrl+O / Ctrl+S'], ['Import', 'Ctrl+I'], ['Export STL', 'Ctrl+E']]],
+      ['Help', [['Find a tool or command', 'Ctrl+K'], ['This list', '? or Ctrl+/']]],
     ];
     const body = h('div');
     for (const [title, rows] of groups) {
       body.append(h('h4', { text: title }));
       const g = h('div.shortcut-grid');
-      for (const [a, k] of rows) g.append(h('span', { text: a }), h('kbd', { text: k }));
+      for (const [a, k] of rows) g.append(h('span', { text: a }), h('kbd', { text: k.replaceAll('Ctrl+', modKey()) }));
       body.append(g);
     }
     return modal({ title: 'Keyboard shortcuts', body, width: 620 });

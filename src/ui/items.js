@@ -8,8 +8,9 @@ export class ItemsPanel {
   constructor(el, app) {
     this.el = el;
     this.app = app;
-    this.collapsed = { bodies: false, sketches: false };
+    this.collapsed = { bodies: false, meshes: false, sketches: false };
     this.renaming = null;
+    this.query = '';
     app.doc.on('change', () => this.render());
     app.selection.on('change', () => this.render());
     this.render();
@@ -18,40 +19,83 @@ export class ItemsPanel {
   render() {
     const app = this.app;
     const doc = app.doc;
+    const searching = this.el.contains(document.activeElement) && document.activeElement?.classList.contains('items-filter');
     clear(this.el);
-    const head = h('div.items-head', h('span', { text: 'Items' }));
+    const anyHidden = [...doc.bodies, ...doc.sketches].some((x) => x.visible === false);
+    const showAll = h('button.ih-btn', { title: 'Show all items', html: icon('eye') });
+    showAll.hidden = !anyHidden;
+    showAll.addEventListener('click', () => app.cmd.showAll());
+    const hide = h('button.ih-btn', { title: 'Hide this panel (Tab)', html: icon('sidebar') });
+    hide.addEventListener('click', () => app.toggleItems());
+    const head = h('div.items-head', h('span', { text: 'Items' }), h('span.ih-actions', showAll, hide));
     const scroll = h('div.items-scroll');
-    const bodies = doc.bodies;
+    const q = this.query.trim().toLowerCase();
+    const match = (x) => !q || x.name.toLowerCase().includes(q);
+    const solids = doc.bodies.filter((b) => b.kind !== 'mesh');
+    const meshes = doc.bodies.filter((b) => b.kind === 'mesh');
     const sketches = doc.sketches;
+    const total = doc.bodies.length + sketches.length;
 
-    scroll.append(this.group('bodies', 'Bodies', bodies.length, () => bodies.map((b) => this.bodyRow(b))));
-    scroll.append(this.group('sketches', 'Sketches', sketches.length, () => sketches.map((s) => this.sketchRow(s))));
-    if (!bodies.length && !sketches.length) {
+    if (total > 6 || q) {
+      const inp = h('input.items-filter', { type: 'text', placeholder: 'Find items', value: this.query, spellcheck: false });
+      inp.addEventListener('input', () => {
+        this.query = inp.value;
+        this.render();
+      });
+      inp.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Escape') {
+          this.query = '';
+          inp.blur();
+          this.render();
+        }
+      });
+      scroll.append(inp);
+      if (searching)
+        setTimeout(() => {
+          inp.focus();
+          inp.setSelectionRange(inp.value.length, inp.value.length);
+        });
+    }
+    scroll.append(this.group('bodies', 'Bodies', solids, 'body', () => solids.filter(match).map((b) => this.bodyRow(b))));
+    if (meshes.length) scroll.append(this.group('meshes', 'Meshes', meshes, 'body', () => meshes.filter(match).map((b) => this.bodyRow(b))));
+    scroll.append(this.group('sketches', 'Sketches', sketches, 'sketch', () => sketches.filter(match).map((s) => this.sketchRow(s))));
+    if (!total) {
       scroll.append(
         h('div.items-empty', {
-          html: 'Nothing here yet.<br><br>Pick a sketch tool on the right (try <b>Rectangle</b>) and click on the grid to start drawing, or <b>Import</b> an STL file.',
+          html: '<b>Your design is empty.</b><br>Everything you make shows up here: bodies, meshes and sketches.<br><br>Pick <b>Rectangle</b> in the tools on the right and click on the grid to start, or <b>Import</b> an STL file.',
         }),
       );
     }
-    const meshCount = bodies.filter((b) => b.kind === 'mesh').length;
+    const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
     const foot = h('div.items-foot', {
-      text: `${bodies.length} bod${bodies.length === 1 ? 'y' : 'ies'}${meshCount ? ` (${meshCount} mesh)` : ''} · ${sketches.length} sketch${sketches.length === 1 ? '' : 'es'}`,
+      text: total ? `${n(solids.length, 'body', 'bodies')} · ${meshes.length ? `${n(meshes.length, 'mesh', 'meshes')} · ` : ''}${n(sketches.length, 'sketch', 'sketches')} — double-click a name to rename` : 'Tip: right-click an item for more options',
     });
     this.el.append(head, scroll, foot);
+    scroll.querySelector('.item.selected')?.scrollIntoView({ block: 'nearest' });
   }
 
-  group(key, title, count, rows) {
+  group(key, title, list, kind, rows) {
     const g = h('div.items-group');
-    const chevron = h('span', { html: icon(this.collapsed[key] ? 'chevron' : 'chevronDown') });
-    chevron.querySelector('svg').style.cssText = 'width:14px;height:14px';
-    const head = h('div.items-group-head', chevron, h('span', { text: title }), h('span.count', { text: String(count) }));
-    head.style.cursor = 'pointer';
+    const chevron = h('span.ig-chev', { html: icon(this.collapsed[key] ? 'chevron' : 'chevronDown') });
+    const allHidden = list.length > 0 && list.every((x) => x.visible === false);
+    const eye = h(`button.item-btn${allHidden ? '.on' : ''}`, { title: allHidden ? `Show all ${title.toLowerCase()}` : `Hide all ${title.toLowerCase()}`, html: icon(allHidden ? 'eyeOff' : 'eye') });
+    eye.hidden = !list.length;
+    eye.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.app.cmd.setVisibleMany(list.filter((x) => (x.visible === false) === allHidden).map((x) => ({ kind, id: x.id })), allHidden);
+    });
+    const head = h('div.items-group-head', chevron, h('span', { text: title }), h('span.count', { text: String(list.length) }), eye);
     head.addEventListener('click', () => {
       this.collapsed[key] = !this.collapsed[key];
       this.render();
     });
     g.append(head);
-    if (!this.collapsed[key]) g.append(...rows());
+    if (!this.collapsed[key]) {
+      const r = rows();
+      if (r.length) g.append(...r);
+      else if (!list.length && this.app.doc.bodies.length + this.app.doc.sketches.length) g.append(h('div.items-none', { text: { bodies: 'No bodies yet — extrude a sketch or add a shape.', sketches: 'No sketches yet — draw with the sketch tools.', meshes: '' }[key] }));
+    }
     return g;
   }
 
@@ -104,7 +148,6 @@ export class ItemsPanel {
       this.bodyMenu(e, b);
     });
     row.append(swatch, kindIcon, this.nameEl(b, 'body'));
-    if (b.kind === 'mesh') row.append(h('span.tag', { text: 'mesh' }));
     row.append(eye, more);
     row.addEventListener('click', (e) => this.select({ kind: 'body', bodyId: b.id }, e));
     row.addEventListener('dblclick', () => {
@@ -136,7 +179,7 @@ export class ItemsPanel {
       e.stopPropagation();
       this.sketchMenu(e, s);
     });
-    row.append(ic, this.nameEl(s, 'sketch'), h('span.tag', { text: String(s.entities.length) }), eye, more);
+    row.append(ic, this.nameEl(s, 'sketch'), h('span.tag', { text: `${s.entities.length} curve${s.entities.length === 1 ? '' : 's'}`, title: 'Curves in this sketch' }), eye, more);
     row.addEventListener('click', (e) => this.select({ kind: 'sketch', sketchId: s.id }, e));
     row.addEventListener('dblclick', () => {
       this.renaming = s.id;
@@ -146,6 +189,8 @@ export class ItemsPanel {
       e.preventDefault();
       this.sketchMenu(e, s);
     });
+    row.addEventListener('mouseenter', () => app.selection.setHover({ kind: 'sketch', sketchId: s.id }));
+    row.addEventListener('mouseleave', () => app.selection.setHover(null));
     return row;
   }
 

@@ -69,9 +69,10 @@ export class FileOps {
   }
 
   async newDesign() {
-    if (!(await this.confirmDiscard())) return;
+    if (!(await this.confirmDiscard())) return false;
     await this.reset();
     this.app.home.hide();
+    return true;
   }
 
   async closeDesign() {
