@@ -4,6 +4,7 @@ import { h, clear } from './dom.js';
 import { MATERIALS } from '../view/bodyview.js';
 import { BODY_COLORS } from '../view/theme.js';
 import { toast } from './overlays.js';
+import { t, tn } from '../core/i18n.js';
 
 // CSS preview of each finish.
 const SWATCH = {
@@ -50,7 +51,7 @@ export class MaterialsPanel {
     const head = h(
       'div.mp-head',
       h('b', { text: 'Materials' }),
-      h('small', { text: sel.length ? `For the ${sel.length} selected bod${sel.length === 1 ? 'y' : 'ies'}` : 'For all bodies — click a body to change just that one' }),
+      h('small', { text: sel.length ? tn(sel.length, 'For the selected body', 'For the {n} selected bodies') : 'For all bodies — click a body to change just that one' }),
     );
     const grid = h('div.mp-grid');
     for (const [key, m] of Object.entries(MATERIALS)) {

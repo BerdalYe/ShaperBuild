@@ -2,6 +2,7 @@
 // number to enter an exact value; Tab moves to the next box, Enter applies.
 import { h, clear } from './dom.js';
 import { parseLength, parseAngle, parseNumber, formatLength, trimNumber } from '../core/units.js';
+import { localNumber } from '../core/i18n.js';
 
 export class DimInput {
   constructor(container, app) {
@@ -89,7 +90,7 @@ export class DimInput {
 
   format(f, v) {
     if (!Number.isFinite(v)) return '';
-    if (f.type === 'angle') return `${trimNumber(v, 1)}°`;
+    if (f.type === 'angle') return `${localNumber(trimNumber(v, 1))}°`;
     if (f.type === 'count') return String(Math.round(v));
     return formatLength(v, this.app.units, { suffix: false });
   }

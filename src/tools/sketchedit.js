@@ -4,6 +4,7 @@ import { OpTool } from './optool.js';
 import { trimEntity, sampleEntity, offsetEntity, lineLoop, offsetPolygon } from '../core/geom2d.js';
 import { planeFrame, to2D, to3D, rayPlane, makePlane, GROUND } from '../core/plane.js';
 import { toast } from '../ui/overlays.js';
+import { t, tn } from '../core/i18n.js';
 
 export class TrimTool extends Tool {
   get pickKinds() {
@@ -196,7 +197,7 @@ export function toggleConstruction(app) {
 export class ProjectTool extends OpTool {
   inputs() {
     return [
-      { key: 'edges', label: 'Edges', kinds: ['edge'], multiple: true, placeholder: 'Click body edges', summary: (items) => `${items.length} edge${items.length === 1 ? '' : 's'}` },
+      { key: 'edges', label: 'Edges', kinds: ['edge'], multiple: true, placeholder: 'Click body edges', summary: (items) => tn(items.length, '1 edge', '{n} edges') },
       {
         key: 'onto',
         label: 'Onto',

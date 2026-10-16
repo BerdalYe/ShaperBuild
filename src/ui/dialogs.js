@@ -2,6 +2,7 @@
 import { h, modKey } from './dom.js';
 import { modal, showMenu } from './overlays.js';
 import { UNITS } from '../core/units.js';
+import { t, LANGUAGES, language } from '../core/i18n.js';
 
 export class Dialogs {
   constructor(app) {
@@ -46,9 +47,18 @@ export class Dialogs {
       app.saveSettings();
       app.applyViewSettings();
     };
+    // Each language is named in its own language.
+    const lang = h('select');
+    for (const l of LANGUAGES) lang.append(h('option', { value: l.id, str: l.name, selected: l.id === language() }));
+    lang.addEventListener('change', () => {
+      app.setLanguageSetting(lang.value);
+      if (lang.value !== language()) app.welcome.restartPrompt();
+    });
+    lang.dataset.setting = 'language';
     const body = h(
       'div',
       h('h4', { text: 'General' }),
+      row('Language', lang),
       row('Theme', select(s.theme, [['dark', 'Dark'], ['light', 'Light']], (v) => v !== s.theme && app.toggleTheme())),
       check(s.autoUpdate !== false, 'Check for updates automatically and install them on restart', (v) => {
         s.autoUpdate = v;
@@ -68,7 +78,7 @@ export class Dialogs {
       ),
       h('div', { style: { fontSize: '12px', color: 'var(--muted)', margin: '-2px 0 6px 160px' }, text: 'Right-drag orbits, middle-drag or Shift+right-drag pans. Hold Space and drag to orbit with the left button. Pinch to zoom on a trackpad.' }),
       h('h4', { text: 'Selection & drawing' }),
-      check(s.additiveSelect, 'Clicking adds to the selection (like Shapr3D). Off: click replaces, Shift/Ctrl adds.', (v) => {
+      check(s.additiveSelect, 'Clicking adds to the selection. Off: click replaces, Shift/Ctrl adds.', (v) => {
         s.additiveSelect = v;
         save();
       }),
@@ -139,15 +149,15 @@ export class Dialogs {
   }
 
   gettingStarted() {
-    const body = h('div', {
-      html: `
-      <p><b>1. Sketch.</b> Pick <b>Rectangle</b> (R) or <b>Circle</b> (C) and click on the grid. Click again to finish. Type numbers while drawing for exact sizes.</p>
-      <p><b>2. Extrude.</b> Click the shaded region inside your sketch and drag the blue arrow up — or press E and type a distance.</p>
-      <p><b>3. Edit.</b> Click a face of the body and drag its arrow to push or pull it. Draw on any flat face to add or cut features.</p>
-      <p><b>4. Finish.</b> Select edges and use <b>Fillet</b> (F) to round them. Use <b>Union</b>, <b>Subtract</b> and <b>Intersect</b> to combine bodies.</p>
-      <p><b>STL files.</b> Use <b>Import</b> to bring in STL, OBJ or 3MF meshes. You can move, scale, mirror, combine and cut them, or turn them into editable solids with <b>Mesh → Solid</b>. Export to STL or 3MF for printing.</p>
-      <p><b>Navigate.</b> Right-drag to orbit, middle-drag to pan, scroll to zoom. Use the cube in the top right for standard views.</p>`,
-    });
+    const paras = [
+      '<b>1. Sketch.</b> Pick <b>Rectangle</b> (R) or <b>Circle</b> (C) and click on the grid. Click again to finish. Type numbers while drawing for exact sizes.',
+      '<b>2. Extrude.</b> Click the shaded region inside your sketch and drag the blue arrow up — or press E and type a distance.',
+      '<b>3. Edit.</b> Click a face of the body and drag its arrow to push or pull it. Draw on any flat face to add or cut features.',
+      '<b>4. Finish.</b> Select edges and use <b>Fillet</b> (F) to round them. Use <b>Union</b>, <b>Subtract</b> and <b>Intersect</b> to combine bodies.',
+      '<b>STL files.</b> Use <b>Import</b> to bring in STL, OBJ or 3MF meshes. You can move, scale, mirror, combine and cut them, or turn them into editable solids with <b>Mesh → Solid</b>. Export to STL or 3MF for printing.',
+      '<b>Navigate.</b> Right-drag to orbit, middle-drag to pan, scroll to zoom. Use the cube in the top right for standard views.',
+    ];
+    const body = h('div', { html: paras.map((p) => `<p>${t(p)}</p>`).join('') });
     return modal({ title: 'Getting started', body, width: 600 });
   }
 
@@ -155,8 +165,8 @@ export class Dialogs {
     const info = (await window.native?.info()) || { version: 'dev' };
     const body = h('div', {
       html: `<p><b>ShaperBuild ${info.version}</b></p>
-      <p>A desktop 3D CAD app for sketching, solid modelling and STL work.</p>
-      <p>Geometry by OpenCascade (via replicad-opencascadejs, LGPL-2.1) and Manifold (Apache-2.0). Rendering by three.js (MIT). Built with Electron.</p>`,
+      <p>${t('A desktop 3D CAD app for sketching, solid modelling and STL work.')}</p>
+      <p>${t('Geometry by OpenCascade (via replicad-opencascadejs, LGPL-2.1) and Manifold (Apache-2.0). Rendering by three.js (MIT). Built with Electron.')}</p>`,
     });
     const v = await modal({
       title: 'About',

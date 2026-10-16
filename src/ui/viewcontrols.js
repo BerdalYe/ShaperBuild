@@ -2,6 +2,7 @@
 import { h, isMac } from './dom.js';
 import { icon } from './icons.js';
 import { attachTooltip, hideTooltip, showMenu, toast } from './overlays.js';
+import { t } from '../core/i18n.js';
 
 const DEG = Math.PI / 180;
 
@@ -14,7 +15,7 @@ export class ViewControls {
     const add = (key, ic, label, kbd, action, desc) => {
       const b = h('button.vc-btn', { html: icon(ic), 'aria-label': label });
       b.dataset.vc = key;
-      attachTooltip(b, () => `<b>${label}</b>${kbd ? `<span class="kbd">${kbd}</span>` : ''}${desc ? `<span class="desc">${desc}</span>` : ''}`);
+      attachTooltip(b, () => `<b>${t(label)}</b>${kbd ? `<span class="kbd">${kbd}</span>` : ''}${desc ? `<span class="desc">${t(desc)}</span>` : ''}`);
       b.addEventListener('click', (e) => {
         hideTooltip();
         action(e, b);
@@ -50,7 +51,7 @@ export class ViewControls {
   toggleMode(mode) {
     const vp = this.app.vp;
     vp.setNavMode(vp.navMode === mode ? null : mode);
-    if (vp.navMode) toast(`${mode === 'orbit' ? 'Orbit' : 'Pan'} mode: drag with the left mouse button. Press Esc or click the button again to stop.`, { ms: 3200 });
+    if (vp.navMode) toast(t(mode === 'orbit' ? 'Orbit mode: drag with the left mouse button. Press Esc or click the button again to stop.' : 'Pan mode: drag with the left mouse button. Press Esc or click the button again to stop.'), { ms: 3200 });
   }
 
   setOrtho(on) {
@@ -130,7 +131,7 @@ export class NavHelp {
     });
     const closeBtn = h('button.nh-close', { html: icon('close'), title: 'Close' });
     closeBtn.addEventListener('click', () => this.close());
-    const tut = h('button.btn', { html: `${icon('learn')}<span>Practice in the tutorial</span>` });
+    const tut = h('button.btn', { html: `${icon('learn')}<span>${t('Practice in the tutorial')}</span>` });
     tut.addEventListener('click', () => {
       this.close();
       app.tutorial.start();

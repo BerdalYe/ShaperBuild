@@ -1,5 +1,6 @@
 // 2D technical drawing: lays out projected views on a sheet with overall
 // sizes and a title block, as SVG (millimetres) and as line segments for DXF.
+import { t, localNumber } from './i18n.js';
 
 export const SHEETS = { A4: [297, 210], A3: [420, 297], Letter: [279.4, 215.9] };
 export const SCALES = [10, 5, 4, 2, 1, 1 / 2, 1 / 2.5, 1 / 4, 1 / 5, 1 / 10, 1 / 20, 1 / 50, 1 / 100];
@@ -18,7 +19,7 @@ export function scaleText(s) {
   return `1:${+(1 / s).toFixed(2)}`;
 }
 
-const fmt = (v) => String(+v.toFixed(Math.abs(v) >= 100 ? 1 : 2));
+const fmt = (v) => localNumber(String(+v.toFixed(Math.abs(v) >= 100 ? 1 : 2)));
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 function bbox(view) {
@@ -86,7 +87,7 @@ export function layoutDrawing(views, opts = {}) {
     svg.push(`<path class="vis" d="${path(v.visible)}"/>`);
     for (const pl of v.visible) add('VISIBLE', pl.map(P));
     const box = { x0: cx - (bb.w * s) / 2, x1: cx + (bb.w * s) / 2, y0: cy - (bb.h * s) / 2, y1: cy + (bb.h * s) / 2 };
-    svg.push(`<text class="lbl" x="${cx.toFixed(2)}" y="${(box.y1 + (key === 'iso' ? 7 : 12)).toFixed(2)}">${VIEWS[key].label}</text>`);
+    svg.push(`<text class="lbl" x="${cx.toFixed(2)}" y="${(box.y1 + (key === 'iso' ? 7 : 12)).toFixed(2)}">${esc(t(VIEWS[key].label))}</text>`);
     placed[key] = { box, bb };
   };
   for (const [k, [c, r]] of Object.entries(grid)) place(k, colX[c], rowY[r], scale);
@@ -141,10 +142,10 @@ export function layoutDrawing(views, opts = {}) {
     `<line class="thin" x1="${tx + 40}" y1="${ty + 12}" x2="${tx + 40}" y2="${ty + titleH}"/>`,
     `<line class="thin" x1="${tx + 80}" y1="${ty + 12}" x2="${tx + 80}" y2="${ty + titleH}"/>`,
     `<text class="tt" x="${tx + 3}" y="${ty + 8.5}">${esc(title)}</text>`,
-    `<text class="tk" x="${tx + 3}" y="${ty + 16}">SCALE</text><text class="tv" x="${tx + 3}" y="${ty + 21.5}">${scaleText(scale)}</text>`,
-    `<text class="tk" x="${tx + 43}" y="${ty + 16}">UNITS · PROJECTION</text><text class="tv" x="${tx + 43}" y="${ty + 21.5}">${units} · ${projection === 'third' ? '3rd angle' : '1st angle'}</text>`,
-    `<text class="tk" x="${tx + 83}" y="${ty + 16}">DATE · ${sheet}</text><text class="tv" x="${tx + 83}" y="${ty + 21.5}">${esc(date)}</text>`,
-    `<text class="tk" x="${margin + 2}" y="${H - margin - 2}">Drawn with ShaperBuild</text>`,
+    `<text class="tk" x="${tx + 3}" y="${ty + 16}">${esc(t('SCALE'))}</text><text class="tv" x="${tx + 3}" y="${ty + 21.5}">${scaleText(scale)}</text>`,
+    `<text class="tk" x="${tx + 43}" y="${ty + 16}">${esc(t('UNITS · PROJECTION'))}</text><text class="tv" x="${tx + 43}" y="${ty + 21.5}">${units} · ${esc(t(projection === 'third' ? '3rd angle' : '1st angle'))}</text>`,
+    `<text class="tk" x="${tx + 83}" y="${ty + 16}">${esc(t('DATE'))} · ${sheet}</text><text class="tv" x="${tx + 83}" y="${ty + 21.5}">${esc(date)}</text>`,
+    `<text class="tk" x="${margin + 2}" y="${H - margin - 2}">${esc(t('Drawn with ShaperBuild'))}</text>`,
   ];
   for (const [x0, y0, x1, y1] of [
     [margin, margin, W - margin, margin],

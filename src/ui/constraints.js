@@ -5,6 +5,7 @@ import { planeFrame, to3D } from '../core/plane.js';
 import { formatLength, trimNumber, parseLength, parseAngle } from '../core/units.js';
 import { arcMidpoint } from '../core/geom2d.js';
 import { toast } from './overlays.js';
+import { t } from '../core/i18n.js';
 
 const lerp2 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
 
@@ -59,7 +60,7 @@ export class ConstraintLayer {
             className: `${info.dimension ? 'dim-label' : 'cons-glyph'}${sel ? ' selected' : ''}${active.has(sk.id) ? '' : ' faint'}`,
             offset: [place.offset[0] + (info.dimension ? 0 : n * 17), place.offset[1]],
             interactive: true,
-            title: `${info.label}${info.dimension ? ' — click to edit' : ' — click to select, Delete to remove'}`,
+            title: `${t(info.label)} — ${t(info.dimension ? 'click to edit' : 'click to select, Delete to remove')}`,
             onClick: (e) => this.onLabelClick(sk.id, c, e),
           });
         }

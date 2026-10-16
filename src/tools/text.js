@@ -4,6 +4,7 @@ import { SketchTool } from './sketch.js';
 import { loadFont, textEntities, insideText, textPreview } from '../core/text.js';
 import { planeFrame, to2D, to3D, rayPlane, GROUND } from '../core/plane.js';
 import { toast } from '../ui/overlays.js';
+import { t } from '../core/i18n.js';
 
 export class TextTool extends SketchTool {
   get pickKinds() {
@@ -86,7 +87,7 @@ export class TextTool extends SketchTool {
       this.fontKey = 'file';
       this.customName = file.split(/[\\/]/).pop().replace(/\.[^.]+$/, '');
     } catch (err) {
-      toast(`That font could not be read: ${err.message}`, { type: 'error', ms: 4000 });
+      toast(t('That font could not be read: {error}', { error: t(err.message) }), { type: 'error', ms: 4000 });
     }
     restore();
     this.redraw();

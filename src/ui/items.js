@@ -4,6 +4,7 @@ import { icon } from './icons.js';
 import { showMenu } from './overlays.js';
 import { BODY_COLORS } from '../view/theme.js';
 import { HistoryList } from './historylist.js';
+import { t, tn } from '../core/i18n.js';
 
 export class ItemsPanel {
   constructor(el, app) {
@@ -36,10 +37,10 @@ export class ItemsPanel {
       ['items', 'Items', 'Bodies, sketches and planes in the design'],
       ['history', 'History', 'The steps that made the design. Click one to change it.'],
     ]) {
-      const t = h(`button.items-tab${this.tab === key ? '.on' : ''}`, { text: label, title: tip });
-      t.dataset.tab = key;
-      t.addEventListener('click', () => this.setTab(key));
-      tabs.append(t);
+      const tabBtn = h(`button.items-tab${this.tab === key ? '.on' : ''}`, { text: label, title: tip });
+      tabBtn.dataset.tab = key;
+      tabBtn.addEventListener('click', () => this.setTab(key));
+      tabs.append(tabBtn);
     }
     const newFolder = h('button.ih-btn', { title: 'New folder (puts the selected items in it)', html: icon('folder2') });
     newFolder.dataset.action = 'new-folder';
@@ -110,11 +111,11 @@ export class ItemsPanel {
         }),
       );
     }
-    const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+    const n = (count, one, many) => tn(count, `1 ${one}`, `{n} ${many}`);
     const nSolids = doc.bodies.filter((b) => b.kind !== 'mesh').length;
     const nMeshes = doc.bodies.length - nSolids;
     const foot = h('div.items-foot', {
-      text: total ? `${n(nSolids, 'body', 'bodies')} · ${nMeshes ? `${n(nMeshes, 'mesh', 'meshes')} · ` : ''}${n(doc.sketches.length, 'sketch', 'sketches')}${doc.planes.length ? ` · ${n(doc.planes.length, 'plane', 'planes')}` : ''}${doc.images.length ? ` · ${n(doc.images.length, 'image', 'images')}` : ''} — double-click a name to rename, drag items into folders` : 'Tip: right-click an item for more options',
+      str: total ? `${n(nSolids, 'body', 'bodies')} · ${nMeshes ? `${n(nMeshes, 'mesh', 'meshes')} · ` : ''}${n(doc.sketches.length, 'sketch', 'sketches')}${doc.planes.length ? ` · ${n(doc.planes.length, 'plane', 'planes')}` : ''}${doc.images.length ? ` · ${n(doc.images.length, 'image', 'images')}` : ''} — ${t('double-click a name to rename, drag items into folders')}` : t('Tip: right-click an item for more options'),
     });
     this.el.append(head, scroll, foot);
     scroll.querySelector('.item.selected')?.scrollIntoView({ block: 'nearest' });
@@ -131,7 +132,7 @@ export class ItemsPanel {
     const g = h('div.items-group');
     const chevron = h('span.ig-chev', { html: icon(this.collapsed[key] ? 'chevron' : 'chevronDown') });
     const allHidden = list.length > 0 && list.every((x) => x.visible === false);
-    const eye = h(`button.item-btn${allHidden ? '.on' : ''}`, { title: allHidden ? `Show all ${title.toLowerCase()}` : `Hide all ${title.toLowerCase()}`, html: icon(allHidden ? 'eyeOff' : 'eye') });
+    const eye = h(`button.item-btn${allHidden ? '.on' : ''}`, { title: t(allHidden ? 'Show all {what}' : 'Hide all {what}', { what: t(title).toLowerCase() }), html: icon(allHidden ? 'eyeOff' : 'eye') });
     eye.hidden = !list.length;
     eye.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -267,7 +268,7 @@ export class ItemsPanel {
       for (let p = doc.folder(f.parent), n = 0; p && n < 20; p = doc.folder(p.parent), n++) names.unshift(p.name);
       return names.join(' › ');
     };
-    const entries = doc.folders.filter((f) => f.id !== current && !blocked.has(f.id)).map((f) => ({ label: path(f), icon: 'folder', action: () => app.cmd.moveToFolder(items, f.id) }));
+    const entries = doc.folders.filter((f) => f.id !== current && !blocked.has(f.id)).map((f) => ({ label: path(f), raw: true, icon: 'folder', action: () => app.cmd.moveToFolder(items, f.id) }));
     if (entries.length) entries.push('-');
     entries.push({
       label: 'New folder',
@@ -280,7 +281,7 @@ export class ItemsPanel {
     if (current && doc.folder(current)) {
       const up = doc.folder(current).parent;
       const upName = up && doc.folder(up) ? doc.folder(up).name : null;
-      entries.push({ label: upName ? `Move up to ${upName}` : 'Take out of folder', icon: 'close', action: () => app.cmd.moveToFolder(items, upName ? up : null) });
+      entries.push({ label: upName ? t('Move up to {name}', { name: upName }) : 'Take out of folder', raw: !!upName, icon: 'close', action: () => app.cmd.moveToFolder(items, upName ? up : null) });
     }
     showMenu(e.clientX, e.clientY, entries);
   }
@@ -324,7 +325,8 @@ export class ItemsPanel {
   }
 
   nameEl(item, kind) {
-    const span = h('span.item-name', { text: item.name, title: item.name });
+    const span = h('span.item-name', { str: item.name });
+    span.title = item.name;
     if (this.renaming === item.id) {
       const inp = h('input', { type: 'text', value: item.name });
       const done = (save) => {
@@ -404,7 +406,7 @@ export class ItemsPanel {
       e.stopPropagation();
       this.sketchMenu(e, s);
     });
-    row.append(ic, this.nameEl(s, 'sketch'), h('span.tag', { text: `${s.entities.length} curve${s.entities.length === 1 ? '' : 's'}`, title: 'Curves in this sketch' }), eye, more);
+    row.append(ic, this.nameEl(s, 'sketch'), h('span.tag', { str: tn(s.entities.length, '1 curve', '{n} curves'), title: 'Curves in this sketch' }), eye, more);
     if (this.renaming !== s.id) this.draggable(row, { kind: 'sketch', sketchId: s.id });
     row.addEventListener('click', (e) => this.select({ kind: 'sketch', sketchId: s.id }, e));
     row.addEventListener('dblclick', () => {

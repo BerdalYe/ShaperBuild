@@ -1,7 +1,8 @@
 // Start screen: new design, open, import and recent designs.
-import { h, clear } from './dom.js';
+import { h, clear, escapeHtml } from './dom.js';
 import { icon } from './icons.js';
 import { loadThumbs } from '../fileops.js';
+import { t } from '../core/i18n.js';
 
 export class Home {
   constructor(el, app) {
@@ -34,12 +35,12 @@ export class Home {
       'button.home-learn',
       h('div.hl-icon', { html: icon('learn') }),
       h('div', h('b', { text: 'New here? Take the interactive tutorial' }), h('span', { text: 'Learn to move around, sketch, extrude and fillet in about 3 minutes.' })),
-      h('span.hl-go', { html: `<span>Start</span>${icon('chevron')}` }),
+      h('span.hl-go', { html: `<span>${t('Start')}</span>${icon('chevron')}` }),
     );
     learn.addEventListener('click', () => this.app.tutorial.start());
     inner.append(learn);
     if (!app.doc.isEmpty || app.files.path) {
-      const back = h('button.btn', { html: `${icon('chevron')}<span>Back to ${app.files.name}</span>` });
+      const back = h('button.btn', { html: `${icon('chevron')}<span>${escapeHtml(t('Back to {name}', { name: app.files.name }))}</span>` });
       back.querySelector('svg').style.cssText = 'width:16px;height:16px;transform:rotate(180deg)';
       back.addEventListener('click', () => this.hide());
       inner.insertBefore(h('div', { style: { marginBottom: '22px' } }, back), inner.children[1]);
@@ -51,7 +52,7 @@ export class Home {
         const name = p.split(/[\\/]/).pop().replace(/\.[^.]+$/, '');
         const thumb = h('div.thumb');
         if (thumbs[p]) thumb.style.backgroundImage = `url(${thumbs[p]})`;
-        const card = h('button.recent-card', thumb, h('div.meta', h('b', { text: name }), h('span', { text: p, title: p })));
+        const card = h('button.recent-card', thumb, h('div.meta', h('b', { str: name }), h('span', { str: p })));
         card.addEventListener('click', () => this.app.files.openPath(p));
         grid.append(card);
       }

@@ -3,6 +3,7 @@
 import { h, clear, modKey, isMac } from './dom.js';
 import { icon } from './icons.js';
 import { modal } from './overlays.js';
+import { t } from '../core/i18n.js';
 
 const SEEN_KEY = 'shaperbuild.tutorialSeen.v1';
 
@@ -108,7 +109,7 @@ export class Tutorial {
       },
       {
         title: 'All tools are on the right',
-        text: 'Tools are grouped into <b>Sketch</b>, <b>Model</b>, <b>Transform</b>, <b>Shapes</b> and <b>Inspect</b>. Hover a tool to see what it does.<br><br>Can’t find something? Type in <b>Search tools</b> (<kbd>' + modKey() + 'K</kbd>) — try “hole” or “round”.',
+        text: t('Tools are grouped into <b>Sketch</b>, <b>Model</b>, <b>Transform</b>, <b>Shapes</b> and <b>Inspect</b>. Hover a tool to see what it does.<br><br>Can’t find something? Type in <b>Search tools</b> (<kbd>{mod}K</kbd>) — try “hole” or “round”.', { mod: modKey() }),
         target: () => document.getElementById('tools'),
         place: 'left',
       },
@@ -187,13 +188,13 @@ export class Tutorial {
       },
       {
         title: 'Ready to print',
-        text: `Click <b>3D Print</b> to check your part (closed shape, fits your printer) and save an STL or 3MF file — or open it straight in your slicer.<br><br>Made a mistake? <b>Undo</b> with <kbd>${modKey()}Z</kbd>. Save your design with <kbd>${modKey()}S</kbd>.`,
+        text: t('Click <b>3D Print</b> to check your part (closed shape, fits your printer) and save an STL or 3MF file — or open it straight in your slicer.<br><br>Made a mistake? <b>Undo</b> with <kbd>{mod}Z</kbd>. Save your design with <kbd>{mod}S</kbd>.', { mod: modKey() }),
         target: () => document.getElementById('btn-print'),
         place: 'bottom',
       },
       {
         title: 'You’re ready!',
-        text: `That’s the basics. A few more tips:<br>• Draw on any flat face of a body to add or cut shapes.<br>• Select a face and drag its arrow to push or pull it.<br>• ${mac ? '⌘' : 'Ctrl'}+K finds any tool. The <b>?</b> button has help and shortcuts.`,
+        text: t('That’s the basics. A few more tips:<br>• Draw on any flat face of a body to add or cut shapes.<br>• Select a face and drag its arrow to push or pull it.<br>• {key}+K finds any tool. The <b>?</b> button has help and shortcuts.', { key: mac ? '⌘' : 'Ctrl' }),
         place: 'center',
         final: true,
       },
@@ -264,22 +265,22 @@ export class Tutorial {
     clear(this.card);
     const endBtn = h('button.tut-link', { text: 'End tutorial' });
     endBtn.addEventListener('click', () => this.end());
-    const back = h('button.btn', { text: 'Back' });
+    const back = h('button.btn', { text: 'Previous' });
     back.disabled = this.index === 0;
     back.addEventListener('click', () => this.go(this.index - 1));
     let next;
-    if (this.completed) next = h('button.btn.primary.tut-done', { html: `${icon('check')}<span>Done!</span>` });
+    if (this.completed) next = h('button.btn.primary.tut-done', { html: `${icon('check')}<span>${t('Done!')}</span>` });
     else if (step.done) next = h('button.btn', { text: 'Skip step' });
     else next = h('button.btn.primary', { text: step.final ? 'Finish' : this.index === 0 ? 'Let’s go' : 'Next' });
     next.addEventListener('click', () => this.go(this.index + 1));
     const progress = h('div.tut-progress', h('div', { style: { width: `${((this.index + (this.completed ? 1 : 0)) / (n - 1)) * 100}%` } }));
     this.card.append(
-      h('div.tut-top', h('span.tut-count', { text: this.index === 0 ? 'Tutorial' : `Step ${this.index} of ${n - 1}` }), endBtn),
+      h('div.tut-top', h('span.tut-count', { text: this.index === 0 ? 'Tutorial' : t('Step {i} of {n}', { i: this.index, n: n - 1 }) }), endBtn),
       progress,
       h('div.tut-title', { text: step.title }),
       h('div.tut-text', { html: step.text }),
     );
-    if (step.done && !this.completed) this.card.append(h('div.tut-wait', { html: `<span class="pulse"></span>Waiting for you to try it…` }));
+    if (step.done && !this.completed) this.card.append(h('div.tut-wait', { html: `<span class="pulse"></span>${t('Waiting for you to try it…')}` }));
     this.card.append(h('div.tut-buttons', back, next));
     this.card.classList.toggle('done', this.completed);
   }

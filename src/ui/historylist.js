@@ -6,6 +6,7 @@ import { icon } from './icons.js';
 import { showMenu } from './overlays.js';
 import { editableParams, withParams, stepSummary } from '../core/replay.js';
 import { formatLength, parseLength } from '../core/units.js';
+import { t, tn } from '../core/i18n.js';
 
 const PRIMITIVE_ICONS = { box: 'box', cylinder: 'cylinder', sphere: 'sphere', cone: 'cone', torus: 'torus' };
 const BOOLEAN_ICONS = { union: 'union', subtract: 'subtract', intersect: 'intersect' };
@@ -85,8 +86,8 @@ export class HistoryList {
     const n = this.steps.length;
     const bad = this.steps.filter((f) => f.error).length;
     if (this.app.history.busy) return 'Updating the design…';
-    if (bad) return `${bad} step${bad === 1 ? '' : 's'} could not be rebuilt — click to see why`;
-    return n ? `${n} step${n === 1 ? '' : 's'} — click a step to change it` : 'Tip: steps appear as you model';
+    if (bad) return tn(bad, '1 step could not be rebuilt — click to see why', '{n} steps could not be rebuilt — click to see why');
+    return n ? tn(n, '1 step — click a step to change it', '{n} steps — click a step to change it') : t('Tip: steps appear as you model');
   }
 
   row(f, i) {
@@ -96,7 +97,7 @@ export class HistoryList {
     row.dataset.step = f.id;
     const num = h('span.step-num', { text: String(i + 1) });
     const ic = h('span.step-icon', { html: icon(stepIcon(f)) });
-    const name = h('span.item-name', { text: f.label, title: f.error ? `${f.label}: ${f.error}` : f.label });
+    const name = h('span.item-name', { text: f.label, title: f.error ? `${t(f.label)}: ${t(f.error)}` : f.label });
     const summary = stepSummary(f, (v) => formatLength(v, app.units));
     row.append(num, ic, name);
     if (f.suppressed) row.append(h('span.tag', { text: 'off', title: 'This step is turned off' }));

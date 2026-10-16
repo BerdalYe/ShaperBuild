@@ -2,6 +2,7 @@
 import { OpTool } from './optool.js';
 import { formatLength, niceStep } from '../core/units.js';
 import { scaleMatrix } from '../core/replay.js';
+import { tn } from '../core/i18n.js';
 
 const AXES = {
   x: { origin: [0, 0, 0], dir: [1, 0, 0] },
@@ -35,7 +36,7 @@ function profileSlot(app, { multiple = true, label = 'Profiles' } = {}) {
       if (it.kind === 'face') return app.faceInfo(it.bodyId, it.index)?.type === 'plane' ? it : null;
       return null;
     },
-    summary: (items) => `${items.length} profile${items.length === 1 ? '' : 's'}`,
+    summary: (items) => tn(items.length, '1 profile', '{n} profiles'),
   };
 }
 
@@ -46,7 +47,7 @@ function bodySlot(key = 'bodies', label = 'Bodies', extra = {}) {
     kinds: ['body'],
     multiple: true,
     placeholder: 'Click bodies',
-    summary: (items) => `${items.length} bod${items.length === 1 ? 'y' : 'ies'}`,
+    summary: (items) => tn(items.length, '1 body', '{n} bodies'),
     ...extra,
   };
 }
@@ -328,7 +329,7 @@ export class EmbossTool extends OpTool {
         kinds: ['region'],
         multiple: true,
         placeholder: 'Click sketch shapes or letters',
-        summary: (items) => `${items.length} shape${items.length === 1 ? '' : 's'}`,
+        summary: (items) => tn(items.length, '1 shape', '{n} shapes'),
       },
       {
         key: 'face',
@@ -414,7 +415,7 @@ class EdgeTool extends OpTool {
         placeholder: 'Click edges',
         reject: 'Pick edges of solid bodies',
         accept: (it) => (this.app.doc.body(it.bodyId)?.kind === 'solid' ? it : null),
-        summary: (items) => `${items.length} edge${items.length === 1 ? '' : 's'}`,
+        summary: (items) => tn(items.length, '1 edge', '{n} edges'),
       },
     ];
   }
@@ -487,7 +488,7 @@ export class ShellTool extends OpTool {
         multiple: true,
         placeholder: 'Click faces to remove',
         accept: (it) => (this.app.doc.body(it.bodyId)?.kind === 'solid' ? it : null),
-        summary: (items) => `${items.length} face${items.length === 1 ? '' : 's'}`,
+        summary: (items) => tn(items.length, '1 face', '{n} faces'),
       },
     ];
   }
@@ -553,7 +554,7 @@ class TargetToolBoolean extends OpTool {
   }
 
   params() {
-    return [{ type: 'toggle', key: 'keepTools', label: `Keep the ${this.toolLabel.toLowerCase()} bodies`, value: this.values?.keepTools ?? false }];
+    return [{ type: 'toggle', key: 'keepTools', label: this.keepLabel, value: this.values?.keepTools ?? false }];
   }
 
   fillFromSelection() {
@@ -583,6 +584,9 @@ export class SubtractTool extends TargetToolBoolean {
   get toolLabel() {
     return 'Remove';
   }
+  get keepLabel() {
+    return 'Keep the bodies used to cut';
+  }
   hint() {
     return 'Cut the second set of bodies out of the first.';
   }
@@ -594,6 +598,9 @@ export class IntersectTool extends TargetToolBoolean {
   }
   get toolLabel() {
     return 'With';
+  }
+  get keepLabel() {
+    return 'Keep the second set of bodies';
   }
   hint() {
     return 'Keep only the volume the bodies share.';
@@ -890,7 +897,7 @@ export class DraftTool extends OpTool {
         multiple: true,
         placeholder: 'Click the side faces to tilt',
         accept: (it) => (this.app.doc.body(it.bodyId)?.kind === 'solid' ? it : null),
-        summary: (items) => `${items.length} face${items.length === 1 ? '' : 's'}`,
+        summary: (items) => tn(items.length, '1 face', '{n} faces'),
       },
       {
         key: 'neutral',

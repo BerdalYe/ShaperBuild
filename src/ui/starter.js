@@ -2,6 +2,7 @@
 // and the hint shown at the top while a tool is active.
 import { h, clear } from './dom.js';
 import { icon } from './icons.js';
+import { t } from '../core/i18n.js';
 
 export class StarterCard {
   constructor(el, app) {
@@ -22,7 +23,7 @@ export class StarterCard {
         action('learn', 'Take the tutorial', 'Learn the basics in 3 minutes', '', () => app.tutorial.start()),
       ),
       h('div.st-nav', {
-        html: `${icon('mouse')}<span><b>Right-drag</b> to orbit · <b>Middle-drag</b> to pan · <b>Scroll</b> to zoom · <b>Z</b> to fit</span>`,
+        html: `${icon('mouse')}<span>${t('<b>Right-drag</b> to orbit · <b>Middle-drag</b> to pan · <b>Scroll</b> to zoom · <b>Z</b> to fit')}</span>`,
       }),
     );
     app.doc.on('change', () => this.update());
@@ -53,7 +54,7 @@ export class ToolHint {
     }
     const def = tool.def;
     this.el.append(
-      h('span.th-tool', { html: `${icon(def.icon)}<span>${def.label}</span>` }),
+      h('span.th-tool', { html: `${icon(def.icon)}<span>${t(def.label)}</span>` }),
       h('span.th-text', { html }),
       h('span.th-esc', { html: '<kbd>Esc</kbd> to exit' }),
     );

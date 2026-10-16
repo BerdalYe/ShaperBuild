@@ -5,6 +5,7 @@
 import { RECORDED, symbolize, runFeature, featureKey, chainKeys, placedPlane, effectiveEntities, mapSketchRefs } from './core/replay.js';
 import { faceSig } from './core/refs.js';
 import { toast } from './ui/overlays.js';
+import { t, tn } from './core/i18n.js';
 import { Emitter } from './core/events.js';
 
 const CACHE_LIMIT = 120;
@@ -259,7 +260,7 @@ export class HistoryEngine extends Emitter {
       for (const [id, sid] of rc.state) {
         if (d.body(id)) continue;
         const was = this.looks.get(id);
-        d.putBody({ ...(was || { name: `Body ${d.bodies.length + 1}` }), id, shapeId: sid, kind: app.meshCache.get(sid)?.kind || was?.kind || 'solid' });
+        d.putBody({ ...(was || { name: t('Body {n}', { n: d.bodies.length + 1 }) }), id, shapeId: sid, kind: app.meshCache.get(sid)?.kind || was?.kind || 'solid' });
       }
       // Sketches drawn on faces follow those faces.
       for (const sk of d.sketches) {
@@ -277,7 +278,7 @@ export class HistoryEngine extends Emitter {
     });
     this.verified = prev;
     this.remember(prev, this.docState());
-    if (errors.size) toast(`${errors.size} step${errors.size === 1 ? '' : 's'} in the history could not be rebuilt. See History.`, { type: 'error', ms: 4500 });
+    if (errors.size) toast(tn(errors.size, '1 step in the history could not be rebuilt. See History.', '{n} steps in the history could not be rebuilt. See History.'), { type: 'error', ms: 4500 });
     this.emit('change');
   }
 

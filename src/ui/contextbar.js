@@ -5,6 +5,7 @@ import { icon } from './icons.js';
 import { showMenu } from './overlays.js';
 import { formatLength, parseLength } from '../core/units.js';
 import { dist } from '../core/geom2d.js';
+import { t, tn } from '../core/i18n.js';
 
 export class ContextBar {
   constructor(el, app) {
@@ -80,22 +81,22 @@ export class ContextBar {
     for (const it of list) counts[it.kind] = (counts[it.kind] || 0) + 1;
     const NAMES = { constraint: ['constraint', 'constraints'], body: ['body', 'bodies'], face: ['face', 'faces'], edge: ['edge', 'edges'], region: ['region', 'regions'], curve: ['curve', 'curves'], spoint: ['point', 'points'], sketch: ['sketch', 'sketches'], vertex: ['vertex', 'vertices'], plane: ['plane', 'planes'], image: ['image', 'images'] };
     const label = Object.entries(counts)
-      .map(([k, n]) => `${n} ${(NAMES[k] || [k, k])[n === 1 ? 0 : 1]}`)
+      .map(([k, n]) => tn(n, `1 ${(NAMES[k] || [k, k])[0]}`, `{n} ${(NAMES[k] || [k, k])[1]}`))
       .join(', ');
-    this.el.append(h('span.cb-label', { text: label }));
+    this.el.append(h('span.cb-label', { str: label }));
     const props = this.quickProps(list);
     if (props) this.el.append(h('span.cb-sep'), props);
     const cons = app.constraints.options();
     if (cons.length) {
       this.el.append(h('span.cb-sep'));
-      const b = h('button.cb-btn', { html: `<span class="glyph">⊥</span><span>Constrain</span>${icon('chevronDown')}` });
+      const b = h('button.cb-btn', { html: `<span class="glyph">⊥</span><span>${t('Constrain')}</span>${icon('chevronDown')}` });
       b.querySelector('svg').style.cssText = 'width:14px;height:14px';
       b.addEventListener('click', () => {
         const r = b.getBoundingClientRect();
         const menu = showMenu(
           r.left,
           r.top,
-          cons.map((o) => ({ label: `<span class="glyph">${o.glyph}</span>${o.label}`, action: () => app.cmd.addConstraint(o.sketchId, o.constraint) })),
+          cons.map((o) => ({ label: `<span class="glyph">${o.glyph}</span>${t(o.label)}`, action: () => app.cmd.addConstraint(o.sketchId, o.constraint) })),
         );
         const mr = menu.getBoundingClientRect();
         menu.style.top = `${r.top - mr.height - 6}px`;
@@ -105,7 +106,7 @@ export class ContextBar {
     const sug = this.suggestions();
     if (sug.length) this.el.append(h('span.cb-sep'));
     for (const s of sug) {
-      const b = h('button.cb-btn', { html: `${icon(s.icon)}<span>${s.label}</span>` });
+      const b = h('button.cb-btn', { html: `${icon(s.icon)}<span>${t(s.label)}</span>` });
       b.addEventListener('click', s.action);
       this.el.append(b);
     }

@@ -3,6 +3,7 @@
 import { h, clear } from './dom.js';
 import { icon } from './icons.js';
 import { modal, toast } from './overlays.js';
+import { t } from '../core/i18n.js';
 import { VIEWS, SHEETS, layoutDrawing, drawingSketches, scaleText } from '../core/drawing.js';
 import { writeDXF } from '../core/dxf.js';
 
@@ -83,7 +84,7 @@ export class DrawingDialog {
     clear(this.body);
     const lay = this.layout();
     const preview = h('div.dd-preview');
-    if (this.error) preview.append(h('div.dd-msg', { text: `Could not make the drawing: ${this.error}` }));
+    if (this.error) preview.append(h('div.dd-msg', { str: t('Could not make the drawing: {error}', { error: t(this.error) }) }));
     else if (!lay) preview.append(h('div.dd-msg', { html: '<span class="spinner"></span> Making the views…' }));
     else preview.innerHTML = lay.svg;
 
@@ -127,11 +128,11 @@ export class DrawingDialog {
       check('hidden', 'Show hidden lines (dashed)'),
       check('dims', 'Show overall sizes'),
       check('iso', 'Add a 3D view'),
-      lay ? h('div.dd-info', { text: `Scale ${scaleText(lay.scale)} · sizes in millimetres` }) : null,
-      this.bodies.length > 1 ? h('div.dd-info', { text: `${this.bodies.length} bodies` }) : null,
+      lay ? h('div.dd-info', { str: t('Scale {scale} · sizes in millimetres', { scale: scaleText(lay.scale) }) }) : null,
+      this.bodies.length > 1 ? h('div.dd-info', { str: t('{n} bodies', { n: this.bodies.length }) }) : null,
     );
     const btn = (label, ic, fmt, primary) => {
-      const b = h(`button.btn${primary ? '.primary' : ''}`, { html: `${icon(ic)}<span>${label}</span>`, type: 'button' });
+      const b = h(`button.btn${primary ? '.primary' : ''}`, { html: `${icon(ic)}<span>${t(label)}</span>`, type: 'button' });
       b.disabled = !lay;
       b.addEventListener('click', () => this.save(fmt));
       return b;
@@ -167,9 +168,9 @@ export class DrawingDialog {
       if (!target) return;
       await native.writeFile(target, bytes);
       this.lastSaved = target;
-      toast(`Saved ${app.files.basename(target)}`, { type: 'ok' });
+      toast(t('Saved {name}', { name: app.files.basename(target) }), { type: 'ok' });
     } catch (err) {
-      toast(`Could not save the drawing: ${err.message}`, { type: 'error', ms: 5000 });
+      toast(t('Could not save the drawing: {error}', { error: t(err.message) }), { type: 'error', ms: 5000 });
     }
   }
 }

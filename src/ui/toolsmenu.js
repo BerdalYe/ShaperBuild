@@ -5,6 +5,7 @@ import { icon } from './icons.js';
 import { attachTooltip, hideTooltip } from './overlays.js';
 import { TOOL_SECTIONS } from '../tools/registry.js';
 import { appCommands, matchScore } from './commandlist.js';
+import { t } from '../core/i18n.js';
 
 const COLLAPSED_KEY = 'shaperbuild.toolsCollapsed';
 
@@ -38,13 +39,13 @@ export class ToolsMenu {
     const sections = h('div.tools-sections');
     for (const section of TOOL_SECTIONS) {
       const grid = h('div.tools-grid');
-      for (const t of section.tools) {
-        const b = h('button.tool-btn', { 'aria-label': t.label }, h('span.tb-ic', { html: icon(t.icon) }), h('span.tb-label', { text: t.short || t.label }));
-        b.dataset.tool = t.id;
-        attachTooltip(b, () => `<b>${t.label}</b>${t.key ? `<span class="kbd">${t.key}</span>` : ''}<span class="desc">${t.desc || ''}</span>`);
-        b.addEventListener('click', () => this.app.tools.activate(t.id));
+      for (const tool of section.tools) {
+        const b = h('button.tool-btn', { 'aria-label': tool.label }, h('span.tb-ic', { html: icon(tool.icon) }), h('span.tb-label', { text: tool.short || tool.label }));
+        b.dataset.tool = tool.id;
+        attachTooltip(b, () => `<b>${t(tool.label)}</b>${tool.key ? `<span class="kbd">${tool.key}</span>` : ''}<span class="desc">${t(tool.desc || '')}</span>`);
+        b.addEventListener('click', () => this.app.tools.activate(tool.id));
         grid.append(b);
-        this.buttons.set(t.id, b);
+        this.buttons.set(tool.id, b);
       }
       const chevron = h('span.tt-chev', { html: icon('chevronDown') });
       const title = h('button.tools-title', chevron, h('span', { text: section.title }), h('span.tt-sub', { text: section.subtitle || '' }));
@@ -86,12 +87,13 @@ export class ToolsMenu {
   entries() {
     const tools = [];
     for (const s of TOOL_SECTIONS) {
-      for (const t of s.tools) {
-        tools.push({ label: t.label, icon: t.icon, kbd: t.key, keywords: t.keywords, desc: t.desc, group: s.title, run: () => this.app.tools.activate(t.id, { force: true }) });
+      for (const tool of s.tools) {
+        tools.push({ label: tool.label, icon: tool.icon, kbd: tool.key, keywords: tool.keywords, desc: tool.desc, group: s.title, run: () => this.app.tools.activate(tool.id, { force: true }) });
       }
     }
     const cmds = appCommands(this.app).map((c) => ({ ...c, group: 'Command' }));
-    return [...tools, ...cmds];
+    // Search in the chosen language, and in English too.
+    return [...tools, ...cmds].map((e) => ({ ...e, label: t(e.label), desc: t(e.desc || ''), keywords: [e.keywords || '', t(e.keywords || ''), e.label].join(' ') }));
   }
 
   filter() {
@@ -113,11 +115,11 @@ export class ToolsMenu {
     this.sectionsEl.hidden = true;
     this.resultsEl.hidden = false;
     if (!this.results.length) {
-      this.resultsEl.append(h('div.ts-empty', { text: `Nothing found for “${q}”. Try words like hole, round, copy or print.` }));
+      this.resultsEl.append(h('div.ts-empty', { text: t('Nothing found for “{q}”. Try words like hole, round, copy or print.', { q }) }));
       return;
     }
     this.results.forEach((r, i) => {
-      const row = h('button.ts-row', h('span.ts-ic', { html: icon(r.icon) }), h('span.ts-label', h('b', { text: r.label }), h('small', { text: r.group === 'Command' ? 'Command' : `${r.group} tool` })), r.kbd ? h('kbd', { text: r.kbd }) : null);
+      const row = h('button.ts-row', h('span.ts-ic', { html: icon(r.icon) }), h('span.ts-label', h('b', { str: r.label }), h('small', { text: r.group === 'Command' ? 'Command' : t('{group} tool', { group: t(r.group) }) })), r.kbd ? h('kbd', { str: r.kbd }) : null);
       row.addEventListener('mouseenter', () => this.setCursor(i));
       row.addEventListener('click', () => this.run(r));
       this.resultsEl.append(row);

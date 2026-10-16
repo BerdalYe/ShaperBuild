@@ -1,6 +1,7 @@
 // Native application menu. Every item sends a command string to the
 // renderer, which owns the behaviour (see src/ui/commands.js).
 const path = require('node:path');
+const { t } = require('./i18n.cjs');
 
 function buildMenu({ send, recent = [], isDev = false }) {
   const { Menu, app } = require('electron');
@@ -8,7 +9,7 @@ function buildMenu({ send, recent = [], isDev = false }) {
   // Shortcuts are shown in the menu but handled by the renderer (see
   // setupKeys in src/app.js), so text fields keep their own Ctrl+Z etc.
   const cmd = (label, command, accelerator, extra = {}) => ({
-    label,
+    label: t(label),
     accelerator,
     registerAccelerator: false,
     click: () => send(command),
@@ -20,9 +21,9 @@ function buildMenu({ send, recent = [], isDev = false }) {
     ? [
         ...recent.map((p) => ({ label: path.basename(p), click: () => send('open-path', p) })),
         { type: 'separator' },
-        { label: 'Clear Recent', click: () => send('clear-recent') },
+        { label: t('Clear Recent'), click: () => send('clear-recent') },
       ]
-    : [{ label: 'No recent designs', enabled: false }];
+    : [{ label: t('No recent designs'), enabled: false }];
 
   const template = [
     ...(mac
@@ -46,11 +47,11 @@ function buildMenu({ send, recent = [], isDev = false }) {
         ]
       : []),
     {
-      label: 'File',
+      label: t('File'),
       submenu: [
         cmd('New Design', 'new', 'CmdOrCtrl+N'),
         cmd('Open…', 'open', 'CmdOrCtrl+O'),
-        { label: 'Open Recent', submenu: recentItems },
+        { label: t('Open Recent'), submenu: recentItems },
         { type: 'separator' },
         cmd('Save', 'save', 'CmdOrCtrl+S'),
         cmd('Save As…', 'save-as', 'CmdOrCtrl+Shift+S'),
@@ -59,7 +60,7 @@ function buildMenu({ send, recent = [], isDev = false }) {
         cmd('3D Print…', 'print', 'CmdOrCtrl+P'),
         cmd('2D Drawing (PDF)…', 'drawing'),
         {
-          label: 'Export',
+          label: t('Export'),
           submenu: [
             cmd('STL (3D printing)…', 'export-stl', 'CmdOrCtrl+E'),
             cmd('3MF (3D printing)…', 'export-3mf'),
@@ -72,18 +73,18 @@ function buildMenu({ send, recent = [], isDev = false }) {
         },
         { type: 'separator' },
         cmd('Close Design', 'close-design', 'CmdOrCtrl+W'),
-        ...(mac ? [] : [{ type: 'separator' }, cmd('Settings…', 'settings', 'Ctrl+,'), { type: 'separator' }, { role: 'quit', label: 'Exit' }]),
+        ...(mac ? [] : [{ type: 'separator' }, cmd('Settings…', 'settings', 'Ctrl+,'), { type: 'separator' }, { role: 'quit', label: t('Exit') }]),
       ],
     },
     {
-      label: 'Edit',
+      label: t('Edit'),
       submenu: [
         cmd('Undo', 'undo', 'CmdOrCtrl+Z'),
         cmd('Redo', 'redo', mac ? 'Cmd+Shift+Z' : 'Ctrl+Y'),
         { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
+        { role: 'cut', label: t('Cut') },
+        { role: 'copy', label: t('Copy') },
+        { role: 'paste', label: t('Paste') },
         { type: 'separator' },
         cmd('Duplicate', 'duplicate', 'CmdOrCtrl+D'),
         hint('Delete', 'delete', 'Delete'),
@@ -92,7 +93,7 @@ function buildMenu({ send, recent = [], isDev = false }) {
       ],
     },
     {
-      label: 'View',
+      label: t('View'),
       submenu: [
         hint('Zoom to Fit', 'view-fit', 'Z'),
         { type: 'separator' },
@@ -116,12 +117,12 @@ function buildMenu({ send, recent = [], isDev = false }) {
         hint('Items Panel', 'toggle-items', 'Tab'),
         hint('Design History', 'show-history', 'Shift+H'),
         cmd('Tool Names in Tools Menu', 'toggle-tool-labels'),
-        { role: 'togglefullscreen' },
+        { role: 'togglefullscreen', label: t('Toggle Full Screen') },
         ...(isDev ? [{ type: 'separator' }, { role: 'reload' }, { role: 'toggleDevTools' }] : []),
       ],
     },
     {
-      label: 'Help',
+      label: t('Help'),
       submenu: [
         cmd('Interactive Tutorial', 'tutorial'),
         cmd('How to Move Around', 'navigation-help'),
@@ -131,7 +132,7 @@ function buildMenu({ send, recent = [], isDev = false }) {
         cmd('Getting Started', 'getting-started'),
         cmd('Check for Updates…', 'check-updates'),
         ...(mac ? [] : [{ type: 'separator' }, cmd('About ShaperBuild', 'about')]),
-        ...(isDev ? [] : [{ type: 'separator' }, { role: 'toggleDevTools', label: 'Developer Tools' }]),
+        ...(isDev ? [] : [{ type: 'separator' }, { role: 'toggleDevTools', label: t('Developer Tools') }]),
       ],
     },
   ];

@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('native', {
   onUpdateState: (cb) => ipcRenderer.on('update-state', (_e, s) => cb(s)),
   openForPrint: (opts) => ipcRenderer.invoke('print:open', opts),
   ready: () => ipcRenderer.send('app:ready'),
+  setLanguage: (lang) => ipcRenderer.send('app:language', lang),
   setDirty: (dirty) => ipcRenderer.send('app:dirty', dirty),
   setTitle: (title) => ipcRenderer.send('app:title', title),
   setRepresentedFile: (file) => ipcRenderer.send('app:represented', file),

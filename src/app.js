@@ -26,9 +26,11 @@ import { DrawingDialog } from './ui/drawingdialog.js';
 import { MaterialsPanel } from './ui/materials.js';
 import { toast, showMenu, hideTooltip } from './ui/overlays.js';
 import { icon } from './ui/icons.js';
-import { isTyping, modKey } from './ui/dom.js';
+import { isTyping, modKey, escapeHtml, translateStatic } from './ui/dom.js';
+import { t, language, setLanguage } from './core/i18n.js';
+import { Welcome } from './ui/welcome.js';
 import { TOOL_KEYS } from './tools/registry.js';
-import { UNITS, formatLength, formatArea, formatVolume, niceStep } from './core/units.js';
+import { UNITS, formatLength, formatArea, formatVolume, formatAngle, niceStep } from './core/units.js';
 import { planeFrame, to3D, to2D, samePlane } from './core/plane.js';
 import { keyPoints, closestOnEntity, dist } from './core/geom2d.js';
 
@@ -61,6 +63,8 @@ export class App {
     this.previewHidden = [];
 
     document.body.className = `theme-${this.settings.theme}`;
+    setLanguage(language());
+    translateStatic(document.getElementById('app'));
     this.kernel = new KernelClient();
     this.doc = new Document();
     this.selection = new Selection();
@@ -87,6 +91,7 @@ export class App {
     this.drawing = new DrawingDialog(this);
     this.materials = new MaterialsPanel(document.getElementById('materials'), this);
     this.starter = new StarterCard(document.getElementById('starter'), this);
+    this.welcome = new Welcome(this);
 
     this.doc.on('change', (ev) => this.onDocChange(ev));
     this.doc.on('saved', () => this.updateTitle());
@@ -104,7 +109,7 @@ export class App {
     try {
       await this.kernel.ready;
     } catch (err) {
-      document.querySelector('#boot .boot-card').innerHTML = `<div style="color:var(--danger)">The geometry engine failed to start.</div><div>${err.message}</div>`;
+      document.querySelector('#boot .boot-card').innerHTML = `<div style="color:var(--danger)">${t('The geometry engine failed to start.')}</div><div>${escapeHtml(t(err.message))}</div>`;
       return;
     }
     document.getElementById('boot').hidden = true;
@@ -112,6 +117,10 @@ export class App {
       window.native.onMenu((cmd, arg) => this.onMenu(cmd, arg));
       window.native.onOpenPath((p) => this.files.openPath(p));
     }
+    // First start: choose the language (reloads if it changes).
+    const info = await window.native?.info().catch(() => null);
+    if (!this.settings.language && !info?.noTutorial) await this.welcome.chooseLanguage();
+    else window.native?.setLanguage?.(language());
     // Decide on recovery and the home screen before reporting ready, so the
     // home screen never pops up over work that has already started.
     const recovered = await this.files.offerRecovery().catch(() => false);
@@ -122,12 +131,24 @@ export class App {
     this.starter.update();
     this.updates.start();
     // First launch: offer the interactive tutorial.
-    const info = await window.native?.info().catch(() => null);
     if (!recovered && !this.tutorial.seen && !info?.noTutorial) this.tutorial.offer();
   }
 
   get units() {
     return this.doc.state.units || 'mm';
+  }
+
+  // The language applies when the window starts (see restartWindow).
+  setLanguageSetting(id) {
+    this.settings.language = id;
+    this.saveSettings();
+    window.native?.setLanguage?.(id);
+  }
+
+  // Reload the window, keeping the open design as it is.
+  async restartWindow() {
+    await this.files.autosave({ keep: true });
+    location.reload();
   }
 
   saveSettings() {
@@ -149,7 +170,7 @@ export class App {
 
   onDocChange(ev) {
     this.syncView();
-    if (ev.kind === 'undo' || ev.kind === 'redo') toast(`${ev.kind === 'undo' ? 'Undo' : 'Redo'} ${ev.label || ''}`.trim(), { ms: 1200 });
+    if (ev.kind === 'undo' || ev.kind === 'redo') toast(t(ev.kind === 'undo' ? 'Undo {label}' : 'Redo {label}', { label: t(ev.label || '') }).trim(), { ms: 1200 });
     this.updateTitle();
     this.scheduleGC();
   }
@@ -699,7 +720,7 @@ export class App {
 
   busy(on, text = 'Working…') {
     this.busyManual = on;
-    document.getElementById('busy-text').textContent = text;
+    document.getElementById('busy-text').textContent = t(text);
     this.onKernelBusy(on);
   }
 
@@ -709,7 +730,7 @@ export class App {
     if (b || this.busyManual) this.busyTimer = setTimeout(() => (el.hidden = false), 350);
     else {
       el.hidden = true;
-      document.getElementById('busy-text').textContent = 'Working…';
+      document.getElementById('busy-text').textContent = t('Working…');
     }
   }
 
@@ -745,7 +766,7 @@ export class App {
     const items = this.selection.list;
     const token = (this.measureToken = (this.measureToken || 0) + 1);
     if (!items.length || items.length > 2) {
-      info.textContent = items.length ? `${items.length} selected` : '';
+      info.textContent = items.length ? t('{n} selected', { n: items.length }) : '';
       return;
     }
     const kitems = [];
@@ -758,14 +779,14 @@ export class App {
       if (items.length === 1 && it.kind === 'curve') {
         const sk = this.doc.sketch(it.sketchId);
         const en = sk?.entities.find((e) => e.id === it.entityId);
-        if (en?.type === 'line') info.textContent = `Line · ${formatLength(dist(en.a, en.b), this.units)}`;
-        else if (en?.type === 'circle') info.textContent = `Circle · ⌀ ${formatLength(en.r * 2, this.units)}`;
-        else if (en?.type === 'arc') info.textContent = `Arc · R ${formatLength(en.r, this.units)}`;
-        else info.textContent = en ? en.type : '';
+        if (en?.type === 'line') info.textContent = `${t('Line')} · ${formatLength(dist(en.a, en.b), this.units)}`;
+        else if (en?.type === 'circle') info.textContent = `${t('Circle')} · ⌀ ${formatLength(en.r * 2, this.units)}`;
+        else if (en?.type === 'arc') info.textContent = `${t('Arc')} · R ${formatLength(en.r, this.units)}`;
+        else info.textContent = en ? t(en.type[0].toUpperCase() + en.type.slice(1)) : '';
       } else if (items.length === 1 && it.kind === 'region') {
         const r = this.regionCache.get(it.sketchId)?.data?.regions[it.index];
-        info.textContent = r ? `Region · ${formatArea(r.area, this.units)}` : '';
-      } else info.textContent = `${items.length} selected`;
+        info.textContent = r ? `${t('Region')} · ${formatArea(r.area, this.units)}` : '';
+      } else info.textContent = t('{n} selected', { n: items.length });
       return;
     }
     try {
@@ -773,13 +794,13 @@ export class App {
       if (token !== this.measureToken) return;
       const u = this.units;
       const parts = res.items.map((r) => {
-        if (r.kind === 'body') return `Volume ${formatVolume(r.volume, u)}`;
-        if (r.kind === 'face') return `Area ${formatArea(r.area, u)}${r.radius ? ` · R ${formatLength(r.radius, u)}` : ''}`;
-        if (r.kind === 'edge') return `Length ${formatLength(r.length, u)}${r.radius ? ` · R ${formatLength(r.radius, u)}` : ''}`;
+        if (r.kind === 'body') return `${t('Volume')} ${formatVolume(r.volume, u)}`;
+        if (r.kind === 'face') return `${t('Area')} ${formatArea(r.area, u)}${r.radius ? ` · R ${formatLength(r.radius, u)}` : ''}`;
+        if (r.kind === 'edge') return `${t('Length')} ${formatLength(r.length, u)}${r.radius ? ` · R ${formatLength(r.radius, u)}` : ''}`;
         return '';
       });
-      if (res.pair?.distance !== undefined) parts.push(`Distance ${formatLength(res.pair.distance, u)}`);
-      if (res.pair?.angle !== undefined) parts.push(`Angle ${res.pair.angle.toFixed(2)}°`);
+      if (res.pair?.distance !== undefined) parts.push(`${t('Distance')} ${formatLength(res.pair.distance, u)}`);
+      if (res.pair?.angle !== undefined) parts.push(`${t('Angle')} ${formatAngle(res.pair.angle)}`);
       info.textContent = items.length === 2 && res.pair ? parts.slice(-2).join(' · ') : parts.join(' · ');
     } catch {
       info.textContent = '';
@@ -1126,7 +1147,7 @@ export class App {
       if (!hint) {
         hint = document.createElement('div');
         hint.className = 'drop-hint';
-        hint.textContent = 'Drop STL, OBJ, 3MF, STEP, DXF or ShaperBuild files to open them';
+        hint.textContent = t('Drop STL, OBJ, 3MF, STEP, DXF or ShaperBuild files to open them');
         document.body.append(hint);
       }
     });
@@ -1258,6 +1279,7 @@ class Status {
   }
 
   hint(html) {
+    html = t(html);
     const inView = this.app.toolHint?.set(html);
     document.getElementById('status-hint').innerHTML = inView ? '' : html || '';
   }

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { OpTool } from './optool.js';
 import { toast } from '../ui/overlays.js';
+import { t, tn } from '../core/i18n.js';
 
 const DEG = Math.PI / 180;
 
@@ -19,7 +20,7 @@ export class TransformTool extends OpTool {
           if (it.kind === 'region' || it.kind === 'curve') return { kind: 'sketch', sketchId: it.sketchId };
           return it;
         },
-        summary: (items) => `${items.length} object${items.length === 1 ? '' : 's'}`,
+        summary: (items) => tn(items.length, '1 object', '{n} objects'),
       },
     ];
   }

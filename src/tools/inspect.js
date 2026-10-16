@@ -3,6 +3,8 @@ import { Tool } from './base.js';
 import { formatLength, formatArea, formatVolume, formatAngle } from '../core/units.js';
 import { itemKey } from '../core/selection.js';
 import { toast } from '../ui/overlays.js';
+import { t, language } from '../core/i18n.js';
+import { escapeHtml } from '../ui/dom.js';
 
 export class MeasureTool extends Tool {
   get pickKinds() {
@@ -89,7 +91,7 @@ export class MeasureTool extends Tool {
       title: 'Measure',
       icon: 'measure',
       hint: rows.length ? '' : 'Click a face, edge, point or body. Click a second one to measure between them.',
-      fields: rows.map((r) => ({ type: 'info', text: `<div style="display:flex;justify-content:space-between;gap:12px"><span>${r.label}</span><b style="color:var(--text);font-weight:${r.strong ? 700 : 500}">${r.value}</b></div>` })),
+      fields: rows.map((r) => ({ type: 'info', text: `<div style="display:flex;justify-content:space-between;gap:12px"><span>${t(r.label)}</span><b style="color:var(--text);font-weight:${r.strong ? 700 : 500}">${escapeHtml(t(String(r.value)))}</b></div>` })),
       onCancel: () => this.done(),
       buttons: this.items.length ? [{ label: 'Clear', action: () => ((this.items = []), this.app.refreshHighlights(), this.measure()) }] : [],
     });
@@ -113,14 +115,14 @@ function describe(r, u) {
         const s = r.bbox.max.map((v, i) => v - r.bbox.min[i]);
         out.push({ label: 'Size (X × Y × Z)', value: s.map((v) => formatLength(v, u, { suffix: false })).join(' × ') + ' ' + u });
       }
-      if (r.mesh) out.push({ label: 'Triangles', value: r.triangles.toLocaleString() });
+      if (r.mesh) out.push({ label: 'Triangles', value: r.triangles.toLocaleString(language() === 'nb' ? 'nb-NO' : 'en-US') });
       break;
     case 'face':
-      out.push({ label: `Face (${r.type})`, value: formatArea(r.area, u), strong: true });
+      out.push({ label: `${t('Face')} (${t(r.type)})`, value: formatArea(r.area, u), strong: true });
       if (r.radius) out.push({ label: 'Radius', value: formatLength(r.radius, u) });
       break;
     case 'edge':
-      out.push({ label: `Edge (${r.type})`, value: formatLength(r.length, u), strong: true });
+      out.push({ label: `${t('Edge')} (${t(r.type)})`, value: formatLength(r.length, u), strong: true });
       if (r.radius) out.push({ label: 'Radius / diameter', value: `${formatLength(r.radius, u)} / ${formatLength(r.radius * 2, u)}` });
       break;
     case 'point':

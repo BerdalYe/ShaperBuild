@@ -1,4 +1,5 @@
 // Units and numeric input. Internally everything is millimetres and degrees.
+import { localNumber, readNumberText } from './i18n.js';
 
 export const UNITS = {
   mm: { label: 'mm', name: 'Millimeters', factor: 1, decimals: 2 },
@@ -181,7 +182,7 @@ function evaluateTokens(tokens, kind, defaultFactor) {
 // "25", "1in + 2mm", "(10+5)/2", "3 cm" -> millimetres (NaN if invalid).
 export function parseLength(text, unit = 'mm') {
   try {
-    return evaluate(text, 'length', UNITS[unit]?.factor ?? 1);
+    return evaluate(readNumberText(text), 'length', UNITS[unit]?.factor ?? 1);
   } catch {
     return NaN;
   }
@@ -190,7 +191,7 @@ export function parseLength(text, unit = 'mm') {
 // "45", "90°", "pi/2 rad" -> degrees (NaN if invalid).
 export function parseAngle(text) {
   try {
-    return evaluate(text, 'angle', 1);
+    return evaluate(readNumberText(text), 'angle', 1);
   } catch {
     return NaN;
   }
@@ -198,7 +199,7 @@ export function parseAngle(text) {
 
 export function parseNumber(text) {
   try {
-    return evaluate(text, 'count', 1);
+    return evaluate(readNumberText(text), 'count', 1);
   } catch {
     return NaN;
   }
@@ -216,22 +217,22 @@ export function toUnit(mm, unit = 'mm') {
 
 export function formatLength(mm, unit = 'mm', { suffix = true, decimals } = {}) {
   const u = UNITS[unit] || UNITS.mm;
-  const v = trimNumber(mm / u.factor, decimals ?? u.decimals);
+  const v = localNumber(trimNumber(mm / u.factor, decimals ?? u.decimals));
   return suffix ? `${v} ${u.label}` : v;
 }
 
 export function formatArea(mm2, unit = 'mm') {
   const u = UNITS[unit] || UNITS.mm;
-  return `${trimNumber(mm2 / u.factor ** 2, u.decimals)} ${u.label}²`;
+  return `${localNumber(trimNumber(mm2 / u.factor ** 2, u.decimals))} ${u.label}²`;
 }
 
 export function formatVolume(mm3, unit = 'mm') {
   const u = UNITS[unit] || UNITS.mm;
-  return `${trimNumber(mm3 / u.factor ** 3, u.decimals)} ${u.label}³`;
+  return `${localNumber(trimNumber(mm3 / u.factor ** 3, u.decimals))} ${u.label}³`;
 }
 
 export function formatAngle(deg, decimals = 2) {
-  return `${trimNumber(deg, decimals)}°`;
+  return `${localNumber(trimNumber(deg, decimals))}°`;
 }
 
 // Grid spacing that looks good at the current zoom: 1, 2 or 5 × 10^n mm.

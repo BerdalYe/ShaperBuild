@@ -1,9 +1,10 @@
 // "3D Print": check that the design is printable and save it as STL or 3MF,
 // or open it straight in a slicer.
-import { h, clear } from './dom.js';
+import { h, clear, escapeHtml } from './dom.js';
 import { icon } from './icons.js';
 import { modal, toast } from './overlays.js';
 import { writeSTL, write3MF } from '../core/formats.js';
+import { t, tn, localNumber, language } from '../core/i18n.js';
 
 export const PRINTERS = {
   generic: { name: 'Typical printer', bed: [220, 220, 250] },
@@ -23,8 +24,8 @@ const PLA_DENSITY = 1.24; // g/cm³
 
 // Short number: 220, 12.5, 0.75 (no trailing zeros after the point).
 export const fmt = (v) => {
-  const t = Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(2);
-  return t.includes('.') ? t.replace(/\.?0+$/, '') : t;
+  const s = Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(2);
+  return localNumber(s.includes('.') ? s.replace(/\.?0+$/, '') : s);
 };
 const dims = (bb) => [0, 1, 2].map((k) => bb.max[k] - bb.min[k]);
 const sizeText = (d) => `${d.map(fmt).join(' × ')} mm`;
@@ -169,25 +170,25 @@ export class PrintDialog {
     for (const p of open) {
       const holes = p.stats.openEdges + p.stats.nonManifoldEdges;
       const fix = p.kind === 'mesh' ? ' Most slicers repair small gaps; for big ones fix the mesh first.' : '';
-      warn(`“${p.name}” is not a closed shape (${holes || p.stats.flippedEdges} problem edge${holes === 1 ? '' : 's'}).${fix}`);
+      warn(tn(holes || p.stats.flippedEdges, '“{name}” is not a closed shape (1 problem edge).', '“{name}” is not a closed shape ({n} problem edges).', { name: p.name }) + (fix ? ` ${t(fix.trim())}` : ''));
     }
     const bb = unionBox(parts.map((p) => p.stats.bbox));
     const size = dims(bb);
     const bed = this.bed;
-    const printer = `${this.opts.printer === 'custom' ? 'custom printer' : PRINTERS[this.opts.printer].name}, ${sizeText(bed)}`;
+    const printer = `${this.opts.printer === 'custom' ? t('custom printer') : t(PRINTERS[this.opts.printer].name)}, ${sizeText(bed)}`;
     const fit = bedFit(size, bed);
-    if (fit === 'fits') ok(`Fits the print bed (${printer}).`);
-    else if (fit === 'rotate') warn(`Fits the print bed (${printer}) if you turn it 90° in your slicer.`);
-    else if (fit === 'too-tall') bad(`Too tall for the printer: ${fmt(size[2])} mm high, it goes up to ${fmt(bed[2])} mm. Lay it on its side, scale it down, or split it.`);
-    else bad(`Too big for the print bed (${printer}). Scale it down with Scale, or split it into pieces.`);
+    if (fit === 'fits') ok(t('Fits the print bed ({printer}).', { printer }));
+    else if (fit === 'rotate') warn(t('Fits the print bed ({printer}) if you turn it 90° in your slicer.', { printer }));
+    else if (fit === 'too-tall') bad(t('Too tall for the printer: {h} mm high, it goes up to {max} mm. Lay it on its side, scale it down, or split it.', { h: fmt(size[2]), max: fmt(bed[2]) }));
+    else bad(t('Too big for the print bed ({printer}). Scale it down with Scale, or split it into pieces.', { printer }));
     const biggest = Math.max(...size);
-    if (biggest < 2) warn(`It is tiny: only ${fmt(biggest)} mm across. Files are in millimetres — did you mean it to be bigger?`);
-    if (biggest > 2000) warn(`It is huge: ${fmt(biggest / 1000)} m across. Files are in millimetres — check the size.`);
-    if (!this.opts.place && Math.abs(bb.min[2]) > 0.01) warn(`The lowest point is at Z = ${fmt(bb.min[2])} mm. Turn on “Put it on the print bed” or move it in your slicer.`);
+    if (biggest < 2) warn(t('It is tiny: only {size} mm across. Files are in millimetres — did you mean it to be bigger?', { size: fmt(biggest) }));
+    if (biggest > 2000) warn(t('It is huge: {size} m across. Files are in millimetres — check the size.', { size: fmt(biggest / 1000) }));
+    if (!this.opts.place && Math.abs(bb.min[2]) > 0.01) warn(t('The lowest point is at Z = {z} mm. Turn on “Put it on the print bed” or move it in your slicer.', { z: fmt(bb.min[2]) }));
     for (let i = 0; i < parts.length; i++)
       for (let j = i + 1; j < parts.length; j++)
         if (boxesOverlap(parts[i].stats.bbox, parts[j].stats.bbox)) {
-          warn(`“${parts[i].name}” and “${parts[j].name}” touch or overlap. If they should be one piece, join them with Union first.`);
+          warn(t('“{a}” and “{b}” touch or overlap. If they should be one piece, join them with Union first.', { a: parts[i].name, b: parts[j].name }));
           i = parts.length;
           break;
         }
@@ -231,7 +232,7 @@ export class PrintDialog {
           `label.pd-body${b.visible === false ? '.hidden-body' : ''}`,
           cb,
           sw,
-          h('span.pd-name', { text: b.name }),
+          h('span.pd-name', { str: b.name }),
           b.kind === 'mesh' ? h('span.pd-tag', { text: 'mesh' }) : null,
           h('span.pd-size', { text: p ? sizeText(dims(p.stats.bbox)) : this.chosen.has(b.id) ? '…' : '' }),
         ),
@@ -241,8 +242,8 @@ export class PrintDialog {
     // Summary and checks
     const summary = h('div.pd-summary');
     const checks = h('div.pd-checks');
-    if (this.error) checks.append(h('div.pd-check.bad', { html: `${icon('close')}<span>Could not prepare the mesh: ${this.error}</span>` }));
-    else if (this.loading || parts.length < this.chosen.size) checks.append(h('div.pd-check', { html: `<span class="spinner"></span><span>Checking your design…</span>` }));
+    if (this.error) checks.append(h('div.pd-check.bad', { html: `${icon('close')}<span>${escapeHtml(t('Could not prepare the mesh: {error}', { error: t(this.error) }))}</span>` }));
+    else if (this.loading || parts.length < this.chosen.size) checks.append(h('div.pd-check', { html: `<span class="spinner"></span><span>${t('Checking your design…')}</span>` }));
     else {
       if (parts.length) {
         const bb = unionBox(parts.map((p) => p.stats.bbox));
@@ -252,20 +253,20 @@ export class PrintDialog {
         summary.append(
           h('div', h('small', { text: 'Size' }), h('b', { text: sizeText(dims(bb)) })),
           h('div', h('small', { text: 'Volume' }), h('b', { text: `${fmt(vol / 1000)} cm³` })),
-          h('div', h('small', { text: 'Plastic if printed solid' }), h('b', { text: `≈ ${fmt(grams)} g PLA` })),
-          h('div', h('small', { text: 'Triangles' }), h('b', { text: tris.toLocaleString('en-US') })),
+          h('div', h('small', { text: 'Plastic if printed solid' }), h('b', { str: `≈ ${fmt(grams)} g PLA` })),
+          h('div', h('small', { text: 'Triangles' }), h('b', { str: tris.toLocaleString(language() === 'nb' ? 'nb-NO' : 'en-US') })),
         );
       }
       for (const c of this.checks(parts)) {
         const ic = c.level === 'ok' ? 'check' : c.level === 'warn' ? 'help' : 'close';
         checks.append(h(`div.pd-check.${c.level}`, { html: `${icon(ic)}<span></span>` }));
-        checks.lastChild.querySelector('span').textContent = c.text;
+        checks.lastChild.querySelector('span').textContent = t(c.text);
       }
     }
 
     // Options
     const printerSel = h('select');
-    for (const [k, v] of Object.entries(PRINTERS)) printerSel.append(h('option', { value: k, text: v.bed ? `${v.name} — ${v.bed.join(' × ')} mm` : v.name, selected: k === o.printer }));
+    for (const [k, v] of Object.entries(PRINTERS)) printerSel.append(h('option', { value: k, text: v.bed ? `${t(v.name)} — ${v.bed.join(' × ')} mm` : v.name, selected: k === o.printer }));
     printerSel.addEventListener('change', () => {
       o.printer = printerSel.value;
       this.render();
@@ -332,21 +333,21 @@ export class PrintDialog {
     const ready = !this.loading && !this.error && parts.length > 0 && parts.length === this.chosen.size;
     const cancel = h('button.btn', { text: 'Cancel', type: 'button' });
     cancel.addEventListener('click', () => this.close?.(null));
-    const save = h('button.btn.primary', { html: `${icon('export')}<span>Save ${o.format.toUpperCase()} file…</span>`, type: 'button' });
+    const save = h('button.btn.primary', { html: `${icon('export')}<span>${t('Save {format} file…', { format: o.format.toUpperCase() })}</span>`, type: 'button' });
     save.disabled = !ready;
     save.addEventListener('click', () => this.save());
     const slicerBox = h('div.pd-slicer');
     if (this.slicers.length) {
       const sel = h('select');
       for (const sl of this.slicers) sel.append(h('option', { value: sl.id, text: sl.name, selected: sl.id === this.slicer }));
-      sel.append(h('option', { value: 'default', text: `Default app for .${o.format}`, selected: this.slicer === 'default' }));
+      sel.append(h('option', { value: 'default', text: t('Default app for .{ext}', { ext: o.format }), selected: this.slicer === 'default' }));
       sel.addEventListener('change', () => (this.slicer = sel.value));
-      const go = h('button.btn', { html: `${icon('printer')}<span>Open in</span>`, type: 'button' });
+      const go = h('button.btn', { html: `${icon('printer')}<span>${t('Open in')}</span>`, type: 'button' });
       go.disabled = !ready;
       go.addEventListener('click', () => this.openInSlicer());
       slicerBox.append(go, sel);
     } else if (window.native) {
-      const go = h('button.btn', { html: `${icon('printer')}<span>Open with default app</span>`, type: 'button', title: 'No slicer found. Install PrusaSlicer, Bambu Studio, OrcaSlicer or Cura to open files in it directly.' });
+      const go = h('button.btn', { html: `${icon('printer')}<span>${t('Open with default app')}</span>`, type: 'button', title: 'No slicer found. Install PrusaSlicer, Bambu Studio, OrcaSlicer or Cura to open files in it directly.' });
       go.disabled = !ready;
       go.addEventListener('click', () => {
         this.slicer = 'default';
@@ -399,15 +400,15 @@ export class PrintDialog {
           const one = buildPrintFile([p], { format: o.format, place: o.place, bed: this.bed, binary: app.settings.stlBinary !== false, name: p.name });
           await native.writeFile(`${dir}${sep}${stem} - ${p.name.replace(/[\\/:*?"<>|]+/g, '_')}.${o.format}`, one);
         }
-        toast(`Saved ${parts.length} ${o.format.toUpperCase()} files`, { type: 'ok' });
+        toast(t('Saved {n} {format} files', { n: parts.length, format: o.format.toUpperCase() }), { type: 'ok' });
       } else {
         await native.writeFile(target, this.fileBytes(parts));
-        toast(`Saved ${app.files.basename(target)} — open it in your slicer to print`, { type: 'ok', ms: 3500 });
+        toast(t('Saved {name} — open it in your slicer to print', { name: app.files.basename(target) }), { type: 'ok', ms: 3500 });
       }
       this.lastSaved = target;
       this.close?.('saved');
     } catch (err) {
-      toast(`Could not save: ${err.message}`, { type: 'error', ms: 6000 });
+      toast(t('Could not save: {error}', { error: t(err.message) }), { type: 'error', ms: 6000 });
     }
   }
 
@@ -421,10 +422,10 @@ export class PrintDialog {
       const res = await window.native.openForPrint({ name, ext: this.opts.format, data: this.fileBytes(parts), slicer: this.slicer });
       if (!res.ok) throw new Error(res.error || 'no app is set up to open this file type');
       const sl = this.slicers.find((x) => x.id === this.slicer);
-      toast(sl ? `Opening in ${sl.name}…` : 'Opening…', { type: 'ok' });
+      toast(sl ? t('Opening in {app}…', { app: sl.name }) : t('Opening…'), { type: 'ok' });
       this.close?.('opened');
     } catch (err) {
-      toast(`Could not open it: ${err.message}. Save the file instead and open it in your slicer.`, { type: 'error', ms: 6000 });
+      toast(t('Could not open it: {error}. Save the file instead and open it in your slicer.', { error: t(err.message) }), { type: 'error', ms: 6000 });
     }
   }
 }

@@ -2,6 +2,7 @@
 import { h, clear } from './dom.js';
 import { icon } from './icons.js';
 import { parseLength, parseAngle, parseNumber, formatLength, trimNumber, UNITS } from '../core/units.js';
+import { t, localNumber } from '../core/i18n.js';
 
 export class ToolPanel {
   constructor(el, app) {
@@ -77,8 +78,8 @@ export class ToolPanel {
   format(f, v) {
     if (v === undefined || v === null || Number.isNaN(v)) return '';
     if (f.type === 'length') return formatLength(v, this.units, { suffix: false });
-    if (f.type === 'angle') return trimNumber(v, 2);
-    return String(v);
+    if (f.type === 'angle') return localNumber(trimNumber(v, 2));
+    return localNumber(String(v));
   }
 
   parse(f, text) {
@@ -91,7 +92,7 @@ export class ToolPanel {
     const s = this.spec;
     clear(this.el);
     this.inputs.clear();
-    const head = h('div.tp-head', { html: `${s.icon ? icon(s.icon) : ''}<span class="title">${s.title}</span>` });
+    const head = h('div.tp-head', { html: `${s.icon ? icon(s.icon) : ''}<span class="title">${t(s.title)}</span>` });
     const closeBtn = h('button.tb-btn', { title: 'Cancel (Esc)', html: icon('close') });
     closeBtn.style.height = closeBtn.style.minWidth = '26px';
     closeBtn.addEventListener('click', () => s.onCancel?.());
@@ -109,7 +110,7 @@ export class ToolPanel {
       for (const b of s.buttons || []) foot.append(h(`button.btn.grow${b.primary ? '.primary' : ''}`, { text: b.label, onClick: b.action }));
       if (s.onOk) {
         const cancel = h('button.btn.grow', { text: 'Cancel', onClick: () => s.onCancel?.() });
-        const ok = h('button.btn.primary.grow', { html: `${icon('check')}<span>${s.okLabel || 'Done'}</span>`, onClick: () => s.onOk?.() });
+        const ok = h('button.btn.primary.grow', { html: `${icon('check')}<span>${t(s.okLabel || 'Done')}</span>`, onClick: () => s.onOk?.() });
         ok.querySelector('svg').style.width = '16px';
         ok.dataset.ok = '1';
         if (!this.okEnabled()) ok.disabled = true;
@@ -128,7 +129,7 @@ export class ToolPanel {
     };
     switch (f.type) {
       case 'slot': {
-        const el = h(`div.slot${f.active ? '.active' : ''}${f.count ? '.filled' : ''}`, h('span.dot'), h('span', { text: f.count ? f.summary || `${f.count} selected` : f.placeholder || f.label }));
+        const el = h(`div.slot${f.active ? '.active' : ''}${f.count ? '.filled' : ''}`, h('span.dot'), h('span', { text: f.count ? f.summary || t('{n} selected', { n: f.count }) : f.placeholder || f.label }));
         if (f.count && f.onClear) {
           const x = h('button.clear', { title: 'Clear', html: '&times;' });
           x.addEventListener('click', (e) => {
@@ -191,7 +192,7 @@ export class ToolPanel {
       case 'choice': {
         const chips = h('div.chips');
         for (const o of f.options) {
-          const b = h(`button.chip${o.value === f.value ? '.on' : ''}`, { html: `${o.icon ? icon(o.icon) : ''}${o.label}`, title: o.title || '' });
+          const b = h(`button.chip${o.value === f.value ? '.on' : ''}`, { html: `${o.icon ? icon(o.icon) : ''}${t(o.label)}`, title: o.title || '' });
           const svg = b.querySelector('svg');
           if (svg) {
             svg.style.width = '14px';

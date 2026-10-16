@@ -3034,3 +3034,53 @@ svg.icon {
   outline: 1px dashed var(--accent);
   outline-offset: -1px;
 }
+
+/* ---- welcome: language ---------------------------------------------------- */
+.welcome-lang p {
+  margin: 0 0 12px;
+  color: var(--text-2);
+}
+
+.wl-choices {
+  display: flex;
+  gap: 12px;
+}
+
+.wl-choice {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-2);
+  background: var(--panel-2);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.wl-choice b {
+  font-size: 15px;
+}
+
+.wl-choice span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.wl-choice:hover {
+  border-color: var(--accent);
+}
+
+.wl-choice.primary {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.welcome-lang .wl-small {
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}

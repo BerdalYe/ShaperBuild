@@ -3,6 +3,7 @@
 import { h, clear } from './dom.js';
 import { icon } from './icons.js';
 import { toast, modal } from './overlays.js';
+import { t } from '../core/i18n.js';
 
 const EVERY = 4 * 3600 * 1000;
 
@@ -47,11 +48,11 @@ export class Updates {
     this.render();
     if (!manual) return s;
     if (s.status === 'disabled') toast('Updates are checked in the installed app, not when running from source.', { ms: 3500 });
-    else if (s.status === 'latest') toast(`You have the newest version (${s.current}).`, { type: 'ok' });
-    else if (s.status === 'error') toast(`Could not check for updates: ${s.message}`, { type: 'error', ms: 5000 });
-    else if (s.status === 'available') toast(`Version ${s.version} is available. Click “Download” at the top to get it.`, { ms: 4000 });
-    else if (s.status === 'downloading') toast(`Downloading version ${s.version}…`, { ms: 2500 });
-    else if (s.status === 'ready') toast(`Version ${s.version} is ready. Click “Restart to update” at the top.`, { ms: 4000 });
+    else if (s.status === 'latest') toast(t('You have the newest version ({version}).', { version: s.current }), { type: 'ok' });
+    else if (s.status === 'error') toast(t('Could not check for updates: {error}', { error: t(s.message) }), { type: 'error', ms: 5000 });
+    else if (s.status === 'available') toast(t('Version {version} is available. Click “Download” at the top to get it.', { version: s.version }), { ms: 4000 });
+    else if (s.status === 'downloading') toast(t('Downloading version {version}…', { version: s.version }), { ms: 2500 });
+    else if (s.status === 'ready') toast(t('Version {version} is ready. Click “Restart to update” at the top.', { version: s.version }), { ms: 4000 });
     return s;
   }
 
@@ -67,16 +68,16 @@ export class Updates {
     el.hidden = false;
     if (s.status === 'downloading') {
       el.classList.add('busy');
-      el.title = `Downloading ShaperBuild ${s.version}`;
-      el.append(h('span.spinner'), h('span', { text: `Updating to ${s.version}${s.percent ? ` · ${s.percent}%` : '…'}` }));
+      el.title = t('Downloading ShaperBuild {version}', { version: s.version });
+      el.append(h('span.spinner'), h('span', { str: t('Updating to {version}', { version: s.version }) + (s.percent ? ` · ${s.percent}%` : '…') }));
     } else if (s.status === 'ready') {
       el.classList.add('ready');
-      el.title = `ShaperBuild ${s.version} is downloaded. Restart to start using it.`;
+      el.title = t('ShaperBuild {version} is downloaded. Restart to start using it.', { version: s.version });
       el.append(h('span', { html: icon('sparkle') }), h('span', { text: 'Restart to update' }));
     } else {
       el.classList.add('ready');
-      el.title = `ShaperBuild ${s.version} is available`;
-      el.append(h('span', { html: icon('import') }), h('span', { text: `Download ${s.version}` }));
+      el.title = t('ShaperBuild {version} is available', { version: s.version });
+      el.append(h('span', { html: icon('import') }), h('span', { str: t('Download {version}', { version: s.version }) }));
     }
   }
 
@@ -87,9 +88,9 @@ export class Updates {
     if (s.status !== 'ready') return;
     const dirty = this.app.doc.dirty;
     const v = await modal({
-      title: `Update to ShaperBuild ${s.version}`,
+      title: t('Update to ShaperBuild {version}', { version: s.version }),
       body: h('div', {
-        html: `ShaperBuild will close, install the update and open again.${dirty ? '<br><br>You will be asked to save your design first.' : ''}<br><br><small style="color:var(--muted)">If you choose Later, the update installs the next time you quit.</small>`,
+        html: `${t('ShaperBuild will close, install the update and open again.')}${dirty ? `<br><br>${t('You will be asked to save your design first.')}` : ''}<br><br><small style="color:var(--muted)">${t('If you choose Later, the update installs the next time you quit.')}</small>`,
       }),
       buttons: [
         { label: 'Later', value: false },

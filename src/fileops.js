@@ -2,6 +2,7 @@
 import { parseSTL, writeSTL, parseOBJ, writeOBJ, parse3MF, write3MF } from './core/formats.js';
 import { toast, modal } from './ui/overlays.js';
 import { h } from './ui/dom.js';
+import { t, tn, language } from './core/i18n.js';
 import { emptyState } from './core/doc.js';
 import { parseDXF, writeDXF } from './core/dxf.js';
 import { GROUND } from './core/plane.js';
@@ -14,7 +15,7 @@ export class FileOps {
   constructor(app) {
     this.app = app;
     this.path = null;
-    this.name = 'Untitled';
+    this.name = t('Untitled');
   }
 
   get native() {
@@ -41,7 +42,7 @@ export class FileOps {
     if (!this.app.doc.dirty) return true;
     const v = await modal({
       title: 'Save changes?',
-      body: h('div', { text: `Do you want to save the changes to "${this.name}"?` }),
+      body: h('div', { text: t('Do you want to save the changes to "{name}"?', { name: this.name }) }),
       buttons: [
         { label: 'Cancel', value: 'cancel' },
         { label: "Don't Save", value: 'discard' },
@@ -52,7 +53,7 @@ export class FileOps {
     return v === 'discard';
   }
 
-  async reset(name = 'Untitled') {
+  async reset(name = t('Untitled')) {
     const app = this.app;
     app.tools.activate('select');
     app.selection.clear();
@@ -113,7 +114,7 @@ export class FileOps {
       const data = await this.native.readFile(path);
       await this.openData(this.basename(path), data, path, opts);
     } catch (err) {
-      toast(`Could not open ${this.basename(path)}: ${err.message}`, { type: 'error', ms: 6000 });
+      toast(t('Could not open {name}: {error}', { name: this.basename(path), error: t(err.message) }), { type: 'error', ms: 6000 });
     }
   }
 
@@ -126,7 +127,7 @@ export class FileOps {
       return this.loadProject(data, path, name);
     }
     if (!['stl', 'obj', '3mf', 'step', 'stp', 'dxf', 'png', 'jpg', 'jpeg', 'webp'].includes(ext)) {
-      toast(`Unsupported file type: .${ext}`, { type: 'error' });
+      toast(t('Unsupported file type: .{ext}', { ext }), { type: 'error' });
       return;
     }
     // Importing from the home screen starts a new design named after the file.
@@ -149,12 +150,12 @@ export class FileOps {
       if (!entities.length) throw new Error('no lines, arcs or circles found');
       const id = app.cmd.addSketch(GROUND, entities, { name: this.stem(name), label: `Import ${name}` });
       app.selection.set([{ kind: 'sketch', sketchId: id }]);
-      const extra = Object.entries(skipped).map(([t, c]) => `${c} ${t.toLowerCase()}`);
-      toast(`Imported ${name} · ${entities.length} curves${extra.length ? ` (skipped: ${extra.join(', ')})` : ''}. Click its closed shapes to extrude them.`, { type: 'ok', ms: 5000 });
+      const extra = Object.entries(skipped).map(([type, c]) => `${c} ${type.toLowerCase()}`);
+      toast(t('Imported {name} · {n} curves{skipped}. Click its closed shapes to extrude them.', { name, n: entities.length, skipped: extra.length ? ` (${t('skipped')}: ${extra.join(', ')})` : '' }), { type: 'ok', ms: 5000 });
       setTimeout(() => app.vp.fit(app.selectionBox()), 80);
       return id;
     } catch (err) {
-      toast(`Import failed: ${err.message}`, { type: 'error', ms: 6000 });
+      toast(t('Import failed: {error}', { error: t(err.message) }), { type: 'error', ms: 6000 });
       return null;
     }
   }
@@ -194,7 +195,7 @@ export class FileOps {
       toast('Image added. Type its real width in the bar at the bottom, then trace it with the sketch tools.', { type: 'ok', ms: 5000 });
       setTimeout(() => app.vp.fit(app.selectionBox()), 80);
     } catch (err) {
-      toast(`Could not add the image: ${err.message}`, { type: 'error', ms: 5000 });
+      toast(t('Could not add the image: {error}', { error: t(err.message) }), { type: 'error', ms: 5000 });
     }
   }
 
@@ -217,7 +218,7 @@ export class FileOps {
     }
     await this.native.writeFile(target, bytes);
     const planes = new Set(sketches.map((s) => JSON.stringify([s.plane.normal, s.plane.origin])));
-    toast(`Exported ${this.basename(target)}${planes.size > 1 ? ' — sketches on different planes are drawn on top of each other' : ''}`, { type: 'ok', ms: 3500 });
+    toast(t('Exported {name}', { name: this.basename(target) }) + (planes.size > 1 ? ` — ${t('sketches on different planes are drawn on top of each other')}` : ''), { type: 'ok', ms: 3500 });
     return target;
   }
 
@@ -225,7 +226,7 @@ export class FileOps {
     const app = this.app;
     const ext = (name.split('.').pop() || '').toLowerCase();
     const stem = this.stem(name);
-    app.busy(true, `Importing ${name}…`);
+    app.busy(true, t('Importing {name}…', { name }));
     try {
       let result;
       if (ext === 'step' || ext === 'stp') {
@@ -255,13 +256,13 @@ export class FileOps {
       const tris = result.bodies.reduce((s, b) => s + (b.mesh.triangles || 0), 0);
       if (meshInfo) {
         const leaky = result.bodies.some((b) => b.mesh.kind === 'mesh' && !b.mesh.watertight);
-        toast(`Imported ${name} · ${tris.toLocaleString()} triangles${leaky ? ' · mesh is not watertight (booleans unavailable)' : ''}`, { type: leaky ? 'info' : 'ok', ms: 4200 });
-      } else toast(`Imported ${name} · ${result.bodies.length} solid bod${result.bodies.length === 1 ? 'y' : 'ies'}`, { type: 'ok' });
+        toast(t('Imported {name} · {n} triangles', { name, n: tris.toLocaleString() }) + (leaky ? ` · ${t('mesh is not watertight (booleans unavailable)')}` : ''), { type: leaky ? 'info' : 'ok', ms: 4200 });
+      } else toast(tn(result.bodies.length, 'Imported {name} · 1 solid body', 'Imported {name} · {n} solid bodies', { name }), { type: 'ok' });
       this.warnUnits(result);
       setTimeout(() => app.vp.fit(), 50);
       return created;
     } catch (err) {
-      toast(`Import failed: ${err.message}`, { type: 'error', ms: 6000 });
+      toast(t('Import failed: {error}', { error: t(err.message) }), { type: 'error', ms: 6000 });
       return [];
     } finally {
       app.busy(false);
@@ -331,10 +332,10 @@ export class FileOps {
       await this.native.addRecent(target);
       this.native.setRepresentedFile(target);
       storeThumb(target, json.thumbnail);
-      toast(`Saved ${this.basename(target)}`, { type: 'ok', ms: 1600 });
+      toast(t('Saved {name}', { name: this.basename(target) }), { type: 'ok', ms: 1600 });
       return true;
     } catch (err) {
-      toast(`Save failed: ${err.message}`, { type: 'error', ms: 6000 });
+      toast(t('Save failed: {error}', { error: t(err.message) }), { type: 'error', ms: 6000 });
       return false;
     } finally {
       app.busy(false);
@@ -371,7 +372,7 @@ export class FileOps {
       app.home.hide();
       app.updateTitle();
     } catch (err) {
-      toast(`Could not open ${name}: ${err.message}`, { type: 'error', ms: 6000 });
+      toast(t('Could not open {name}: {error}', { name, error: t(err.message) }), { type: 'error', ms: 6000 });
     } finally {
       app.busy(false);
     }
@@ -386,14 +387,16 @@ export class FileOps {
     this.autosaveTimer = setInterval(() => this.autosave(), ms);
   }
 
-  async autosave() {
+  // `keep`: a copy for a restart (language change), restored without asking.
+  async autosave({ keep = false } = {}) {
     const app = this.app;
-    if (!app.doc.dirty || app.doc.isEmpty || this.autosaving) return;
+    if ((!keep && !app.doc.dirty) || app.doc.isEmpty || this.autosaving || !this.native?.writeRecovery) return false;
     this.autosaving = true;
     try {
       const json = await this.serialize({ thumbnail: false });
       const bytes = await gzip(new TextEncoder().encode(JSON.stringify(json)));
-      await this.native.writeRecovery(bytes, { name: this.name, path: this.path });
+      await this.native.writeRecovery(bytes, { name: this.name, path: this.path, ...(keep ? { restore: true, dirty: app.doc.dirty, untitled: this.name === t('Untitled') } : {}) });
+      return true;
     } catch (err) {
       console.warn('autosave failed', err);
     } finally {
@@ -409,10 +412,22 @@ export class FileOps {
   async offerRecovery() {
     const rec = await this.native?.readRecovery?.();
     if (!rec) return false;
-    const when = new Date(rec.meta.saved).toLocaleString();
+    if (rec.meta.restore) {
+      // Kept for a restart: open it again as it was.
+      await this.loadProject(rec.data, null, `${rec.meta.name || t('Recovered')}.${PROJECT_EXT}`);
+      this.path = rec.meta.path || null;
+      // "Untitled" follows the new language.
+      this.name = rec.meta.untitled ? t('Untitled') : rec.meta.name || this.name;
+      if (rec.meta.dirty) this.app.doc.saved = null;
+      else this.app.doc.markSaved();
+      this.app.updateTitle();
+      await this.clearRecovery();
+      return true;
+    }
+    const when = new Date(rec.meta.saved).toLocaleString(language() === 'nb' ? 'nb-NO' : undefined);
     const v = await modal({
       title: 'Recover unsaved work?',
-      body: h('div', { text: `ShaperBuild closed before "${rec.meta.name || 'Untitled'}" was saved. A copy from ${when} is available.` }),
+      body: h('div', { text: t('ShaperBuild closed before "{name}" was saved. A copy from {when} is available.', { name: rec.meta.name || t('Untitled'), when }) }),
       buttons: [
         { label: 'Discard', value: 'discard', danger: true },
         { label: 'Recover', value: 'recover', primary: true },
@@ -422,7 +437,7 @@ export class FileOps {
       await this.clearRecovery();
       return false;
     }
-    await this.loadProject(rec.data, null, `${rec.meta.name || 'Recovered'}.${PROJECT_EXT}`);
+    await this.loadProject(rec.data, null, `${rec.meta.name || t('Recovered')}.${PROJECT_EXT}`);
     this.path = rec.meta.path || null;
     // Keep it marked unsaved so the user saves it properly.
     this.app.doc.saved = null;
@@ -451,12 +466,12 @@ export class FileOps {
     const bodies = bodyIds.map((id) => app.doc.body(id));
     const defaultName = bodies.length === 1 ? bodies[0].name : this.name;
     try {
-      app.busy(true, `Exporting ${format.toUpperCase()}…`);
+      app.busy(true, t('Exporting {format}…', { format: format.toUpperCase() }));
       let bytes;
       if (format === 'step') {
         const res = await app.kernel.call('exportSTEP', { ids: bodies.map((b) => b.shapeId) });
         bytes = res.data;
-        if (res.skipped) toast(`${res.skipped} mesh bod${res.skipped === 1 ? 'y was' : 'ies were'} skipped (STEP needs solids)`, { ms: 4000 });
+        if (res.skipped) toast(tn(res.skipped, '1 mesh body was skipped (STEP needs solids)', '{n} mesh bodies were skipped (STEP needs solids)'), { ms: 4000 });
       } else {
         const tol = QUALITY[app.settings.stlQuality] ?? QUALITY.fine;
         const { parts } = await app.kernel.call('exportMeshes', { ids: bodies.map((b) => b.shapeId), tolerance: tol });
@@ -473,10 +488,10 @@ export class FileOps {
         if (!target) return null;
       }
       await this.native.writeFile(target, bytes);
-      toast(`Exported ${this.basename(target)}`, { type: 'ok' });
+      toast(t('Exported {name}', { name: this.basename(target) }), { type: 'ok' });
       return target;
     } catch (err) {
-      toast(`Export failed: ${err.message}`, { type: 'error', ms: 6000 });
+      toast(t('Export failed: {error}', { error: t(err.message) }), { type: 'error', ms: 6000 });
       return null;
     } finally {
       app.busy(false);
@@ -493,7 +508,7 @@ export class FileOps {
       if (!target) return null;
     }
     await this.native.writeFile(target, bytes);
-    toast(`Saved image ${this.basename(target)}`, { type: 'ok' });
+    toast(t('Saved image {name}', { name: this.basename(target) }), { type: 'ok' });
     return target;
   }
 }

@@ -30,7 +30,9 @@ It shows the size, volume and roughly how much plastic it takes. Then save a **3
 
 ## Getting started
 
-The first time you open ShaperBuild it offers an **interactive tutorial** (about 3 minutes). It shows you how to move around, draw a rectangle, pull it into 3D and round its edges, and it waits for you to try each step. You can start it again any time from **Help → Interactive tutorial** or the home screen.
+The first time you open ShaperBuild it asks for your language: **English** or **Norwegian (bokmål)**. Everything follows the choice — tools, hints, menus, messages, file dialogs and drawings, with decimal commas in Norwegian (typing `12,5` or `12.5` both work). Change it later under **Settings → Language**; the window restarts and your open design stays as it was.
+
+Then it offers an **interactive tutorial** (about 3 minutes). It shows you how to move around, draw a rectangle, pull it into 3D and round its edges, and it waits for you to try each step. You can start it again any time from **Help → Interactive tutorial** or the home screen.
 
 Finding your way around:
 
@@ -115,6 +117,9 @@ npm start
 | `npm run test:e2e` | Drives the real app through sketching, modelling, STL import, save/open and export. On Linux run it with `xvfb-run -a`. Screenshots go to `test-output/`. |
 | `npm run dist` | Builds an installer for your system into `dist/` |
 | `npm run vendor` | Refreshes the files copied into `src/vendor/` after upgrading three or manifold-3d |
+| `node tools/i18n-extract.mjs` | Lists English text that has no Norwegian translation yet |
+
+**Translations.** Write text in the code in English; it is looked up in `src/i18n/nb.js` when shown. `npm test` fails while any text is missing a Norwegian translation or a translation drops a `{placeholder}`.
 
 ## Project layout
 
@@ -124,12 +129,14 @@ src/
   app.js         app controller: document, selection, snapping, previews, shortcuts
   commands.js    document changes (apply kernel results, delete, duplicate, …)
   fileops.js     open / save / import / export
-  core/          pure logic: units & expressions, 2D geometry, constraint solver, planes, document + undo, file formats
+  core/          pure logic: units & expressions, 2D geometry, constraint solver, planes, document + undo, file formats, languages
+  i18n/          translations (nb.js: Norwegian bokmål; electron/i18n.cjs has the native menus)
   kernel/        geometry kernel (OpenCascade + Manifold) running in a Web Worker
   view/          three.js viewport: camera, grid, view cube, GPU picking, bodies, sketches, overlays
   tools/         interactive tools (select, sketch, modelling, transform, measure, section)
   ui/            panels: items, tools menu, tool options, context bar, dialogs, home screen
 tests/           unit, kernel and end-to-end tests
+tools/           helper scripts (i18n-extract.mjs lists text that still needs a translation)
 build/           app icon
 ```
 

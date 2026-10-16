@@ -56,7 +56,7 @@ export function matchScore(query, { label, keywords = '', desc = '' }) {
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (!terms.length) return 0;
   const l = label.toLowerCase();
-  const words = l.split(/[^a-z0-9]+/);
+  const words = l.split(/[^\p{L}\p{N}]+/u);
   const kw = keywords.toLowerCase().split(/\s+/);
   const d = desc.toLowerCase();
   let total = 0;

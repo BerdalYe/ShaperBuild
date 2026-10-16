@@ -1,6 +1,7 @@
 // Document-changing commands shared by tools, panels and menus.
 import * as THREE from 'three';
 import { toast, confirmDialog } from './ui/overlays.js';
+import { t, tn } from './core/i18n.js';
 import { samePlane, GROUND } from './core/plane.js';
 import { solveSketch, measure, pruneConstraints, dropConstraintsFor, pointOf, CONSTRAINT_INFO } from './core/solver.js';
 
@@ -185,21 +186,21 @@ export class Commands {
         const pl = d.plane(st.id);
         if (!pl) continue;
         const plane = transformPlane(pl.plane, st.matrix);
-        if (st.copy) d.addPlane({ plane, size: pl.size, name: `${pl.name} copy` });
+        if (st.copy) d.addPlane({ plane, size: pl.size, name: t('{name} copy', { name: pl.name }) });
         else d.updatePlane(st.id, { plane });
       }
       for (const st of opts.images || []) {
         const im = d.image(st.id);
         if (!im) continue;
         const plane = transformPlane(im.plane, st.matrix);
-        if (st.copy) d.addImage({ ...im, id: undefined, plane, name: `${im.name} copy` });
+        if (st.copy) d.addImage({ ...im, id: undefined, plane, name: t('{name} copy', { name: im.name }) });
         else d.updateImage(st.id, { plane });
       }
       for (const st of opts.sketches || []) {
         const sk = d.sketch(st.id);
         if (!sk) continue;
         const plane = transformPlane(sk.plane, st.matrix);
-        if (st.copy) d.addSketch({ plane, entities: sk.entities, constraints: sk.constraints || [], name: `${sk.name} copy` });
+        if (st.copy) d.addSketch({ plane, entities: sk.entities, constraints: sk.constraints || [], name: t('{name} copy', { name: sk.name }) });
         // A sketch moved off its face no longer follows that face.
         else d.updateSketch(st.id, { plane, ...(sk.attach && !samePlane(plane, sk.plane) ? { attach: null } : {}) });
       }
@@ -404,10 +405,10 @@ export class Commands {
     this.doc.replaceSilently((d) => {
       for (const r of result.bodies) {
         const b = d.bodies.find((x) => x.shapeId === r.id);
-        if (b && names.has(r.from)) d.updateBody(b.id, { name: `${names.get(r.from)} copy` });
+        if (b && names.has(r.from)) d.updateBody(b.id, { name: t('{name} copy', { name: names.get(r.from) }) });
       }
     });
-    toast(`Duplicated ${ids.length + sketches.length} item${ids.length + sketches.length === 1 ? '' : 's'} — use Move to place the copy`, { ms: 2200 });
+    toast(tn(ids.length + sketches.length, 'Duplicated 1 item — use Move to place the copy', 'Duplicated {n} items — use Move to place the copy'), { ms: 2200 });
   }
 
   deleteSelection() {
@@ -485,14 +486,14 @@ export class Commands {
       const m = app.meshCache.get(b.shapeId);
       const tris = m?.triangles || 0;
       if (tris > 20000) {
-        const ok = await confirmDialog('Convert large mesh?', `"${b.name}" has ${tris.toLocaleString()} triangles. Converting can take a while and the solid will have many faces. Continue?`, { ok: 'Convert' });
+        const ok = await confirmDialog('Convert large mesh?', t('"{name}" has {n} triangles. Converting can take a while and the solid will have many faces. Continue?', { name: b.name, n: tris.toLocaleString() }), { ok: 'Convert' });
         if (!ok) continue;
       }
       try {
-        app.busy(true, `Converting ${b.name}…`);
+        app.busy(true, t('Converting {name}…', { name: b.name }));
         const res = await app.kernel.call('meshToSolid', { id: b.shapeId });
         this.applyResult('Convert to solid', res);
-        toast(`${b.name} is now a solid body`, { type: 'ok' });
+        toast(t('{name} is now a solid body', { name: b.name }), { type: 'ok' });
       } catch (err) {
         toast(err.message, { type: 'error', ms: 6000 });
       } finally {

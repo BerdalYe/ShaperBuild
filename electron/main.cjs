@@ -5,6 +5,7 @@ const { app, BrowserWindow, Menu, dialog, ipcMain, protocol, shell, nativeTheme,
 const path = require('node:path');
 const fs = require('node:fs');
 const { buildMenu } = require('./menu.cjs');
+const i18n = require('./i18n.cjs');
 const { listSlicers, openInSlicer } = require('./slicers.cjs');
 const updater = require('./updater.cjs');
 
@@ -202,11 +203,11 @@ function createWindow() {
     e.preventDefault();
     const choice = dialog.showMessageBoxSync(win, {
       type: 'question',
-      buttons: ['Save', "Don't Save", 'Cancel'],
+      buttons: [i18n.t('Save'), i18n.t("Don't Save"), i18n.t('Cancel')],
       defaultId: 0,
       cancelId: 2,
-      message: 'Do you want to save the changes to your design?',
-      detail: "Your changes will be lost if you don't save them.",
+      message: i18n.t('Do you want to save the changes to your design?'),
+      detail: i18n.t("Your changes will be lost if you don't save them."),
     });
     if (choice === 0) sendMenu('save-and-close');
     else if (choice === 1) {
@@ -242,51 +243,52 @@ async function serve(request) {
 
 // ---- IPC -----------------------------------------------------------------
 
-const FILTERS = {
-  project: [{ name: 'ShaperBuild design', extensions: [PROJECT_EXT] }],
+// Built when used, in the current language.
+const filters = () => ({
+  project: [{ name: i18n.t('ShaperBuild design'), extensions: [PROJECT_EXT] }],
   open: [
-    { name: 'All supported', extensions: [PROJECT_EXT, 'stl', 'obj', 'step', 'stp', '3mf', 'dxf', 'png', 'jpg', 'jpeg', 'webp'] },
-    { name: 'ShaperBuild design', extensions: [PROJECT_EXT] },
-    { name: 'Mesh (STL, OBJ, 3MF)', extensions: ['stl', 'obj', '3mf'] },
-    { name: 'STEP', extensions: ['step', 'stp'] },
-    { name: 'DXF drawing', extensions: ['dxf'] },
-    { name: 'Image to trace', extensions: ['png', 'jpg', 'jpeg', 'webp'] },
+    { name: i18n.t('All supported'), extensions: [PROJECT_EXT, 'stl', 'obj', 'step', 'stp', '3mf', 'dxf', 'png', 'jpg', 'jpeg', 'webp'] },
+    { name: i18n.t('ShaperBuild design'), extensions: [PROJECT_EXT] },
+    { name: i18n.t('Mesh (STL, OBJ, 3MF)'), extensions: ['stl', 'obj', '3mf'] },
+    { name: i18n.t('STEP'), extensions: ['step', 'stp'] },
+    { name: i18n.t('DXF drawing'), extensions: ['dxf'] },
+    { name: i18n.t('Image to trace'), extensions: ['png', 'jpg', 'jpeg', 'webp'] },
   ],
   import: [
-    { name: 'All supported', extensions: ['stl', 'obj', 'step', 'stp', '3mf', 'dxf', 'png', 'jpg', 'jpeg', 'webp'] },
-    { name: 'STL', extensions: ['stl'] },
-    { name: 'OBJ', extensions: ['obj'] },
-    { name: 'STEP', extensions: ['step', 'stp'] },
-    { name: '3MF', extensions: ['3mf'] },
-    { name: 'DXF drawing (becomes a sketch)', extensions: ['dxf'] },
-    { name: 'Image to trace (PNG, JPG)', extensions: ['png', 'jpg', 'jpeg', 'webp'] },
+    { name: i18n.t('All supported'), extensions: ['stl', 'obj', 'step', 'stp', '3mf', 'dxf', 'png', 'jpg', 'jpeg', 'webp'] },
+    { name: i18n.t('STL'), extensions: ['stl'] },
+    { name: i18n.t('OBJ'), extensions: ['obj'] },
+    { name: i18n.t('STEP'), extensions: ['step', 'stp'] },
+    { name: i18n.t('3MF'), extensions: ['3mf'] },
+    { name: i18n.t('DXF drawing (becomes a sketch)'), extensions: ['dxf'] },
+    { name: i18n.t('Image to trace (PNG, JPG)'), extensions: ['png', 'jpg', 'jpeg', 'webp'] },
   ],
-  dxf: [{ name: 'DXF drawing', extensions: ['dxf'] }],
-  pdf: [{ name: 'PDF document', extensions: ['pdf'] }],
-  svg: [{ name: 'SVG image', extensions: ['svg'] }],
-  stl: [{ name: 'STL', extensions: ['stl'] }],
-  font: [{ name: 'Fonts', extensions: ['ttf', 'otf', 'woff'] }],
-  obj: [{ name: 'OBJ', extensions: ['obj'] }],
-  step: [{ name: 'STEP', extensions: ['step', 'stp'] }],
-  '3mf': [{ name: '3MF', extensions: ['3mf'] }],
-  png: [{ name: 'PNG image', extensions: ['png'] }],
-};
+  dxf: [{ name: i18n.t('DXF drawing'), extensions: ['dxf'] }],
+  pdf: [{ name: i18n.t('PDF document'), extensions: ['pdf'] }],
+  svg: [{ name: i18n.t('SVG image'), extensions: ['svg'] }],
+  stl: [{ name: i18n.t('STL'), extensions: ['stl'] }],
+  font: [{ name: i18n.t('Fonts'), extensions: ['ttf', 'otf', 'woff'] }],
+  obj: [{ name: i18n.t('OBJ'), extensions: ['obj'] }],
+  step: [{ name: i18n.t('STEP'), extensions: ['step', 'stp'] }],
+  '3mf': [{ name: i18n.t('3MF'), extensions: ['3mf'] }],
+  png: [{ name: i18n.t('PNG image'), extensions: ['png'] }],
+});
 
 ipcMain.handle('dialog:open', async (_e, { kind = 'open', multi = false } = {}) => {
   const res = await dialog.showOpenDialog(win, {
     properties: multi ? ['openFile', 'multiSelections'] : ['openFile'],
-    filters: FILTERS[kind] || FILTERS.open,
+    filters: filters()[kind] || filters().open,
   });
   if (res.canceled) return [];
   return res.filePaths;
 });
 
 ipcMain.handle('dialog:save', async (_e, { kind = 'project', defaultName = 'Untitled' } = {}) => {
-  const filters = FILTERS[kind] || FILTERS.project;
-  const ext = filters[0].extensions[0];
+  const list = filters()[kind] || filters().project;
+  const ext = list[0].extensions[0];
   const res = await dialog.showSaveDialog(win, {
     defaultPath: path.join(app.getPath('documents'), `${defaultName}.${ext}`),
-    filters,
+    filters: list,
   });
   return res.canceled ? null : res.filePath;
 });
@@ -349,6 +351,7 @@ ipcMain.handle('app:info', () => ({
   dark: nativeTheme.shouldUseDarkColors,
   // Automated tests start without the first-run tutorial.
   noTutorial: process.env.SHAPER_NO_TUTORIAL === '1',
+  language: i18n.language(),
 }));
 
 ipcMain.on('app:ready', () => {
@@ -356,6 +359,10 @@ ipcMain.on('app:ready', () => {
   const files = pendingOpen;
   pendingOpen = [];
   for (const f of files) win.webContents.send('open-path', f);
+});
+// The renderer's language (menus and dialogs follow it).
+ipcMain.on('app:language', (_e, value) => {
+  if (i18n.setLanguage(value)) refreshMenu();
 });
 ipcMain.on('app:dirty', (_e, value) => {
   dirty = !!value;
@@ -393,6 +400,7 @@ app.on('second-instance', (_e, argv) => {
 
 app.whenReady().then(() => {
   protocol.handle(SCHEME, serve);
+  i18n.init(app.getPath('userData'));
   refreshMenu();
   createWindow();
   openPaths(filesFromArgv(process.argv));

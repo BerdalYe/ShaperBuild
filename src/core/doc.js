@@ -4,6 +4,7 @@
 // callback a shallow draft; callbacks replace objects instead of mutating
 // them, so unchanged bodies and sketches keep their identity.
 import { Emitter } from './events.js';
+import { t } from './i18n.js';
 
 export function emptyState() {
   return {
@@ -57,7 +58,7 @@ export class Draft {
 
   addBody(props) {
     const id = this.nextId('body');
-    const body = { name: `Body ${this.seq.body}`, kind: 'solid', visible: true, color: null, ...props, id };
+    const body = { name: t('Body {n}', { n: this.seq.body }), kind: 'solid', visible: true, color: null, ...props, id };
     this.bodies.push(body);
     return body;
   }
@@ -82,7 +83,7 @@ export class Draft {
 
   addSketch(props) {
     const id = this.nextId('sketch');
-    const sk = { name: `Sketch ${this.seq.sketch}`, visible: true, entities: [], constraints: [], ...props, id };
+    const sk = { name: t('Sketch {n}', { n: this.seq.sketch }), visible: true, entities: [], constraints: [], ...props, id };
     this.sketches.push(sk);
     return sk;
   }
@@ -105,7 +106,7 @@ export class Draft {
   // Reference plane: { plane: { origin, normal, xDir }, size }.
   addPlane(props) {
     const id = this.nextId('plane');
-    const pl = { name: `Plane ${this.seq.plane}`, visible: true, size: 80, ...props, id };
+    const pl = { name: t('Plane {n}', { n: this.seq.plane }), visible: true, size: 80, ...props, id };
     this.planes.push(pl);
     return pl;
   }
@@ -128,7 +129,7 @@ export class Draft {
   // Reference image: { src (data URL), plane, width, height (mm), opacity }.
   addImage(props) {
     const id = this.nextId('image');
-    const im = { name: `Image ${this.seq.image}`, visible: true, opacity: 0.6, ...props, id };
+    const im = { name: t('Image {n}', { n: this.seq.image }), visible: true, opacity: 0.6, ...props, id };
     this.images.push(im);
     return im;
   }
@@ -150,7 +151,7 @@ export class Draft {
 
   addFolder(props = {}) {
     const id = this.nextId('folder');
-    const f = { name: `Folder ${this.seq.folder}`, ...props, id };
+    const f = { name: t('Folder {n}', { n: this.seq.folder }), ...props, id };
     this.folders.push(f);
     return f;
   }
