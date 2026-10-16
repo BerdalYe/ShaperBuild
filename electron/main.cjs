@@ -25,6 +25,8 @@ const MIME = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.hdr': 'application/octet-stream',
+  '.ttf': 'font/ttf',
+  '.otf': 'font/otf',
 };
 
 // Let machines without a usable GPU (VMs, remote desktops) fall back to
@@ -256,6 +258,7 @@ const FILTERS = {
     { name: '3MF', extensions: ['3mf'] },
   ],
   stl: [{ name: 'STL', extensions: ['stl'] }],
+  font: [{ name: 'Fonts', extensions: ['ttf', 'otf', 'woff'] }],
   obj: [{ name: 'OBJ', extensions: ['obj'] }],
   step: [{ name: 'STEP', extensions: ['step', 'stp'] }],
   '3mf': [{ name: '3MF', extensions: ['3mf'] }],

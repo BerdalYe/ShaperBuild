@@ -2652,3 +2652,25 @@ svg.icon {
   width: 13px;
   height: 13px;
 }
+
+.tp-text {
+  width: 100%;
+  min-height: 34px;
+  resize: vertical;
+  padding: 6px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+  user-select: text;
+}
+
+.tp-text:focus {
+  border-color: var(--accent);
+}
+
+.tp-field-text {
+  align-items: flex-start;
+}

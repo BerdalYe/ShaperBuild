@@ -218,6 +218,23 @@ export class ToolPanel {
         sel.addEventListener('change', () => change(sel.value));
         return h('div.tp-field', h('label', { text: f.label }), h('div.ctrl', sel));
       }
+      case 'text': {
+        const inp = h('textarea.tp-text', { rows: 2, spellcheck: false, placeholder: f.placeholder || '' });
+        inp.value = f.value || '';
+        inp.dataset.key = f.key;
+        this.inputs.set(f.key, inp);
+        inp.addEventListener('input', () => change(inp.value));
+        inp.addEventListener('keydown', (e) => {
+          e.stopPropagation();
+          if (e.key === 'Escape') inp.blur();
+          // Enter places/applies; Shift+Enter starts a new line.
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            f.onEnter?.();
+          }
+        });
+        return h('div.tp-field.tp-field-text', h('label', { text: f.label }), h('div.ctrl', inp));
+      }
       case 'info':
         return h('div.tp-hint', { html: f.text });
       case 'button':

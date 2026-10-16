@@ -94,6 +94,35 @@ try {
   await win.keyboard.press('Escape');
   await win.waitForSelector('.print-modal', { state: 'detached' });
 
+  step('text tool: type a name, place it, extrude it, print it');
+  await A(() => window.__shaper.files.reset());
+  await win.keyboard.press('Control+k');
+  await win.keyboard.type('text');
+  await win.keyboard.press('Enter');
+  assert.equal(await A(() => window.__shaper.tools.activeId), 'text');
+  await win.waitForFunction(() => document.activeElement?.classList.contains('tp-text'));
+  await win.keyboard.type('Hi');
+  await win.keyboard.press('Enter');
+  await win.waitForFunction(() => window.__shaper.selection.size === 3, null, { timeout: 30000 });
+  assert.equal(await A(() => window.__shaper.selection.list.every((it) => it.kind === 'region')), true);
+  await shot(win, '71-text-placed');
+  await A(() => document.getElementById('viewport').querySelector('canvas').focus());
+  await win.keyboard.press('e');
+  await win.waitForSelector('#tool-panel:not([hidden]) .num-input');
+  await win.keyboard.type('3');
+  await win.waitForTimeout(400);
+  await win.waitForFunction(() => window.__shaper.kernel.busy === 0, null, { timeout: 60000 });
+  await win.keyboard.press('Enter');
+  await win.waitForFunction(() => window.__shaper.doc.bodies.length >= 1 && window.__shaper.tools.isSelect, null, { timeout: 60000 });
+  await A(() => window.__shaper.vp.fit());
+  await win.waitForTimeout(500);
+  await shot(win, '72-text-extruded');
+  await win.keyboard.press('Control+p');
+  await win.waitForFunction(() => document.querySelectorAll('.pd-summary > div').length === 4, null, { timeout: 30000 });
+  checks = await checkTexts();
+  assert.ok(checks.some((t) => /closed, solid/i.test(t)), checks.join('\n'));
+  await win.keyboard.press('Escape');
+
   assert.deepEqual(errors, [], `renderer errors:\n${errors.join('\n')}`);
   console.log('\nprinting: all steps passed');
 } catch (err) {

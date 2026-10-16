@@ -27,4 +27,13 @@ copy('node_modules/three/examples/jsm', 'src/vendor/three-addons', [
 ]);
 fs.copyFileSync('node_modules/three/LICENSE', 'src/vendor/three-addons/LICENSE');
 fs.writeFileSync('src/vendor/three-addons/VERSION', `${version('three')}\n`);
-console.log(`vendored manifold-3d ${version('manifold-3d')} and three ${version('three')} add-ons`);
+// opentype.js (reads fonts for the Text tool) and the Inter font.
+fs.mkdirSync('src/vendor/opentype', { recursive: true });
+fs.writeFileSync('src/vendor/opentype/opentype.min.mjs', fs.readFileSync('node_modules/opentype.js/dist/opentype.min.mjs', 'utf8').replace(/\n\/\/# sourceMappingURL=.*\s*$/, '\n'));
+fs.copyFileSync('node_modules/opentype.js/LICENSE', 'src/vendor/opentype/LICENSE');
+fs.writeFileSync('src/vendor/opentype/VERSION', `${version('opentype.js')}\n`);
+fs.mkdirSync('src/fonts', { recursive: true });
+fs.copyFileSync('node_modules/@expo-google-fonts/inter/700Bold/Inter_700Bold.ttf', 'src/fonts/Inter-Bold.ttf');
+fs.copyFileSync('node_modules/@expo-google-fonts/inter/400Regular/Inter_400Regular.ttf', 'src/fonts/Inter-Regular.ttf');
+fs.copyFileSync('node_modules/@expo-google-fonts/inter/LICENSE_FONT', 'src/fonts/OFL.txt');
+console.log(`vendored manifold-3d ${version('manifold-3d')}, three ${version('three')} add-ons, opentype.js ${version('opentype.js')} and Inter`);

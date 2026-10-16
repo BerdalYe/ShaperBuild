@@ -3,6 +3,7 @@ import { SelectTool } from './select.js';
 import { LineTool, RectTool, CircleTool, ArcTool, PolygonTool, SplineTool, EllipseTool, PointTool } from './sketch.js';
 import { TrimTool, OffsetTool, ProjectTool, toggleConstruction } from './sketchedit.js';
 import { DimensionTool } from './dimension.js';
+import { TextTool } from './text.js';
 import { ExtrudeTool, RevolveTool, SweepTool, LoftTool, FilletTool, ChamferTool, ShellTool, DraftTool, UnionTool, SubtractTool, IntersectTool, SplitTool, MirrorTool, LinearPatternTool, CircularPatternTool, ScaleTool } from './model.js';
 import { TransformTool } from './transform.js';
 import { PrimitiveTool } from './primitive.js';
@@ -22,6 +23,7 @@ export const TOOL_SECTIONS = [
       def('polygon', 'Polygon', 'polygon', PolygonTool, { key: 'P', keywords: 'hexagon triangle sides nut draw', desc: 'Regular polygon with any number of sides.' }),
       def('spline', 'Spline', 'spline', SplineTool, { key: 'B', keywords: 'curve freeform bezier draw', desc: 'Smooth curve through the points you click.' }),
       def('ellipse', 'Ellipse', 'ellipse', EllipseTool, { keywords: 'oval draw', desc: 'Center, axis, then width.' }),
+      def('text', 'Text', 'text', TextTool, { keywords: 'letters words name label engrave emboss font type writing', desc: 'Write text as sketch curves. Extrude it to raise the letters, or cut it into a face to engrave.' }),
       def('point', 'Point', 'point', PointTool, { keywords: 'reference', desc: 'Reference point for snapping.' }),
       def('trim', 'Trim', 'trim', TrimTool, { key: 'T', keywords: 'cut erase remove delete segment', desc: 'Remove pieces of curves between intersections.' }),
       def('offset', 'Offset', 'offset', OffsetTool, { keywords: 'parallel copy wall thickness', desc: 'Copy curves at a distance.' }),
