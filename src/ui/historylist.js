@@ -276,6 +276,7 @@ export class HistoryList {
   editor(f) {
     const app = this.app;
     const box = h('div.step-edit');
+    box.dataset.step = f.id;
     if (f.error) box.append(h('div.step-error', { text: f.error }));
     const params = editableParams(f);
     // `text`: what was typed, kept when it uses a variable.
@@ -344,7 +345,11 @@ export class HistoryList {
       if (p.check === 'positive') return v > 1e-6;
       return true;
     };
+    // Typed but not applied yet (kept if the list is redrawn meanwhile).
+    inp.addEventListener('input', () => (inp.dataset.dirty = '1'));
     const apply = () => {
+      if (inp.dataset.redraw) return;
+      delete inp.dataset.dirty;
       const v = parse();
       if (!valid(v)) {
         inp.classList.add('bad');

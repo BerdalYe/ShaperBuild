@@ -43,7 +43,7 @@ try {
     a.vp.fit();
   });
   await win.waitForTimeout(400);
-  assert.equal(await A(() => window.__shaper.doc.bodies[0].name), 'Legeme 1');
+  assert.equal(await A(() => window.__shaper.doc.bodies[0].name), 'Objekt 1');
   for (const id of ['line', 'rect', 'extrude', 'fillet', 'move', 'measure', 'subtract', 'box', 'text']) {
     await A((id) => window.__shaper.tools.activate(id, { force: true }), id);
     await win.waitForTimeout(150);

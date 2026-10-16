@@ -18,6 +18,8 @@ export class HistoryEngine extends Emitter {
     this.app = app;
     // key -> Map(bodyId -> shapeId): the bodies after a step.
     this.cache = new Map();
+    // Errors of steps by chain key, kept with the cache.
+    this.failed = new Map();
     this.verified = 'root';
     this.running = null;
     this.again = false;
@@ -45,7 +47,11 @@ export class HistoryEngine extends Emitter {
   remember(key, state) {
     this.cache.delete(key);
     this.cache.set(key, state);
-    while (this.cache.size > CACHE_LIMIT) this.cache.delete(this.cache.keys().next().value);
+    while (this.cache.size > CACHE_LIMIT) {
+      const old = this.cache.keys().next().value;
+      this.cache.delete(old);
+      this.failed.delete(old);
+    }
   }
 
   // The current bodies are the result of the current history.
@@ -173,6 +179,7 @@ export class HistoryEngine extends Emitter {
     for (const b of this.app.doc.bodies) this.looks.set(b.id, b);
     if (ev.kind === 'load') {
       this.cache.clear();
+      this.failed.clear();
       // Designs from before the history: start from their current bodies.
       if (!this.features.length && this.app.doc.bodies.length) {
         this.app.doc.replaceSilently((d) => {
@@ -249,6 +256,9 @@ export class HistoryEngine extends Emitter {
       temps: [],
     };
     const errors = new Map();
+    // Steps before `start` are not run again: their errors come from the
+    // run that cached them (a step that failed fails the same way again).
+    for (let i = 0; i < start; i++) if (this.failed.has(keys[i])) errors.set(feats[i].id, this.failed.get(keys[i]));
     let prev = start ? keys[start - 1] : 'root';
     app.busy(true, 'Updating the design…');
     try {
@@ -262,6 +272,8 @@ export class HistoryEngine extends Emitter {
           }
         }
         prev = featureKey(prev, f, sketches);
+        if (errors.has(f.id)) this.failed.set(prev, errors.get(f.id));
+        else this.failed.delete(prev);
         this.remember(prev, new Map(rc.state));
       }
     } finally {

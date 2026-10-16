@@ -30,12 +30,12 @@ test('t() translates labels, counts and messages built at run time', () => {
   try {
     assert.equal(t('Extrude'), 'Ekstruder');
     assert.equal(t('Extrude…'), 'Ekstruder…');
-    assert.equal(tn(1, '1 body', '{n} bodies'), '1 legeme');
-    assert.equal(tn(3, '1 body', '{n} bodies'), '3 legemer');
-    assert.equal(t('Fillet failed (radius too large for the selected edges)'), 'Avrunding mislyktes (radiusen er for stor for de valgte kantene)');
-    assert.equal(t('Wrap & Emboss failed'), 'Preging mislyktes');
+    assert.equal(tn(1, '1 body', '{n} bodies'), '1 objekt');
+    assert.equal(tn(3, '1 body', '{n} bodies'), '3 objekter');
+    assert.equal(t('Fillet failed (radius too large for the selected edges)'), '«Avrunding» mislyktes (radiusen er for stor for de valgte kantene)');
+    assert.equal(t('Wrap & Emboss failed'), '«Preging» mislyktes');
     // History shows kernel errors with a capital letter.
-    assert.equal(t('A body it uses no longer exists'), 'Et legeme den bruker finnes ikke lenger');
+    assert.equal(t('A body it uses no longer exists'), 'Et objekt den bruker, finnes ikke lenger');
     assert.equal(t('Undo {label}', { label: t('Delete Extrude') }), 'Angre Slett «Ekstruder»');
     assert.equal(t('Import part.stl'), 'Importer part.stl');
     assert.equal(t('Set length'), 'Endre lengde');

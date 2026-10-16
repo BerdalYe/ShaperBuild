@@ -10,9 +10,9 @@ export const SCALES = [10, 5, 4, 2, 1, 1 / 2, 1 / 2.5, 1 / 4, 1 / 5, 1 / 10, 1 /
 const R3 = 1 / Math.sqrt(3);
 // View directions: `normal` points from the part towards the viewer.
 export const VIEWS = {
-  front: { name: 'front', label: 'FRONT', normal: [0, -1, 0], xDir: [1, 0, 0] },
-  top: { name: 'top', label: 'TOP', normal: [0, 0, 1], xDir: [1, 0, 0] },
-  right: { name: 'right', label: 'RIGHT', normal: [1, 0, 0], xDir: [0, 1, 0] },
+  front: { name: 'front', label: 'FRONT VIEW', normal: [0, -1, 0], xDir: [1, 0, 0] },
+  top: { name: 'top', label: 'TOP VIEW', normal: [0, 0, 1], xDir: [1, 0, 0] },
+  right: { name: 'right', label: 'RIGHT VIEW', normal: [1, 0, 0], xDir: [0, 1, 0] },
   iso: { name: 'iso', label: '3D VIEW', normal: [R3, -R3, R3], xDir: [Math.SQRT1_2, Math.SQRT1_2, 0] },
 };
 

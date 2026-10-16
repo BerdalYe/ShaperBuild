@@ -48,7 +48,7 @@ test('the sheet uses a standard scale and has sizes and a title block', () => {
   const lay = layoutDrawing(views, { sheet: 'A4', title: 'Block', date: '2026-01-01' });
   assert.ok([2, 1, 0.5].includes(lay.scale), `scale ${lay.scale}`);
   assert.match(lay.svg, /^<svg[^>]+width="297mm" height="210mm"/);
-  for (const text of ['>40<', '>20<', '>30<', '>Block<', `>${scaleText(lay.scale)}<`, '>FRONT<', '>TOP<', '>RIGHT<']) assert.ok(lay.svg.includes(text), `missing ${text}`);
+  for (const text of ['>40<', '>20<', '>30<', '>Block<', `>${scaleText(lay.scale)}<`, '>FRONT VIEW<', '>TOP VIEW<', '>RIGHT VIEW<']) assert.ok(lay.svg.includes(text), `missing ${text}`);
   assert.ok(lay.svg.includes('class="hid"'));
   const third = layoutDrawing(views, { projection: 'third' });
   assert.ok(third.svg.includes('3rd angle'));

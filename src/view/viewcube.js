@@ -5,12 +5,13 @@ import { t } from '../core/i18n.js';
 
 const HALF = 30;
 const FACES = [
-  { name: 'Top', n: [0, 0, 1], x: [1, 0, 0], y: [0, 1, 0] },
-  { name: 'Bottom', n: [0, 0, -1], x: [1, 0, 0], y: [0, -1, 0] },
-  { name: 'Front', n: [0, -1, 0], x: [1, 0, 0], y: [0, 0, 1] },
-  { name: 'Back', n: [0, 1, 0], x: [-1, 0, 0], y: [0, 0, 1] },
-  { name: 'Right', n: [1, 0, 0], x: [0, 1, 0], y: [0, 0, 1] },
-  { name: 'Left', n: [-1, 0, 0], x: [0, -1, 0], y: [0, 0, 1] },
+  // Short labels of their own: the cube faces are small.
+  { name: 'TOP', n: [0, 0, 1], x: [1, 0, 0], y: [0, 1, 0] },
+  { name: 'BOTTOM', n: [0, 0, -1], x: [1, 0, 0], y: [0, -1, 0] },
+  { name: 'FRONT', n: [0, -1, 0], x: [1, 0, 0], y: [0, 0, 1] },
+  { name: 'BACK', n: [0, 1, 0], x: [-1, 0, 0], y: [0, 0, 1] },
+  { name: 'RIGHT', n: [1, 0, 0], x: [0, 1, 0], y: [0, 0, 1] },
+  { name: 'LEFT', n: [-1, 0, 0], x: [0, -1, 0], y: [0, 0, 1] },
 ];
 
 const V = (a) => new THREE.Vector3(...a);

@@ -23,7 +23,26 @@ export class ItemsPanel {
     this.render();
   }
 
+  // Redrawing removes inputs, which can fire their change handlers and
+  // ask for another redraw; that one waits until this one is done.
   render() {
+    if (this.rendering) {
+      this.renderAgain = true;
+      return;
+    }
+    this.rendering = true;
+    try {
+      this.renderNow();
+    } finally {
+      this.rendering = false;
+    }
+    if (this.renderAgain) {
+      this.renderAgain = false;
+      this.render();
+    }
+  }
+
+  renderNow() {
     const app = this.app;
     const doc = app.doc;
     const searching = this.el.contains(document.activeElement) && document.activeElement?.classList.contains('items-filter');
@@ -31,6 +50,11 @@ export class ItemsPanel {
     const old = this.el.querySelector('.items-scroll');
     if (old) (this.scrolls ||= {})[this.shownTab] = old.scrollTop;
     this.shownTab = this.tab;
+    // A value being typed in a History step survives the redraw.
+    const act = document.activeElement;
+    const typing = this.el.contains(act) && act.matches('.step-edit .num-input') && act.dataset.dirty ? { step: act.closest('.step-edit')?.dataset.step, key: act.dataset.key, value: act.value, start: act.selectionStart, end: act.selectionEnd } : null;
+    // Removing it must not apply the half-typed value.
+    if (typing) act.dataset.redraw = '1';
     clear(this.el);
     const anyHidden = [...doc.bodies, ...doc.sketches, ...doc.planes, ...doc.axes, ...doc.images].some((x) => x.visible === false);
     const showAll = h('button.ih-btn', { title: 'Show all items', html: icon('eye') });
@@ -73,6 +97,15 @@ export class ItemsPanel {
       this.el.append(head, scroll, foot);
       scroll.scrollTop = this.scrolls?.history || 0;
       scroll.querySelector('.step.selected')?.scrollIntoView({ block: 'nearest' });
+      if (typing) {
+        const inp = scroll.querySelector(`.step-edit[data-step="${typing.step}"] .num-input[data-key="${typing.key}"]`);
+        if (inp) {
+          inp.value = typing.value;
+          inp.dataset.dirty = '1';
+          inp.focus({ preventScroll: true });
+          inp.setSelectionRange(typing.start, typing.end);
+        }
+      }
       return;
     }
     const q = this.query.trim().toLowerCase();

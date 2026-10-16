@@ -3,7 +3,7 @@
 // labels…) stays in English so a design looks right in any language.
 //
 //   t('Extrude')                       -> 'Ekstruder'
-//   t('{n} bodies', { n: 3 })          -> '3 legemer'
+//   t('{n} bodies', { n: 3 })          -> '3 objekter'
 //   t('Fillet failed (radius too large)') -> patterns below
 import { NB, NB_PATTERNS } from '../i18n/nb.js';
 

@@ -164,9 +164,18 @@ try {
 
   step('a step that cannot be made shows an error, and undo fixes it');
   await typeIn('Fillet', 'radius', 40);
-  assert.ok((await steps())[2].error, 'the fillet reports a problem');
+  const fillet = await A(() => window.__shaper.history.features[2]);
+  assert.ok(fillet.error, `the fillet reports a problem: ${JSON.stringify(fillet).slice(0, 400)}`);
   assert.equal(await win.locator('.step.step-bad').count(), 1);
   await shot(win, '92-history-error');
+  await A(() => window.__shaper.cmd.undo());
+  await idle();
+  assert.equal((await steps())[2].error, null);
+  near(await volume(), part(60, 30, 35, 2));
+
+  step('the same impossible value again still shows the error (rebuilt from the cache)');
+  await typeIn('Fillet', 'radius', 40);
+  assert.ok((await steps())[2].error, 'the error comes back with the cached result');
   await A(() => window.__shaper.cmd.undo());
   await idle();
   assert.equal((await steps())[2].error, null);
