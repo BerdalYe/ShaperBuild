@@ -11,10 +11,14 @@ export async function launch({ userData } = {}) {
   fs.mkdirSync(OUT, { recursive: true });
   const dataDir = userData || fs.mkdtempSync(path.join(OUT, 'profile-'));
   const exe = process.platform === 'win32' ? 'electron.exe' : process.platform === 'darwin' ? 'Electron.app/Contents/MacOS/Electron' : 'electron';
+  // SHAPER_EXE runs a packaged build (e.g. dist/linux-unpacked/shaperbuild)
+  // instead of the sources.
+  const packaged = process.env.SHAPER_EXE;
+  const flags = ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', `--user-data-dir=${dataDir}`];
   const app = await electron.launch({
-    executablePath: path.join(ROOT, 'node_modules/electron/dist', exe),
+    executablePath: packaged || path.join(ROOT, 'node_modules/electron/dist', exe),
     // Software rendering keeps screenshots identical on machines without a GPU.
-    args: [ROOT, '--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', `--user-data-dir=${dataDir}`],
+    args: packaged ? flags : [ROOT, ...flags],
     cwd: ROOT,
     env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: '1' },
   });

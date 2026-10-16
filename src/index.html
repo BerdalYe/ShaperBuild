@@ -3,13 +3,13 @@
   <head>
     <meta charset="utf-8" />
     <title>ShaperBuild</title>
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-adW9Sf+5osNvppUM8wELjiFVRowznslSGpF4/lX1Lgs='; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-m2qHBEXhCX0XxdQrrxsNNVFXpmXCw4c06QHqA6BiquI='; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'" />
     <link rel="stylesheet" href="./styles/app.css" />
     <script type="importmap">
       {
         "imports": {
           "three": "/node_modules/three/build/three.module.js",
-          "three/addons/": "/node_modules/three/examples/jsm/"
+          "three/addons/": "/src/vendor/three-addons/"
         }
       }
     </script>

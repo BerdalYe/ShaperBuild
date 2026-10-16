@@ -2,7 +2,7 @@
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import OC from '../../node_modules/replicad-opencascadejs/dist/replicad_single.js';
-import ManifoldModule from '../../node_modules/manifold-3d/manifold.js';
+import ManifoldModule from '../../src/vendor/manifold/manifold.js';
 import { Kernel, rotationMatrix, translationMatrix } from '../../src/kernel/kernel.js';
 import { parseSTL, writeSTL } from '../../src/core/formats.js';
 

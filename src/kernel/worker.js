@@ -1,7 +1,7 @@
 // Web Worker hosting the geometry kernel so heavy CAD operations never block
 // the interface.
 import OC from '/node_modules/replicad-opencascadejs/dist/replicad_single.js';
-import ManifoldModule from '/node_modules/manifold-3d/manifold.js';
+import ManifoldModule from '../vendor/manifold/manifold.js';
 import { Kernel } from './kernel.js';
 
 let kernel = null;

@@ -71,6 +71,19 @@ function tokenize(src) {
 // kind: 'length' (result in mm) or 'angle' (result in degrees).
 function evaluate(src, kind, defaultFactor) {
   const tokens = tokenize(String(src).replace(/,/g, '.'));
+  // A single unit at the very end applies to the whole expression:
+  // "10+5 mm" is 15 mm and "pi/2 rad" is 90°.
+  const units = tokens.filter((t) => t.t === 'unit');
+  if (units.length === 1 && tokens[tokens.length - 1].t === 'unit' && tokens.length > 2) {
+    const u = tokens.pop();
+    const f = kind === 'angle' ? ANGLE_ALIASES[u.v] : UNIT_ALIASES[u.v] ? UNITS[UNIT_ALIASES[u.v]].factor : undefined;
+    if (f === undefined) throw new Error(`Unknown unit "${u.v}"`);
+    return evaluateTokens(tokens, kind, 1) * f;
+  }
+  return evaluateTokens(tokens, kind, defaultFactor);
+}
+
+function evaluateTokens(tokens, kind, defaultFactor) {
   let pos = 0;
   const peek = () => tokens[pos];
   const unitFactor = (u) => {

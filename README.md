@@ -1,1 +1,93 @@
 # ShaperBuild
+
+A desktop 3D CAD app for Windows, macOS and Linux, modelled on the way Shapr3D works: sketch on any flat surface, pull shapes into 3D, round and combine them, and export for 3D printing or other CAD tools. It opens and edits **STL** files too.
+
+![ShaperBuild](docs/screenshot.png)
+
+## Download
+
+Installers are built automatically by GitHub Actions:
+
+- Open the **Actions** tab → latest **Build** run → **Artifacts**, and download the one for your system:
+  - **Windows:** `ShaperBuild-Setup-x.y.z.exe`
+  - **macOS:** `ShaperBuild-x.y.z-arm64.dmg` (Apple Silicon) or `-x64.dmg` (Intel)
+  - **Linux:** `.AppImage` or `.deb`
+- Tagged versions (`v1.0.0` …) also appear on the **Releases** page.
+
+The installers are not code-signed yet, so the first launch shows a warning:
+- **Windows:** "Windows protected your PC" → *More info* → *Run anyway*.
+- **macOS:** right-click the app → *Open* → *Open*.
+
+## What it does
+
+**Sketch** – Line, Rectangle, Circle, Arc, Polygon, Spline, Ellipse, Point, Trim, Offset and Construction lines. Click the grid, any flat face or an existing sketch to draw on it. Points snap to ends, midpoints, centers, body corners, alignments and the grid. Start typing while drawing to enter exact sizes (Tab moves between boxes, Enter applies). Closed shapes turn into regions you can click.
+
+**Model** – Extrude (also push/pull of faces: grow a body or cut into it), Revolve, Sweep, Loft, Fillet, Chamfer, Shell, Split, Union, Subtract and Intersect. Every tool shows a live preview before you apply it. Select a region or face and drag its blue arrow to extrude directly.
+
+**Transform** – Move/Rotate with a gizmo or exact values, Scale, Mirror, Linear and Circular patterns, Duplicate.
+
+**Shapes** – Box, Cylinder, Sphere, Cone and Torus, placed by clicking.
+
+**Inspect** – Measure lengths, areas, volumes, distances and angles; Section view with solid cut faces; Visualization mode with soft shadows.
+
+**STL and mesh files** – Import STL (binary or text), OBJ and 3MF. Meshes can be moved, scaled, mirrored, patterned and combined with solids (union / subtract / intersect). *Mesh → Solid* turns a mesh into an editable solid, merging flat triangles into real faces so you can push/pull and fillet them.
+
+**Files** – Save designs as `.shaperbuild`. Export STL, 3MF, OBJ, STEP and PNG images. Import STEP. Drag and drop files onto the window. Unlimited undo/redo.
+
+The geometry engine is [OpenCascade](https://dev.opencascade.org/) (a real B-rep CAD kernel, through `replicad-opencascadejs`), with [Manifold](https://github.com/elalish/manifold) for mesh booleans.
+
+## Mouse and keys
+
+| | |
+|---|---|
+| Orbit | Right-drag (trackpad: two-finger swipe) |
+| Pan | Middle-drag or Shift + right-drag |
+| Zoom | Scroll wheel or pinch |
+| Select | Click (adds to the selection) · double-click a face for its whole body · drag on empty space for a box |
+| Standard views | View cube, or keys 0 (iso), 1 (front), 3 (right), 7 (top) |
+| Zoom to fit | Z |
+| Tools | L line · R rectangle · C circle · A arc · P polygon · B spline · T trim · E extrude · Q revolve · F fillet · H shell · U union · M move · K measure · X section |
+| Undo / redo | Ctrl+Z / Ctrl+Y (⌘ on Mac) |
+
+*Help → Keyboard Shortcuts* in the app lists everything.
+
+## How it compares to Shapr3D
+
+It follows Shapr3D's workflow and layout closely, but it is not a copy of Shapr3D and does not have everything yet. Not included so far: sketch constraints and editable dimensions, parametric history (editing earlier steps), 2D drawings, text in sketches, and AR/iPad features.
+
+## Run from source
+
+Needs [Node.js](https://nodejs.org/) 20 or newer.
+
+```
+npm install
+npm start
+```
+
+| Command | What it does |
+|---|---|
+| `npm test` | Unit tests and geometry kernel tests (runs OpenCascade in Node) |
+| `npm run test:e2e` | Drives the real app through sketching, modelling, STL import, save/open and export. On Linux run it with `xvfb-run -a`. Screenshots go to `test-output/`. |
+| `npm run dist` | Builds an installer for your system into `dist/` |
+| `npm run vendor` | Refreshes the files copied into `src/vendor/` after upgrading three or manifold-3d |
+
+## Project layout
+
+```
+electron/        main process: window, native menu, file dialogs, app:// protocol
+src/
+  app.js         app controller: document, selection, snapping, previews, shortcuts
+  commands.js    document changes (apply kernel results, delete, duplicate, …)
+  fileops.js     open / save / import / export
+  core/          pure logic: units & expressions, 2D geometry, planes, document + undo, file formats
+  kernel/        geometry kernel (OpenCascade + Manifold) running in a Web Worker
+  view/          three.js viewport: camera, grid, view cube, GPU picking, bodies, sketches, overlays
+  tools/         interactive tools (select, sketch, modelling, transform, measure, section)
+  ui/            panels: items, tools menu, tool options, context bar, dialogs, home screen
+tests/           unit, kernel and end-to-end tests
+build/           app icon
+```
+
+## Third-party software
+
+OpenCascade via replicad-opencascadejs (LGPL-2.1), Manifold (Apache-2.0), three.js (MIT) and Electron (MIT).

@@ -12,7 +12,7 @@ const HOST = 'shaperbuild';
 const PROJECT_EXT = 'shaperbuild';
 
 // Only these folders are reachable from the renderer.
-const SERVED = ['/src/', '/node_modules/three/', '/node_modules/replicad-opencascadejs/dist/', '/node_modules/manifold-3d/'];
+const SERVED = ['/src/', '/node_modules/three/build/', '/node_modules/replicad-opencascadejs/dist/'];
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
