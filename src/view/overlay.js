@@ -96,9 +96,9 @@ export class Overlay {
     const objects = [];
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
+    if (data.indices) g.setIndex(new THREE.BufferAttribute(data.indices, 1));
     if (data.normals && data.normals.length === data.positions.length) g.setAttribute('normal', new THREE.BufferAttribute(data.normals, 3));
     else g.computeVertexNormals();
-    g.setIndex(new THREE.BufferAttribute(data.indices, 1));
     const m = new THREE.MeshStandardMaterial({
       color: new THREE.Color(color),
       transparent: opacity < 1,

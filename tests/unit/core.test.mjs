@@ -8,7 +8,7 @@ import { planeFrame, to2D, to3D, samePlane, makePlane, rayPlane, GROUND, default
 import { Document, emptyState } from '../../src/core/doc.js';
 import { Selection, itemKey } from '../../src/core/selection.js';
 import { parseSTL, writeSTL, parseOBJ, writeOBJ, write3MF, parse3MF, crc32 } from '../../src/core/formats.js';
-import { mergeVertices, meshVolume, featureEdges, rotationMatrix, mirrorMatrix, transformMesh } from '../../src/kernel/kernel.js';
+import { mergeVertices, meshVolume, featureEdges, meshTopology, rotationMatrix, mirrorMatrix, transformMesh } from '../../src/kernel/kernel.js';
 
 const near = (a, b, tol = 1e-9) => assert.ok(Math.abs(a - b) < tol, `${a} != ${b}`);
 const nearPt = (p, q, tol = 1e-9) => p.forEach((v, i) => near(v, q[i], tol));
@@ -220,6 +220,19 @@ test('mesh helpers: feature edges and transforms', () => {
   const f = [0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 2, 3, 7, 2, 7, 6, 1, 2, 6, 1, 6, 5, 0, 4, 7, 0, 7, 3];
   const edges = featureEdges(new Float32Array(v), new Uint32Array(f));
   assert.equal(edges.length / 6, 12);
+  const topo = meshTopology(new Float32Array(v), new Uint32Array(f));
+  assert.equal(topo.edges.length / 6, 12);
+  assert.equal(topo.watertight, true);
+  assert.equal(topo.positions.length, 12 * 9);
+  // Flat cube faces keep flat normals (no smoothing across 90° edges).
+  assert.deepEqual(Array.from(topo.normals.slice(0, 3)).map((x) => Math.round(x)), [0, 0, -1]);
+  const open = meshTopology(new Float32Array(v), new Uint32Array(f.slice(0, 33)));
+  assert.equal(open.watertight, false);
+  // Welding is exact and quick.
+  const big = new Float32Array(300000 * 3).map((_, i) => Math.floor(i / 9) % 1000);
+  const t0 = performance.now();
+  mergeVertices(big, null);
+  assert.ok(performance.now() - t0 < 500);
   near(meshVolume(new Float32Array(v), new Uint32Array(f)), 1, 1e-9);
   const r = transformMesh(new Float32Array([1, 0, 0]), rotationMatrix([0, 0, 0], [0, 0, 1], Math.PI / 2)).positions;
   nearPt(Array.from(r), [0, 1, 0], 1e-6);

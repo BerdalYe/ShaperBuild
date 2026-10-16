@@ -148,6 +148,7 @@ export class Kernel {
 
   freeEntry(e) {
     try {
+      e.topo = null;
       if (e.shape) e.shape.delete();
       if (e.faces) e.faces.forEach((f) => f.delete());
       if (e.edges) e.edges.forEach((f) => f.delete());
@@ -399,19 +400,18 @@ export class Kernel {
   }
 
   tessellateMesh(id, e) {
-    if (!e.normals) e.normals = flatNormals(e.positions, e.indices);
-    if (!e.featureEdges) e.featureEdges = featureEdges(e.positions, e.indices, 35);
-    if (e.watertight === undefined) e.watertight = !!this.manifoldOf(id, true);
+    if (!e.topo) e.topo = meshTopology(e.positions, e.indices, 35);
+    const t = e.topo;
     return {
       kind: 'mesh',
       id,
-      positions: e.positions.slice(),
-      normals: e.normals.slice(),
-      indices: e.indices.slice(),
-      edgeSegments: e.featureEdges.slice(),
+      flat: true,
+      positions: t.positions.slice(),
+      normals: t.normals.slice(),
+      edgeSegments: t.edges.slice(),
       bbox: meshBBox(e.positions),
       triangles: e.indices.length / 3,
-      watertight: e.watertight,
+      watertight: t.watertight,
     };
   }
 
@@ -1082,9 +1082,9 @@ export class Kernel {
     return this.result([{ id }]);
   }
 
-  manifoldFromTriangles(positions, indices) {
+  manifoldFromTriangles(positions, indices, welded = false) {
     const { Manifold, Mesh } = this.mf;
-    const m = mergeVertices(positions, indices);
+    const m = welded ? { positions: Float32Array.from(positions), indices: Uint32Array.from(indices) } : mergeVertices(positions, indices);
     const mesh = new Mesh({ numProp: 3, vertProperties: m.positions, triVerts: m.indices });
     mesh.merge();
     const man = new Manifold(mesh);
@@ -1102,7 +1102,7 @@ export class Kernel {
     let man = null;
     try {
       const t = e.kind === 'mesh' ? e : this.tessellateForExport(id, 0.01);
-      man = this.manifoldFromTriangles(t.positions, t.indices);
+      man = this.manifoldFromTriangles(t.positions, t.indices, e.kind === 'mesh');
     } catch {
       man = null;
     }
@@ -1506,36 +1506,178 @@ export function flipWinding(indices) {
 }
 
 // Weld identical vertices so the mesh is connected (STL stores every
-// triangle separately).
+// triangle separately). Uses an open-addressing hash on quantised
+// coordinates, so it stays fast for millions of triangles.
 export function mergeVertices(positions, indices, tolerance = 1e-5) {
   const n = positions.length / 3;
-  const idx = indices && indices.length ? indices : Uint32Array.from({ length: n }, (_, i) => i);
-  const map = new Map();
-  const remap = new Uint32Array(n);
-  const out = [];
+  const idx = indices && indices.length ? indices : null;
   const inv = 1 / tolerance;
+  let size = 1;
+  while (size < n * 2) size <<= 1;
+  const mask = size - 1;
+  const table = new Int32Array(size).fill(-1);
+  const qx = new Int32Array(n);
+  const qy = new Int32Array(n);
+  const qz = new Int32Array(n);
+  const remap = new Uint32Array(n);
+  const out = new Float32Array(n * 3);
+  let count = 0;
   for (let i = 0; i < n; i++) {
-    const x = positions[i * 3];
-    const y = positions[i * 3 + 1];
-    const z = positions[i * 3 + 2];
-    const key = `${Math.round(x * inv)},${Math.round(y * inv)},${Math.round(z * inv)}`;
-    let v = map.get(key);
-    if (v === undefined) {
-      v = out.length / 3;
-      map.set(key, v);
-      out.push(x, y, z);
+    const x = Math.round(positions[i * 3] * inv);
+    const y = Math.round(positions[i * 3 + 1] * inv);
+    const z = Math.round(positions[i * 3 + 2] * inv);
+    let h = (Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(z, 83492791)) & mask;
+    for (;;) {
+      const v = table[h];
+      if (v === -1) {
+        table[h] = count;
+        qx[count] = x;
+        qy[count] = y;
+        qz[count] = z;
+        out[count * 3] = positions[i * 3];
+        out[count * 3 + 1] = positions[i * 3 + 1];
+        out[count * 3 + 2] = positions[i * 3 + 2];
+        remap[i] = count++;
+        break;
+      }
+      if (qx[v] === x && qy[v] === y && qz[v] === z) {
+        remap[i] = v;
+        break;
+      }
+      h = (h + 1) & mask;
     }
-    remap[i] = v;
   }
-  const tri = [];
-  for (let i = 0; i + 2 < idx.length; i += 3) {
-    const a = remap[idx[i]];
-    const b = remap[idx[i + 1]];
-    const c = remap[idx[i + 2]];
+  const triCount = idx ? Math.floor(idx.length / 3) : Math.floor(n / 3);
+  const tri = new Uint32Array(triCount * 3);
+  let t = 0;
+  for (let i = 0; i < triCount; i++) {
+    const a = remap[idx ? idx[i * 3] : i * 3];
+    const b = remap[idx ? idx[i * 3 + 1] : i * 3 + 1];
+    const c = remap[idx ? idx[i * 3 + 2] : i * 3 + 2];
     if (a === b || b === c || a === c) continue; // degenerate
-    tri.push(a, b, c);
+    tri[t++] = a;
+    tri[t++] = b;
+    tri[t++] = c;
   }
-  return { positions: new Float32Array(out), indices: new Uint32Array(tri) };
+  return { positions: out.slice(0, count * 3), indices: tri.slice(0, t) };
+}
+
+// One pass over a welded mesh: feature edges, whether it is closed
+// (every edge shared by exactly two triangles) and per-corner normals that
+// stay smooth across gentle bends but crisp at sharp edges.
+export function meshTopology(p, idx, angle = 35) {
+  const nt = idx.length / 3;
+  const cosT = Math.cos((angle * Math.PI) / 180);
+  const fn = new Float32Array(nt * 3);
+  for (let t = 0; t < nt; t++) {
+    const a = idx[t * 3] * 3;
+    const b = idx[t * 3 + 1] * 3;
+    const c = idx[t * 3 + 2] * 3;
+    const ux = p[b] - p[a];
+    const uy = p[b + 1] - p[a + 1];
+    const uz = p[b + 2] - p[a + 2];
+    const vx = p[c] - p[a];
+    const vy = p[c + 1] - p[a + 1];
+    const vz = p[c + 2] - p[a + 2];
+    // Area-weighted (unnormalised) normal.
+    fn[t * 3] = uy * vz - uz * vy;
+    fn[t * 3 + 1] = uz * vx - ux * vz;
+    fn[t * 3 + 2] = ux * vy - uy * vx;
+  }
+  // Unit normals, computed once.
+  const un = new Float32Array(nt * 3);
+  for (let t = 0; t < nt; t++) {
+    const x = fn[t * 3];
+    const y = fn[t * 3 + 1];
+    const z = fn[t * 3 + 2];
+    const l = Math.sqrt(x * x + y * y + z * z) || 1;
+    un[t * 3] = x / l;
+    un[t * 3 + 1] = y / l;
+    un[t * 3 + 2] = z / l;
+  }
+  // Edge table: key (min, max) -> first triangle, count.
+  let size = 1;
+  while (size < nt * 3) size <<= 1;
+  const mask = size - 1;
+  const ea = new Int32Array(size).fill(-1);
+  const eb = new Int32Array(size);
+  const et = new Int32Array(size);
+  const ec = new Int32Array(size);
+  const ef = new Uint8Array(size); // 1 = feature
+  let watertight = true;
+  for (let t = 0; t < nt; t++) {
+    for (let k = 0; k < 3; k++) {
+      let a = idx[t * 3 + k];
+      let b = idx[t * 3 + ((k + 1) % 3)];
+      if (a > b) [a, b] = [b, a];
+      let h = (Math.imul(a, -1640531535) ^ Math.imul(b, 40503)) & mask;
+      for (;;) {
+        if (ea[h] === -1) {
+          ea[h] = a;
+          eb[h] = b;
+          et[h] = t;
+          ec[h] = 1;
+          break;
+        }
+        if (ea[h] === a && eb[h] === b) {
+          ec[h]++;
+          if (ec[h] === 2) {
+            const o = et[h] * 3;
+            if (un[o] * un[t * 3] + un[o + 1] * un[t * 3 + 1] + un[o + 2] * un[t * 3 + 2] < cosT) ef[h] = 1;
+          }
+          break;
+        }
+        h = (h + 1) & mask;
+      }
+    }
+  }
+  const segs = [];
+  for (let h = 0; h < size; h++) {
+    if (ea[h] === -1) continue;
+    if (ec[h] !== 2) watertight = false;
+    if (ec[h] === 2 && !ef[h]) continue;
+    const a = ea[h] * 3;
+    const b = eb[h] * 3;
+    segs.push(p[a], p[a + 1], p[a + 2], p[b], p[b + 1], p[b + 2]);
+  }
+  // Vertex -> triangles adjacency (CSR).
+  const nv = p.length / 3;
+  const start = new Uint32Array(nv + 1);
+  for (let i = 0; i < idx.length; i++) start[idx[i] + 1]++;
+  for (let v = 0; v < nv; v++) start[v + 1] += start[v];
+  const fill = start.slice(0, nv);
+  const adj = new Uint32Array(idx.length);
+  for (let i = 0; i < idx.length; i++) adj[fill[idx[i]]++] = (i / 3) | 0;
+  // Non-indexed output with creased normals.
+  const positions = new Float32Array(nt * 9);
+  const normals = new Float32Array(nt * 9);
+  for (let t = 0; t < nt; t++) {
+    const nx = un[t * 3];
+    const ny = un[t * 3 + 1];
+    const nz = un[t * 3 + 2];
+    for (let k = 0; k < 3; k++) {
+      const v = idx[t * 3 + k];
+      positions[t * 9 + k * 3] = p[v * 3];
+      positions[t * 9 + k * 3 + 1] = p[v * 3 + 1];
+      positions[t * 9 + k * 3 + 2] = p[v * 3 + 2];
+      let sx = 0;
+      let sy = 0;
+      let sz = 0;
+      for (let j = start[v]; j < start[v + 1]; j++) {
+        const o = adj[j] * 3;
+        if (un[o] * nx + un[o + 1] * ny + un[o + 2] * nz >= cosT) {
+          sx += fn[o];
+          sy += fn[o + 1];
+          sz += fn[o + 2];
+        }
+      }
+      const l = Math.sqrt(sx * sx + sy * sy + sz * sz) || 1;
+      normals[t * 9 + k * 3] = sx / l;
+      normals[t * 9 + k * 3 + 1] = sy / l;
+      normals[t * 9 + k * 3 + 2] = sz / l;
+    }
+  }
+  return { positions, normals, edges: new Float32Array(segs), watertight };
 }
 
 export function meshBBox(p) {

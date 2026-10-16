@@ -40,8 +40,13 @@ export class BodyView {
     if (d.kind === 'mesh') {
       let g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.BufferAttribute(d.positions, 3));
-      g.setIndex(new THREE.BufferAttribute(d.indices, 1));
-      g = toCreasedNormals(g, (30 * Math.PI) / 180);
+      if (d.flat) {
+        // Normals were already computed (with creases) by the kernel.
+        g.setAttribute('normal', new THREE.BufferAttribute(d.normals, 3));
+      } else {
+        g.setIndex(new THREE.BufferAttribute(d.indices, 1));
+        g = toCreasedNormals(g, (30 * Math.PI) / 180);
+      }
       this.geometry = g;
     } else {
       geom.setAttribute('position', new THREE.BufferAttribute(d.positions, 3));

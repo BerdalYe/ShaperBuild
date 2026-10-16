@@ -364,6 +364,7 @@ export class Viewport extends Emitter {
         return;
       }
       if (e.button === 0) {
+        this.pendingMove = null;
         c.setPointerCapture(e.pointerId);
         this.emit('pointerdown', this.event(e));
       }
@@ -381,7 +382,12 @@ export class Viewport extends Emitter {
         this.requestRender();
         return;
       }
-      this.emit('pointermove', this.event(e));
+      // Handle at most one move per frame: picking big scenes is not free.
+      this.pendingMove = e;
+      if (!this.moveScheduled) {
+        this.moveScheduled = true;
+        requestAnimationFrame(() => this.flushMove());
+      }
     });
     const end = (e) => {
       if (nav) {
@@ -393,6 +399,7 @@ export class Viewport extends Emitter {
         return;
       }
       if (e.button === 0) {
+        this.flushMove();
         c.releasePointerCapture?.(e.pointerId);
         this.emit('pointerup', this.event(e));
       }
@@ -417,12 +424,26 @@ export class Viewport extends Emitter {
         if (e.deltaMode === 1) delta *= 33;
         if (e.deltaMode === 2) delta *= this.height;
         const factor = Math.exp(delta * (pinch ? 0.01 : 0.0015));
-        const point = this.raycastAny(x, y) || this.pointOnTargetPlane(x, y);
+        // Re-use the zoom point while scrolling in one place (raycasting
+        // large meshes on every wheel tick would stutter).
+        const now = performance.now();
+        const z = this.zoomCache;
+        let point;
+        if (z && now - z.t < 250 && Math.abs(z.x - x) < 3 && Math.abs(z.y - y) < 3) point = z.point;
+        else point = this.raycastAny(x, y) || this.pointOnTargetPlane(x, y);
+        this.zoomCache = { t: now, x, y, point };
         this.rig.zoom(factor, point);
         this.requestRender();
       },
       { passive: false },
     );
+  }
+
+  flushMove() {
+    this.moveScheduled = false;
+    const e = this.pendingMove;
+    this.pendingMove = null;
+    if (e) this.emit('pointermove', this.event(e));
   }
 
   pointOnTargetPlane(x, y) {
