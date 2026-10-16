@@ -38,6 +38,11 @@ export class ContextBar {
         if ([...bodies].some((id) => app.doc.body(id)?.kind === 'mesh')) out.push({ label: 'Convert to solid', icon: 'convert', action: () => app.cmd.convertToSolid() });
       }
     }
+    if (only('plane') && list.length === 1) {
+      const pl = app.doc.plane(list[0].planeId);
+      out.push(tool('rect', 'Draw a rectangle', 'rect'), tool('circle', 'Circle'), tool('text', 'Text'));
+      if (pl) out.push({ label: 'Look at', icon: 'lookAt', action: () => app.vp.lookAtPlane(pl.plane) });
+    }
     if (only('curve', 'spoint', 'sketch')) {
       if (kinds.has('curve')) out.push({ label: 'Construction', icon: 'construction', action: () => app.tools.activate('construction') });
       if (kinds.has('curve')) out.push(tool('offset', 'Offset'));
@@ -56,7 +61,7 @@ export class ContextBar {
     }
     const counts = {};
     for (const it of list) counts[it.kind] = (counts[it.kind] || 0) + 1;
-    const NAMES = { constraint: ['constraint', 'constraints'], body: ['body', 'bodies'], face: ['face', 'faces'], edge: ['edge', 'edges'], region: ['region', 'regions'], curve: ['curve', 'curves'], spoint: ['point', 'points'], sketch: ['sketch', 'sketches'], vertex: ['vertex', 'vertices'] };
+    const NAMES = { constraint: ['constraint', 'constraints'], body: ['body', 'bodies'], face: ['face', 'faces'], edge: ['edge', 'edges'], region: ['region', 'regions'], curve: ['curve', 'curves'], spoint: ['point', 'points'], sketch: ['sketch', 'sketches'], vertex: ['vertex', 'vertices'], plane: ['plane', 'planes'] };
     const label = Object.entries(counts)
       .map(([k, n]) => `${n} ${(NAMES[k] || [k, k])[n === 1 ? 0 : 1]}`)
       .join(', ');

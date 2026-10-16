@@ -537,12 +537,12 @@ export class SplitTool extends OpTool {
       {
         key: 'face',
         label: 'Cut with',
-        kinds: ['face'],
+        kinds: ['face', 'plane'],
         multiple: false,
         optional: true,
         fromSelection: false,
-        placeholder: 'Click a flat face (optional)',
-        accept: (it) => (this.app.faceInfo(it.bodyId, it.index)?.type === 'plane' ? it : null),
+        placeholder: 'Click a flat face or plane (optional)',
+        accept: (it) => (it.kind === 'plane' || this.app.faceInfo(it.bodyId, it.index)?.type === 'plane' ? it : null),
       },
     ];
   }
@@ -571,6 +571,10 @@ export class SplitTool extends OpTool {
 
   plane() {
     const f = this.items('face')[0];
+    if (f?.kind === 'plane') {
+      const pl = this.app.doc.plane(f.planeId).plane;
+      return { origin: pl.origin, normal: pl.normal };
+    }
     if (f) {
       const info = this.app.faceInfo(f.bodyId, f.index);
       return { origin: info.center, normal: info.normal };
@@ -599,12 +603,12 @@ export class MirrorTool extends OpTool {
       {
         key: 'face',
         label: 'Mirror plane',
-        kinds: ['face'],
+        kinds: ['face', 'plane'],
         multiple: false,
         optional: true,
         fromSelection: false,
-        placeholder: 'Click a flat face (optional)',
-        accept: (it) => (this.app.faceInfo(it.bodyId, it.index)?.type === 'plane' ? it : null),
+        placeholder: 'Click a flat face or plane (optional)',
+        accept: (it) => (it.kind === 'plane' || this.app.faceInfo(it.bodyId, it.index)?.type === 'plane' ? it : null),
       },
     ];
   }
@@ -630,6 +634,10 @@ export class MirrorTool extends OpTool {
 
   plane() {
     const f = this.items('face')[0];
+    if (f?.kind === 'plane') {
+      const pl = this.app.doc.plane(f.planeId).plane;
+      return { origin: pl.origin, normal: pl.normal };
+    }
     if (f) {
       const info = this.app.faceInfo(f.bodyId, f.index);
       return { origin: info.center, normal: info.normal };

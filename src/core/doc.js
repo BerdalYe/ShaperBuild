@@ -9,7 +9,8 @@ export function emptyState() {
   return {
     bodies: [],
     sketches: [],
-    seq: { body: 0, sketch: 0, entity: 0, constraint: 0 },
+    planes: [],
+    seq: { body: 0, sketch: 0, entity: 0, constraint: 0, plane: 0 },
     units: 'mm',
   };
 }
@@ -26,13 +27,14 @@ export class Draft {
   constructor(state) {
     this.bodies = state.bodies.slice();
     this.sketches = state.sketches.slice();
+    this.planes = (state.planes || []).slice();
     this.seq = { ...state.seq };
     this.units = state.units;
   }
 
   nextId(kind) {
     this.seq[kind] = (this.seq[kind] || 0) + 1;
-    const prefix = { body: 'b', sketch: 's', entity: 'e', constraint: 'k' }[kind] || kind;
+    const prefix = { body: 'b', sketch: 's', entity: 'e', constraint: 'k', plane: 'p' }[kind] || kind;
     return `${prefix}${this.seq[kind]}`;
   }
 
@@ -80,6 +82,29 @@ export class Draft {
     this.sketches = this.sketches.filter((s) => s.id !== id);
   }
 
+  plane(id) {
+    return this.planes.find((p) => p.id === id);
+  }
+
+  // Reference plane: { plane: { origin, normal, xDir }, size }.
+  addPlane(props) {
+    const id = this.nextId('plane');
+    const pl = { name: `Plane ${this.seq.plane}`, visible: true, size: 80, ...props, id };
+    this.planes.push(pl);
+    return pl;
+  }
+
+  updatePlane(id, patch) {
+    const i = this.planes.findIndex((p) => p.id === id);
+    if (i < 0) return null;
+    this.planes[i] = { ...this.planes[i], ...patch };
+    return this.planes[i];
+  }
+
+  removePlane(id) {
+    this.planes = this.planes.filter((p) => p.id !== id);
+  }
+
   // Give new entities ids.
   withIds(entities) {
     return entities.map((e) => (e.id ? e : { ...e, id: this.nextId('entity') }));
@@ -90,7 +115,7 @@ export class Draft {
   }
 
   toState() {
-    return { bodies: this.bodies, sketches: this.sketches, seq: this.seq, units: this.units };
+    return { bodies: this.bodies, sketches: this.sketches, planes: this.planes, seq: this.seq, units: this.units };
   }
 }
 
@@ -116,6 +141,14 @@ export class Document extends Emitter {
     return this.state.bodies.find((b) => b.id === id);
   }
 
+  get planes() {
+    return this.state.planes || [];
+  }
+
+  plane(id) {
+    return this.planes.find((p) => p.id === id);
+  }
+
   sketch(id) {
     return this.state.sketches.find((s) => s.id === id);
   }
@@ -125,7 +158,7 @@ export class Document extends Emitter {
   }
 
   get isEmpty() {
-    return !this.state.bodies.length && !this.state.sketches.length;
+    return !this.state.bodies.length && !this.state.sketches.length && !(this.state.planes || []).length;
   }
 
   // Apply a change; returns whatever the callback returns.

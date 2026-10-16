@@ -7,7 +7,7 @@ import { toast } from '../ui/overlays.js';
 
 export class TextTool extends SketchTool {
   get pickKinds() {
-    return ['region', 'face', 'body'];
+    return ['region', 'face', 'body', 'plane'];
   }
 
   get options() {

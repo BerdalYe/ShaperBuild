@@ -7,14 +7,15 @@ import { Grid } from './grid.js';
 import { PickRegistry, Picker } from './pick.js';
 import { BodyView } from './bodyview.js';
 import { SketchView } from './sketchview.js';
+import { PlaneView } from './planeview.js';
 import { Overlay } from './overlay.js';
 import { ViewCube } from './viewcube.js';
 import { THEMES } from './theme.js';
 import { Emitter } from '../core/events.js';
 import { to3D } from '../core/plane.js';
 
-const PRIORITY = { handle: 0, spoint: 1, vertex: 1, curve: 2, edge: 2, region: 3, face: 4, body: 4 };
-const RADIUS = { handle: 10, spoint: 9, vertex: 9, curve: 7, edge: 7, region: 1.5, face: 1.5, body: 1.5 };
+const PRIORITY = { handle: 0, spoint: 1, vertex: 1, curve: 2, edge: 2, region: 3, face: 4, body: 4, plane: 5 };
+const RADIUS = { handle: 10, spoint: 9, vertex: 9, curve: 7, edge: 7, region: 1.5, face: 1.5, body: 1.5, plane: 1.5 };
 
 export class Viewport extends Emitter {
   constructor(container, { theme = 'dark' } = {}) {
@@ -95,10 +96,12 @@ export class Viewport extends Emitter {
 
     this.bodyGroup = new THREE.Group();
     this.sketchGroup = new THREE.Group();
-    this.scene.add(this.bodyGroup, this.sketchGroup);
+    this.planeGroup = new THREE.Group();
+    this.scene.add(this.bodyGroup, this.sketchGroup, this.planeGroup);
     this.pickBodies = new THREE.Group();
     this.pickSketches = new THREE.Group();
-    this.pickScene.add(this.pickBodies, this.pickSketches);
+    this.pickPlanes = new THREE.Group();
+    this.pickScene.add(this.pickBodies, this.pickSketches, this.pickPlanes);
 
     this.overlay = new Overlay(this);
     this.scene.add(this.overlay.group);
@@ -106,6 +109,7 @@ export class Viewport extends Emitter {
 
     this.bodyViews = new Map();
     this.sketchViews = new Map();
+    this.planeViews = new Map();
 
     this.viewcube = new ViewCube(container, (p) => this.onCubePick(p));
 
@@ -259,6 +263,28 @@ export class Viewport extends Emitter {
     this.requestRender();
   }
 
+  syncPlanes(planes) {
+    const seen = new Set();
+    for (const pl of planes) {
+      seen.add(pl.id);
+      let view = this.planeViews.get(pl.id);
+      if (!view) {
+        view = new PlaneView(pl, this.ctx);
+        this.planeViews.set(pl.id, view);
+        this.planeGroup.add(view.group);
+        this.pickPlanes.add(view.pickGroup);
+      } else if (view.pl !== pl) view.update(pl);
+      if (this.visualization) view.group.visible = false;
+    }
+    for (const [id, view] of this.planeViews) {
+      if (!seen.has(id)) {
+        view.dispose();
+        this.planeViews.delete(id);
+      }
+    }
+    this.requestRender();
+  }
+
   setShowEdges(v) {
     this.showEdges = v;
     for (const view of this.bodyViews.values()) view.setEdgesVisible(v && !this.visualization);
@@ -319,6 +345,7 @@ export class Viewport extends Emitter {
     });
     for (const v of this.bodyViews.values()) v.pickGroup.visible = v.group.visible;
     for (const v of this.sketchViews.values()) v.pickGroup.visible = v.group.visible;
+    for (const v of this.planeViews.values()) v.pickGroup.visible = v.group.visible;
     this.overlay.updateScreenSizes();
     const found = this.picker.read(this.pickScene, this.camera, x, y, this.width, this.height, this.ctx.pickLineMaterials);
     for (const [obj, vis] of toggled) obj.visible = vis;
@@ -619,6 +646,7 @@ export class Viewport extends Emitter {
       v.setVisualization?.(on);
     }
     for (const v of this.sketchViews.values()) v.group.visible = !on && v.sketch.visible !== false;
+    for (const v of this.planeViews.values()) v.group.visible = !on && v.pl.visible !== false;
     this.requestRender();
   }
 

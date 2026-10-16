@@ -154,6 +154,7 @@ export class App {
     this.vp.syncBodies(doc.bodies, (id) => this.meshCache.get(id));
     for (const sk of doc.sketches) this.requestRegions(sk);
     this.vp.syncSketches(doc.sketches, (sk) => this.regionDataFor(sk));
+    this.vp.syncPlanes(doc.planes);
     this.selection.prune((it) => this.isValidItem(it));
     this.refreshHighlights();
     this.tools.active?.onSelectionChange?.();
@@ -249,6 +250,8 @@ export class App {
         return !!doc.sketch(it.sketchId);
       case 'constraint':
         return !!doc.sketch(it.sketchId)?.constraints?.some((c) => c.id === it.cid);
+      case 'plane':
+        return !!doc.plane(it.planeId);
       default:
         return true;
     }
@@ -279,6 +282,7 @@ export class App {
     const t = this.vp.theme;
     const bodyH = new Map();
     const sketchH = new Map();
+    const planeH = new Map();
     const B = (id) => {
       if (!bodyH.has(id)) bodyH.set(id, { faces: new Map(), edges: new Map(), body: null });
       return bodyH.get(id);
@@ -313,6 +317,9 @@ export class App {
           if (sk) for (const e of sk.entities) S(it.sketchId).entities.set(e.id, color);
           break;
         }
+        case 'plane':
+          planeH.set(it.planeId, color);
+          break;
         default:
       }
     };
@@ -326,6 +333,7 @@ export class App {
       const h = sketchH.get(id) || {};
       view.setHighlight(h);
     }
+    for (const [id, view] of this.vp.planeViews) view.setHighlight(planeH.get(id) || null);
     this.constraints?.update();
     this.vp.requestRender();
   }
@@ -1071,6 +1079,8 @@ export class App {
     }
     const sk = it?.sketchId ? this.doc.sketch(it.sketchId) : null;
     if (sk) return this.vp.lookAtPlane(sk.plane);
+    const pl = it?.kind === 'plane' ? this.doc.plane(it.planeId) : null;
+    if (pl) return this.vp.lookAtPlane(pl.plane);
     const tp = this.tools.active?.plane;
     if (tp) return this.vp.lookAtPlane(tp);
     toast('Select a flat face or sketch to look at', { ms: 1600 });

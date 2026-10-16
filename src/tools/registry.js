@@ -4,6 +4,7 @@ import { LineTool, RectTool, CircleTool, ArcTool, PolygonTool, SplineTool, Ellip
 import { TrimTool, OffsetTool, ProjectTool, toggleConstruction } from './sketchedit.js';
 import { DimensionTool } from './dimension.js';
 import { TextTool } from './text.js';
+import { PlaneTool } from './plane.js';
 import { ExtrudeTool, RevolveTool, SweepTool, LoftTool, FilletTool, ChamferTool, ShellTool, DraftTool, UnionTool, SubtractTool, IntersectTool, SplitTool, MirrorTool, LinearPatternTool, CircularPatternTool, ScaleTool } from './model.js';
 import { TransformTool } from './transform.js';
 import { PrimitiveTool } from './primitive.js';
@@ -28,6 +29,7 @@ export const TOOL_SECTIONS = [
       def('trim', 'Trim', 'trim', TrimTool, { key: 'T', keywords: 'cut erase remove delete segment', desc: 'Remove pieces of curves between intersections.' }),
       def('offset', 'Offset', 'offset', OffsetTool, { keywords: 'parallel copy wall thickness', desc: 'Copy curves at a distance.' }),
       def('project', 'Project', 'project', ProjectTool, { keywords: 'edges copy include reference', desc: 'Copy body edges into a sketch.' }),
+      def('plane', 'Plane', 'planeRef', PlaneTool, { keywords: 'reference construction work offset angle datum surface', desc: 'Add a flat surface to draw on — at a distance from, or at an angle to, the grid or a face.' }),
       def('dimension', 'Dimension', 'dimension', DimensionTool, { key: 'D', keywords: 'constraint size length angle parallel tangent', desc: 'Add sizes that drive the sketch. Select curves to add constraints like parallel or tangent.' }),
       { id: 'construction', label: 'Construction', short: 'Construct', keywords: 'reference helper line', icon: 'construction', action: (app) => toggleConstruction(app), desc: 'Turn selected curves into construction geometry (ignored for profiles).' },
     ],

@@ -173,23 +173,33 @@ export class Commands {
   // ---- items ---------------------------------------------------------------
 
   rename(kind, id, name) {
-    this.doc.apply('Rename', (d) => (kind === 'body' ? d.updateBody(id, { name }) : d.updateSketch(id, { name })));
+    this.doc.apply('Rename', (d) => (kind === 'body' ? d.updateBody(id, { name }) : kind === 'plane' ? d.updatePlane(id, { name }) : d.updateSketch(id, { name })));
   }
 
   setVisible(kind, id, visible) {
-    this.doc.apply(visible ? 'Show' : 'Hide', (d) => (kind === 'body' ? d.updateBody(id, { visible }) : d.updateSketch(id, { visible })));
-    if (!visible) this.app.selection.prune((it) => (kind === 'body' ? it.bodyId !== id : it.sketchId !== id));
+    this.doc.apply(visible ? 'Show' : 'Hide', (d) => (kind === 'body' ? d.updateBody(id, { visible }) : kind === 'plane' ? d.updatePlane(id, { visible }) : d.updateSketch(id, { visible })));
+    if (!visible) this.app.selection.prune((it) => (kind === 'body' ? it.bodyId !== id : kind === 'plane' ? it.planeId !== id : it.sketchId !== id));
+  }
+
+  // Add a reference plane and select it.
+  addPlane(plane, { size = 80, name } = {}) {
+    let id = null;
+    this.doc.apply('Plane', (d) => {
+      id = d.addPlane({ plane, size, ...(name ? { name } : {}) }).id;
+    });
+    this.app.selection.set([{ kind: 'plane', planeId: id }]);
+    return id;
   }
 
   // Show or hide several items in one undo step: items = [{ kind, id }].
   setVisibleMany(items, visible) {
     if (!items.length) return;
     this.doc.apply(visible ? 'Show' : 'Hide', (d) => {
-      for (const { kind, id } of items) kind === 'body' ? d.updateBody(id, { visible }) : d.updateSketch(id, { visible });
+      for (const { kind, id } of items) kind === 'body' ? d.updateBody(id, { visible }) : kind === 'plane' ? d.updatePlane(id, { visible }) : d.updateSketch(id, { visible });
     });
     if (!visible) {
       const gone = new Set(items.map((x) => x.id));
-      this.app.selection.prune((it) => !gone.has(it.bodyId) && !gone.has(it.sketchId));
+      this.app.selection.prune((it) => !gone.has(it.bodyId) && !gone.has(it.sketchId) && !gone.has(it.planeId));
     }
   }
 
@@ -204,6 +214,7 @@ export class Commands {
     this.doc.apply('Show all', (d) => {
       for (const b of d.bodies) if (b.visible === false) d.updateBody(b.id, { visible: true });
       for (const s of d.sketches) if (s.visible === false) d.updateSketch(s.id, { visible: true });
+      for (const p of d.planes) if (p.visible === false) d.updatePlane(p.id, { visible: true });
     });
   }
 
@@ -245,6 +256,7 @@ export class Commands {
   deleteItems(items) {
     const bodies = new Set();
     const sketches = new Set();
+    const planes = new Set();
     const curves = new Map();
     const cons = items.filter((it) => it.kind === 'constraint');
     if (cons.length) {
@@ -262,9 +274,11 @@ export class Commands {
         if (!curves.has(it.sketchId)) curves.set(it.sketchId, new Set());
         curves.get(it.sketchId).add(it.entityId);
       } else if (it.kind === 'region') sketches.add(it.sketchId);
+      else if (it.kind === 'plane') planes.add(it.planeId);
     }
-    if (!bodies.size && !sketches.size && !curves.size) return;
+    if (!bodies.size && !sketches.size && !curves.size && !planes.size) return;
     this.doc.apply('Delete', (d) => {
+      for (const id of planes) d.removePlane(id);
       for (const id of bodies) d.removeBody(id);
       for (const id of sketches) d.removeSketch(id);
       for (const [sid, ids] of curves) {
