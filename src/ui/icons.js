@@ -45,6 +45,7 @@ const P = {
   convert: '<path d="M3 20l5-9 5 9zM8 11l5 9" /><path d="M16.5 3.5l4 2.3v4.5l-4 2.3-4-2.3V5.8z"/><path d="M12 8h-2.5M10.5 6.5L9 8l1.5 1.5"/>',
   eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   eyeOff: '<path d="M2 12s3.6-7 10-7c2 0 3.7.6 5.1 1.5M22 12s-3.6 7-10 7c-2 0-3.7-.6-5.1-1.5"/><path d="M4 20L20 4"/>',
+  history: '<path d="M4 12a8 8 0 102.3-5.6"/><path d="M4 4v4h4"/><path d="M12 8v4.5l3 2"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M5.5 7l1 13h11l1-13M9 7V4h6v3"/>',
   solid: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>',
   mesh: '<path d="M3 19L12 4l9 15z"/><path d="M7.5 11.5h9M12 19l-4.5-7.5M12 19l4.5-7.5"/>',

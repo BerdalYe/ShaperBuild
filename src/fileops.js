@@ -283,7 +283,9 @@ export class FileOps {
   async serialize({ thumbnail: withThumb = true } = {}) {
     const app = this.app;
     const state = app.doc.state;
-    const ids = [...new Set(state.bodies.map((b) => b.shapeId))];
+    // Current bodies plus the shapes the history starts from (imports).
+    const base = (state.history || []).filter((f) => f.op === 'base').flatMap((f) => f.bodies.map((x) => x.s));
+    const ids = [...new Set([...state.bodies.map((b) => b.shapeId), ...base])];
     const raw = ids.length ? await app.kernel.call('serialize', { ids }) : {};
     const shapes = {};
     for (const [id, s] of Object.entries(raw)) {
@@ -299,7 +301,7 @@ export class FileOps {
       app: (await this.native?.info())?.version || 'dev',
       saved: new Date().toISOString(),
       camera: app.vp.rig.toJSON(),
-      state: { bodies: state.bodies, sketches: state.sketches, planes: state.planes || [], images: state.images || [], seq: state.seq, units: state.units },
+      state: { bodies: state.bodies, sketches: state.sketches, planes: state.planes || [], images: state.images || [], history: state.history || [], seq: state.seq, units: state.units },
       shapes,
       thumbnail,
     };
@@ -355,6 +357,7 @@ export class FileOps {
       for (const [id, mesh] of Object.entries(res.meshes)) app.meshCache.set(id, mesh);
       const state = json.state;
       state.bodies = state.bodies.filter((b) => res.map[b.shapeId]).map((b) => ({ ...b, shapeId: res.map[b.shapeId] }));
+      state.history = (state.history || []).map((f) => (f.op === 'base' ? { ...f, bodies: f.bodies.filter((x) => res.map[x.s]).map((x) => ({ ...x, s: res.map[x.s] })) } : f));
       app.doc.load(state);
       if (json.camera) app.vp.rig.fromJSON(json.camera);
       app.vp.requestRender();

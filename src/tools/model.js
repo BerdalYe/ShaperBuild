@@ -52,7 +52,7 @@ function bodySlot(key = 'bodies', label = 'Bodies', extra = {}) {
 
 // Combine several kernel results into one.
 function merge(results) {
-  return { bodies: results.flatMap((r) => r.bodies), removed: results.flatMap((r) => r.removed) };
+  return { bodies: results.flatMap((r) => r.bodies), removed: results.flatMap((r) => r.removed), calls: results.flatMap((r) => r.calls || []) };
 }
 
 // Closest point parameter along an axis line for a view ray.

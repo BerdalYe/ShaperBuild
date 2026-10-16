@@ -2865,3 +2865,137 @@ svg.icon {
   width: 90px;
   accent-color: var(--accent);
 }
+
+/* ---- items panel: tabs and history ------------------------------------ */
+.items-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.items-tab {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.items-tab:hover {
+  color: var(--text);
+}
+
+.items-tab.on {
+  background: var(--panel-3);
+  color: var(--text);
+}
+
+.item.step {
+  cursor: pointer;
+  gap: 6px;
+}
+
+.step .step-num {
+  width: 18px;
+  flex: none;
+  text-align: right;
+  font-size: 10.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.step .step-icon {
+  display: inline-flex;
+  opacity: 0.8;
+}
+
+.step .step-icon svg.icon {
+  width: 16px;
+  height: 16px;
+}
+
+.step.step-off .item-name,
+.step.step-off .step-icon {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.step.step-bad .item-name {
+  color: var(--danger);
+}
+
+.step .step-warn {
+  display: inline-flex;
+  color: var(--danger);
+}
+
+.step .step-warn svg.icon {
+  width: 14px;
+  height: 14px;
+}
+
+.step-edit {
+  margin: 2px 2px 8px 26px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel-2);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.step-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.step-field .step-field-label {
+  flex: 1;
+}
+
+.step-field .num-input {
+  width: 72px;
+}
+
+.step-field .num-input.bad {
+  border-color: var(--danger);
+}
+
+.step-field .step-unit {
+  width: 22px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.step-error {
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.step-note {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.step-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.step-actions .btn {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+}

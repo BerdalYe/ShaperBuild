@@ -53,12 +53,16 @@ export class Commands {
         if (existing) sk = existing;
       }
       if (!sk) {
-        // Remember which body the sketch was drawn on (for auto join/cut).
+        // Remember which body the sketch was drawn on (for auto join/cut),
+        // and its face, so the sketch moves with it when the design changes.
         let sourceBody = null;
+        let attach = null;
         for (const b of d.bodies) {
           const m = app.meshCache.get(b.shapeId);
-          if (m?.faceInfo?.some((f) => f.type === 'plane' && samePlane(plane, { origin: f.center, normal: f.normal }))) {
+          const fi = m?.faceInfo?.findIndex((f) => f.type === 'plane' && samePlane(plane, { origin: f.center, normal: f.normal })) ?? -1;
+          if (fi >= 0) {
             sourceBody = b.id;
+            attach = app.history.attachFor(plane, b.id, fi);
             break;
           }
           if (m?.kind === 'mesh' && !samePlane(plane, GROUND)) {
@@ -68,7 +72,7 @@ export class Commands {
             if (inside) sourceBody = b.id;
           }
         }
-        sk = d.addSketch({ plane, sourceBody });
+        sk = d.addSketch({ plane, sourceBody, ...(attach ? { attach } : {}) });
       }
       const ents = d.withIds(entities);
       const ref = (v) => (typeof v === 'string' && v[0] === '#' ? ents[+v.slice(1)]?.id : v);
@@ -84,7 +88,10 @@ export class Commands {
   setSketchEntities(sketchId, entities, label = 'Edit sketch', { dropFor = [] } = {}) {
     this.doc.apply(label, (d) => {
       const ents = d.withIds(entities);
-      if (!ents.length) return d.removeSketch(sketchId);
+      if (!ents.length) {
+        this.app.history.keepSketchShapes(d, [sketchId]);
+        return d.removeSketch(sketchId);
+      }
       const sk = d.sketch(sketchId);
       const cons = pruneConstraints(dropConstraintsFor(sk.constraints, dropFor), ents);
       d.updateSketch(sketchId, { entities: ents, constraints: cons });
@@ -151,18 +158,24 @@ export class Commands {
     const app = this.app;
     for (const b of result.bodies) if (b.mesh) app.meshCache.set(b.id, b.mesh);
     const created = [];
+    // How to make this result again (before the document changes).
+    const recipe = app.history.recipe(result);
     this.doc.apply(label, (d) => {
       const byShape = new Map(d.bodies.map((b) => [b.shapeId, b]));
+      const outIds = [];
       for (const r of result.bodies) {
         const kind = r.mesh?.kind || 'solid';
         if (r.replaces && byShape.has(r.replaces)) {
           d.updateBody(byShape.get(r.replaces).id, { shapeId: r.id, kind });
+          outIds.push(byShape.get(r.replaces).id);
         } else {
           const src = r.from ? byShape.get(r.from) : null;
           const nb = d.addBody({ shapeId: r.id, kind, color: src?.color ?? null, ...(opts.newBody || {}) });
           created.push(nb.id);
+          outIds.push(nb.id);
         }
       }
+      app.history.record(d, label, result, outIds, recipe);
       for (const sid of result.removed) {
         const b = byShape.get(sid);
         if (b && !result.bodies.some((r) => r.replaces === sid)) d.removeBody(b.id);
@@ -187,9 +200,11 @@ export class Commands {
         if (!sk) continue;
         const plane = transformPlane(sk.plane, st.matrix);
         if (st.copy) d.addSketch({ plane, entities: sk.entities, constraints: sk.constraints || [], name: `${sk.name} copy` });
-        else d.updateSketch(st.id, { plane });
+        // A sketch moved off its face no longer follows that face.
+        else d.updateSketch(st.id, { plane, ...(sk.attach && !samePlane(plane, sk.plane) ? { attach: null } : {}) });
       }
     });
+    app.history.afterRecord();
     app.selection.clear();
     return created;
   }
@@ -322,10 +337,14 @@ export class Commands {
       else if (it.kind === 'image') images.add(it.imageId);
     }
     if (!bodies.size && !sketches.size && !curves.size && !planes.size && !images.size) return;
+    const history = this.app.history;
     this.doc.apply('Delete', (d) => {
+      // Steps that use deleted sketch curves keep their current shape.
+      history.keepSketchShapes(d, [...sketches, ...curves.keys()]);
       for (const id of planes) d.removePlane(id);
       for (const id of images) d.removeImage(id);
       for (const id of bodies) d.removeBody(id);
+      history.recordDelete(d, [...bodies]);
       for (const id of sketches) d.removeSketch(id);
       for (const [sid, ids] of curves) {
         if (sketches.has(sid)) continue;
@@ -336,6 +355,7 @@ export class Commands {
         else d.removeSketch(sid);
       }
     });
+    if (bodies.size) history.afterRecord();
     this.app.selection.clear();
   }
 

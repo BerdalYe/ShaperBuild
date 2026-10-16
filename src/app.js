@@ -12,6 +12,7 @@ import { ItemsPanel } from './ui/items.js';
 import { ToolsMenu } from './ui/toolsmenu.js';
 import { ContextBar } from './ui/contextbar.js';
 import { Commands } from './commands.js';
+import { HistoryEngine } from './history.js';
 import { FileOps } from './fileops.js';
 import { Dialogs } from './ui/dialogs.js';
 import { Home } from './ui/home.js';
@@ -69,6 +70,7 @@ export class App {
     this.dim = new DimInput(document.getElementById('viewport'), this);
     this.status = new Status(this);
     this.cmd = new Commands(this);
+    this.history = new HistoryEngine(this);
     this.files = new FileOps(this);
     this.dialogs = new Dialogs(this);
     this.tools = new ToolManager(this);
@@ -499,7 +501,7 @@ export class App {
     if (it.kind === 'curve') {
       const sk = this.doc.sketch(it.sketchId);
       const en = sk?.entities.find((e) => e.id === it.entityId);
-      return en ? { type: 'curve', plane: sk.plane, entity: en } : null;
+      return en ? { type: 'curve', plane: sk.plane, entity: en, sketchId: sk.id } : null;
     }
     return null;
   }
@@ -731,6 +733,8 @@ export class App {
       if (!this.tools.isSelect) return this.scheduleGC();
       const keep = new Set(this.doc.referencedShapes());
       for (const id of this.tools.active?.heldShapes() || []) keep.add(id);
+      for (const id of this.history.heldShapes()) keep.add(id);
+      if (this.history.busy) return this.scheduleGC();
       for (const id of this.meshCache.keys()) if (!keep.has(id)) this.meshCache.delete(id);
       this.kernel.call('retainOnly', [...keep]).catch(() => {});
     }, 4000);
@@ -935,6 +939,14 @@ export class App {
     else this.tools.activate('section');
   }
 
+  // Show the History tab (or go back to Items if it is already showing).
+  showHistory() {
+    const el = document.getElementById('items');
+    if (el.classList.contains('collapsed')) this.toggleItems();
+    else if (this.items.tab === 'history') return this.items.setTab('items');
+    this.items.setTab('history');
+  }
+
   toggleItems() {
     const collapsed = document.getElementById('items').classList.toggle('collapsed');
     document.getElementById('btn-items').classList.toggle('on', !collapsed);
@@ -1039,6 +1051,7 @@ export class App {
       if (k === '-' || k === '_') return this.vp.stepZoom(1.25);
       if (k === '?') return this.dialogs.shortcuts();
       if (e.shiftKey && k.toLowerCase() === 'x') return this.toggleXray();
+      if (e.shiftKey && k.toLowerCase() === 'h') return this.showHistory();
       if (k === 'Delete' || k === 'Backspace') {
         e.preventDefault();
         this.cmd.deleteSelection();
@@ -1209,6 +1222,8 @@ export class App {
         return this.applyViewSettings();
       case 'toggle-theme':
         return this.toggleTheme();
+      case 'show-history':
+        return this.showHistory();
       case 'toggle-items':
         return this.toggleItems();
       case 'settings':

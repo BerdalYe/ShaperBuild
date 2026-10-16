@@ -11,7 +11,9 @@ export function emptyState() {
     sketches: [],
     planes: [],
     images: [],
-    seq: { body: 0, sketch: 0, entity: 0, constraint: 0, plane: 0, image: 0 },
+    // Design history: every step that made or changed bodies (see history.js).
+    history: [],
+    seq: { body: 0, sketch: 0, entity: 0, constraint: 0, plane: 0, image: 0, feature: 0 },
     units: 'mm',
   };
 }
@@ -30,13 +32,14 @@ export class Draft {
     this.sketches = state.sketches.slice();
     this.planes = (state.planes || []).slice();
     this.images = (state.images || []).slice();
+    this.history = (state.history || []).slice();
     this.seq = { ...state.seq };
     this.units = state.units;
   }
 
   nextId(kind) {
     this.seq[kind] = (this.seq[kind] || 0) + 1;
-    const prefix = { body: 'b', sketch: 's', entity: 'e', constraint: 'k', plane: 'p', image: 'i' }[kind] || kind;
+    const prefix = { body: 'b', sketch: 's', entity: 'e', constraint: 'k', plane: 'p', image: 'i', feature: 'f' }[kind] || kind;
     return `${prefix}${this.seq[kind]}`;
   }
 
@@ -51,6 +54,13 @@ export class Draft {
   addBody(props) {
     const id = this.nextId('body');
     const body = { name: `Body ${this.seq.body}`, kind: 'solid', visible: true, color: null, ...props, id };
+    this.bodies.push(body);
+    return body;
+  }
+
+  // Add a body that already has an id (bodies rebuilt from the history).
+  putBody(props) {
+    const body = { name: 'Body', kind: 'solid', visible: true, color: null, ...props };
     this.bodies.push(body);
     return body;
   }
@@ -140,7 +150,7 @@ export class Draft {
   }
 
   toState() {
-    return { bodies: this.bodies, sketches: this.sketches, planes: this.planes, images: this.images, seq: this.seq, units: this.units };
+    return { bodies: this.bodies, sketches: this.sketches, planes: this.planes, images: this.images, history: this.history, seq: this.seq, units: this.units };
   }
 }
 
@@ -257,7 +267,11 @@ export class Document extends Emitter {
   // Every kernel shape id referenced by current state and history.
   referencedShapes() {
     const ids = new Set();
-    const add = (s) => s.bodies.forEach((b) => ids.add(b.shapeId));
+    const add = (s) => {
+      s.bodies.forEach((b) => ids.add(b.shapeId));
+      // Shapes the history starts from (imports) must stay alive too.
+      for (const f of s.history || []) if (f.op === 'base') f.bodies.forEach((x) => ids.add(x.s));
+    };
     add(this.state);
     this.past.forEach((h) => add(h.state));
     this.future.forEach((h) => add(h.state));

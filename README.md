@@ -37,6 +37,7 @@ Finding your way around:
 - **Tools** are on the right, with names, grouped into Sketch, Model, Transform, Shapes and Inspect. Hover one to see what it does.
 - **Search tools** (Ctrl+K / ⌘K) finds any tool or command by name or purpose — try "hole", "round" or "print".
 - **Items** on the left lists everything in your design: bodies, meshes, sketches, planes and images. Hide, rename, recolour or delete them there.
+- **History** (the tab next to Items, or Shift+H) lists every step that made your design, in order. Click a step to change it.
 - The **bar at the bottom** suggests tools for whatever you selected. While a tool is active, a hint there tells you what to do next.
 - The **buttons under the view cube** fit the view, jump to standard views, zoom, and switch on **Orbit** or **Pan** mode for dragging with the left button. The **mouse** button explains every way to move around.
 
@@ -51,6 +52,8 @@ Finding your way around:
 **Constraints and dimensions** – Sizes you type become dimensions you can click and change later; the sketch follows. Lines drawn level or upright stay that way, and rectangles stay rectangles when you drag them. Select curves or points and use **Constrain** for parallel, perpendicular, equal, tangent, concentric, midpoint, on-curve, coincident, fixed, angle and distance. The **Dimension** tool (D) adds lengths, diameters, radii and distances.
 
 **Model** – Extrude (also push/pull of faces: grow a body or cut into it), Revolve, Sweep, Loft, Fillet, Chamfer, Shell, Draft, Split, Union, Subtract and Intersect. Every tool shows a live preview before you apply it. Select a region or face and drag its blue arrow to extrude directly.
+
+**Editable history** – Every step is remembered: extrude, fillet, shell, move, pattern, shapes and more. Open **History**, click a step and type a new value (say, make the first extrude taller): every later step is redone on top of it, so fillets, holes and push/pulls follow. Changing a sketch (a dimension, a curve) updates the bodies made from it, and sketches drawn on a face move with that face. Steps can be turned off or deleted; if a later step no longer fits (a fillet that has become too big), it is marked in red and skipped until you fix it.
 
 **Transform** – Move/Rotate with a gizmo or exact values, Scale, Mirror, Linear and Circular patterns, Duplicate.
 
@@ -81,12 +84,13 @@ The geometry engine is [OpenCascade](https://dev.opencascade.org/) (a real B-rep
 | Tools | L line · R rectangle · C circle · A arc · P polygon · B spline · T trim · D dimension · E extrude · Q revolve · F fillet · H shell · U union · M move · K measure · X section |
 | Undo / redo | Ctrl+Z / Ctrl+Y (⌘ on Mac) |
 | Find a tool | Ctrl+K (⌘K on Mac) |
+| Design history | Shift+H |
 
 Press **?** or use *Help → Keyboard Shortcuts* in the app to see everything. Laptop without a mouse? Use the Orbit and Pan buttons, or set *Settings → Scroll wheel / two-finger swipe* to orbit.
 
 ## How it compares to Shapr3D
 
-It follows Shapr3D's workflow and layout closely, but it is not a copy of Shapr3D and does not have everything yet. Not included so far: parametric history (going back to edit earlier steps), Wrap & Emboss, sweep twist/scale controls, folders in Items, IGES files, AI rendering, the iPad / Vision Pro / AR apps, cloud sync and team sharing, and the video learning center.
+It follows Shapr3D's workflow and layout closely, but it is not a copy of Shapr3D and does not have everything yet. Not included so far: Wrap & Emboss, sweep twist/scale controls, folders in Items, IGES files, AI rendering, the iPad / Vision Pro / AR apps, cloud sync and team sharing, and the video learning center.
 
 ## Updates
 

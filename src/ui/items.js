@@ -3,6 +3,7 @@ import { h, clear } from './dom.js';
 import { icon } from './icons.js';
 import { showMenu } from './overlays.js';
 import { BODY_COLORS } from '../view/theme.js';
+import { HistoryList } from './historylist.js';
 
 export class ItemsPanel {
   constructor(el, app) {
@@ -11,6 +12,9 @@ export class ItemsPanel {
     this.collapsed = { bodies: false, meshes: false, sketches: false, planes: false, images: false };
     this.renaming = null;
     this.query = '';
+    // 'items' (what is in the design) or 'history' (the steps that made it).
+    this.tab = 'items';
+    this.historyList = new HistoryList(this, app);
     app.doc.on('change', () => this.render());
     app.selection.on('change', () => this.render());
     this.render();
@@ -27,8 +31,26 @@ export class ItemsPanel {
     showAll.addEventListener('click', () => app.cmd.showAll());
     const hide = h('button.ih-btn', { title: 'Hide this panel (Tab)', html: icon('sidebar') });
     hide.addEventListener('click', () => app.toggleItems());
-    const head = h('div.items-head', h('span', { text: 'Items' }), h('span.ih-actions', showAll, hide));
+    const tabs = h('span.items-tabs');
+    for (const [key, label, tip] of [
+      ['items', 'Items', 'Bodies, sketches and planes in the design'],
+      ['history', 'History', 'The steps that made the design. Click one to change it.'],
+    ]) {
+      const t = h(`button.items-tab${this.tab === key ? '.on' : ''}`, { text: label, title: tip });
+      t.dataset.tab = key;
+      t.addEventListener('click', () => this.setTab(key));
+      tabs.append(t);
+    }
+    if (this.tab === 'history') showAll.hidden = true;
+    const head = h('div.items-head', tabs, h('span.ih-actions', showAll, hide));
     const scroll = h('div.items-scroll');
+    if (this.tab === 'history') {
+      this.historyList.render(scroll);
+      const foot = h('div.items-foot', { text: this.historyList.footText() });
+      this.el.append(head, scroll, foot);
+      scroll.querySelector('.step.selected')?.scrollIntoView({ block: 'nearest' });
+      return;
+    }
     const q = this.query.trim().toLowerCase();
     const match = (x) => !q || x.name.toLowerCase().includes(q);
     const solids = doc.bodies.filter((b) => b.kind !== 'mesh');
@@ -77,6 +99,13 @@ export class ItemsPanel {
     });
     this.el.append(head, scroll, foot);
     scroll.querySelector('.item.selected')?.scrollIntoView({ block: 'nearest' });
+  }
+
+  setTab(tab) {
+    if (this.tab === tab) return;
+    this.tab = tab;
+    this.app.selection.setHover(null);
+    this.render();
   }
 
   group(key, title, list, kind, rows) {

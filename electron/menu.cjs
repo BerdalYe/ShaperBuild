@@ -114,6 +114,7 @@ function buildMenu({ send, recent = [], isDev = false }) {
         cmd('Light / Dark Theme', 'toggle-theme'),
         { type: 'separator' },
         hint('Items Panel', 'toggle-items', 'Tab'),
+        hint('Design History', 'show-history', 'Shift+H'),
         cmd('Tool Names in Tools Menu', 'toggle-tool-labels'),
         { role: 'togglefullscreen' },
         ...(isDev ? [{ type: 'separator' }, { role: 'reload' }, { role: 'toggleDevTools' }] : []),

@@ -4,6 +4,7 @@
 //
 // Every operation is functional: it reads shapes by id and stores results
 // under new ids, so undo on the main thread is just swapping ids.
+import { closestOnEntity } from '../core/geom2d.js';
 
 const EPS = 1e-7;
 
@@ -569,6 +570,7 @@ export class Kernel {
           centroid: [c.X(), c.Y(), c.Z()],
           positions: mesh.positions,
           indices: mesh.indices,
+          entities: this.boundaryEntities(face, sketch, f, r),
         });
       }
       this.regionCache.set(sketch.id, keep);
@@ -576,6 +578,33 @@ export class Kernel {
     } finally {
       r.free();
     }
+  }
+
+  // Ids of the sketch curves that form a region's outline (and holes):
+  // each boundary edge belongs to the curve nearest its midpoint.
+  boundaryEntities(face, sketch, f, r) {
+    const oc = this.oc;
+    const ids = new Set();
+    const ents = sketch.entities.filter((e) => !e.construction && e.type !== 'point');
+    for (const e of this.explore(face, this.T.TopAbs_EDGE)) {
+      try {
+        const ad = r(new oc.BRepAdaptor_Curve(oc.TopoDS.Edge(e)));
+        const P = r(ad.Value((ad.FirstParameter() + ad.LastParameter()) / 2));
+        const v = [P.X() - f.o[0], P.Y() - f.o[1], P.Z() - f.o[2]];
+        const q = [dot(v, f.x), dot(v, f.y)];
+        let best = null;
+        for (const en of ents) {
+          const d = closestOnEntity(q, en).d;
+          if (!best || d < best.d) best = { id: en.id, d };
+        }
+        if (best?.id) ids.add(best.id);
+      } catch {
+        // Unusual edges are skipped.
+      } finally {
+        e.delete();
+      }
+    }
+    return [...ids].sort();
   }
 
   // Exact polylines (plane coordinates) for spline entities, for display.
@@ -617,6 +646,10 @@ export class Kernel {
     const indices = this.heapCopy(Uint32Array, raw.getTrianglesPtr(), raw.getTrianglesSize());
     raw.delete();
     return { positions, indices };
+  }
+
+  dropSketches({ ids }) {
+    for (const id of ids || []) this.dropSketch(id);
   }
 
   dropSketch(sketchId) {

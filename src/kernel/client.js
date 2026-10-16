@@ -1,5 +1,6 @@
 // Promise-based client for the geometry worker.
 import { Emitter } from '../core/events.js';
+import { RECORDED } from '../core/replay.js';
 
 export class KernelClient extends Emitter {
   constructor(url = new URL('./worker.js', import.meta.url)) {
@@ -26,8 +27,11 @@ export class KernelClient extends Emitter {
     this.pending.delete(msg.id);
     this.busy--;
     this.emit('busy', this.busy > 0);
-    if (msg.error) p.reject(new KernelError(msg.error));
-    else p.resolve(msg.result);
+    if (msg.error) return p.reject(new KernelError(msg.error));
+    const res = msg.result;
+    // Remember how a body-changing result was made (for the design history).
+    if (RECORDED.has(p.method) && res && Array.isArray(res.bodies)) res.calls = [{ method: p.method, args: p.args, n: res.bodies.length }];
+    p.resolve(res);
   }
 
   call(method, args = {}) {
@@ -35,7 +39,7 @@ export class KernelClient extends Emitter {
     this.busy++;
     this.emit('busy', true);
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      this.pending.set(id, { resolve, reject, method, args });
       this.worker.postMessage({ id, method, args });
     });
   }
