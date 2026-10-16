@@ -1,6 +1,7 @@
 # Third-party software in ShaperBuild
 
-ShaperBuild itself is open source under the MIT licence ([LICENSE](LICENSE)).
+ShaperBuild itself is open source under the GNU General Public License,
+version 3 or later ([LICENSE](LICENSE)).
 It includes the open-source software listed below. Each part keeps
 its own licence. The licence texts are in this repository (paths below),
 in the installed app's `resources/licenses` folder, and in the app under

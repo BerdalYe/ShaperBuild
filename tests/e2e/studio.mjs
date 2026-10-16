@@ -248,7 +248,7 @@ try {
   });
   await win.waitForSelector('.lic-row');
   assert.equal(await win.locator('.lic-row').count(), 9);
-  await win.waitForFunction(() => document.querySelector('.lic-text')?.textContent.includes('MIT License'));
+  await win.waitForFunction(() => document.querySelector('.lic-text')?.textContent.includes('GNU GENERAL PUBLIC LICENSE'));
   await win.locator('.lic-row', { hasText: 'Open CASCADE' }).click();
   await win.waitForFunction(() => document.querySelector('.lic-text')?.textContent.includes('GNU LESSER GENERAL PUBLIC LICENSE'));
   await win.locator('.lic-row', { hasText: 'Manifold' }).click();

@@ -1,6 +1,6 @@
 # ShaperBuild
 
-A free, open-source desktop 3D CAD app for Windows, macOS and Linux: sketch on any flat surface, pull shapes into 3D, round and combine them, and export for 3D printing or other CAD tools. It opens and edits **STL** files too. In English and Norwegian (bokmål). MIT licence.
+A free, open-source desktop 3D CAD app for Windows, macOS and Linux: sketch on any flat surface, pull shapes into 3D, round and combine them, and export for 3D printing or other CAD tools. It opens and edits **STL** files too. In English and Norwegian (bokmål). Free software under the GNU GPL.
 
 ![ShaperBuild](docs/screenshot.png)
 
@@ -157,7 +157,7 @@ build/           app icon
 
 ## Licence, third-party software and privacy
 
-ShaperBuild is free and open-source software under the [MIT licence](LICENSE): anyone may use, copy, change and share it, also commercially, as long as the copyright notice and licence stay with it. Contributions are welcome through pull requests.
+ShaperBuild is free and open-source software under the [GNU General Public License, version 3 or later](LICENSE). Anyone may use, copy, change and share it, also commercially, but copies and changed versions must stay open source under the same licence, with their source code available. It comes with no warranty. Contributions are welcome through pull requests and are shared under the same licence. Copyright © 2026 BerdalYe and contributors.
 
 ShaperBuild uses OpenCascade via replicad-opencascadejs (LGPL-2.1, kept as a separate, replaceable library), Manifold (Apache-2.0), three.js (MIT), opentype.js (MIT), the Inter font (OFL-1.1) and Electron (MIT). [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists everything with versions and where the licence texts are; the app shows them under *Help → Open-source licences*.
 

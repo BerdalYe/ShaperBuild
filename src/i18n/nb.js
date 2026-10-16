@@ -1521,8 +1521,6 @@ export const NB = {
   'This file cannot be opened': 'Denne filen kan ikke åpnes',
   '.shapr files store their shapes in a closed format that ShaperBuild cannot read.': '.shapr-filer lagrer formene i et lukket format som ShaperBuild ikke kan lese.',
   'Open the design in the program that made it and export it as STEP (best: the shapes stay editable) or 3MF/STL. Then import that file here.': 'Åpne modellen i programmet som laget den, og eksporter den som STEP (best: formene kan fortsatt redigeres) eller 3MF/STL. Importer så den filen her.',
-  'ShaperBuild is open source (MIT) and uses this open-source software. Click one to read its licence. The geometry engine is a separate, unchanged library that can be replaced; its source code is at github.com/sgenoud/replicad and github.com/Open-Cascade-SAS/OCCT.': 'ShaperBuild har åpen kildekode (MIT) og bruker denne programvaren med åpen kildekode. Klikk på en for å lese lisensen. Geometrimotoren er et eget, uendret bibliotek som kan byttes ut; kildekoden finnes på github.com/sgenoud/replicad og github.com/Open-Cascade-SAS/OCCT.',
-  'Free and open-source software under the MIT licence.': 'Gratis programvare med åpen kildekode under MIT-lisensen.',
   BOTTOM: 'BUNN',
   BACK: 'BAK',
   LEFT: 'VENSTRE',
@@ -1531,6 +1529,9 @@ export const NB = {
   'RIGHT VIEW': 'FRA HØYRE',
   'Orbit mode: drag with the left mouse button. Press Esc or click the button again to stop.': 'Snumodus: dra med venstre museknapp. Trykk Esc eller klikk på knappen igjen for å avslutte.',
   'Pan mode: drag with the left mouse button. Press Esc or click the button again to stop.': 'Panoreringsmodus: dra med venstre museknapp. Trykk Esc eller klikk på knappen igjen for å avslutte.',
+  'ShaperBuild is open source (GNU GPL 3.0 or later) and uses this open-source software. Click one to read its licence. The geometry engine is a separate, unchanged library that can be replaced; its source code is at github.com/sgenoud/replicad and github.com/Open-Cascade-SAS/OCCT.': 'ShaperBuild har åpen kildekode (GNU GPL 3.0 eller nyere) og bruker denne programvaren med åpen kildekode. Klikk på en for å lese lisensen. Geometrimotoren er et eget, uendret bibliotek som kan byttes ut; kildekoden finnes på github.com/sgenoud/replicad og github.com/Open-Cascade-SAS/OCCT.',
+  'Free and open-source software: you may share and change it under the GNU General Public License, version 3 or later. It comes with no warranty.': 'Fri programvare med åpen kildekode: du kan dele og endre den under GNU General Public License, versjon 3 eller nyere. Den leveres uten garanti.',
+  'GNU GPL 3.0 or later': 'GNU GPL 3.0 eller nyere',
 };
 
 const upper = (s) => s.charAt(0).toUpperCase() + s.slice(1);

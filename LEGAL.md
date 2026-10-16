@@ -6,11 +6,20 @@ summary, not legal advice; for a business launch, have a lawyer check it.
 
 ## Done in the project
 
-- **ShaperBuild's own licence: MIT.** ShaperBuild is free and open-source
-  software under the MIT licence ([LICENSE](LICENSE)). Anyone may use,
-  copy, change, share and even sell it, as long as the copyright notice
-  and the licence text stay with it; there is no warranty. The MIT licence
-  fits with every library below, including the LGPL geometry engine.
+- **ShaperBuild's own licence: GNU GPL, version 3 or later.** ShaperBuild
+  is free and open-source software ([LICENSE](LICENSE)). Anyone may use,
+  copy, change, share and even sell it, but whoever shares a copy or a
+  changed version must share it under the same licence and give people
+  its source code. There is no warranty. The About box says this, as the
+  GPL asks for programs with a user interface.
+  - Version 3 is needed because Manifold uses Apache-2.0, which fits with
+    GPL version 3 but not version 2. The LGPL geometry engine and the MIT,
+    ISC, BSD-style and OFL parts all fit with GPL-3.0.
+  - Publishing installers on GitHub next to the source code (the same
+    tagged version) is enough to meet the "give people the source" rule.
+  - Pull requests from others are shared under the same licence. If you
+    may want to change the licence later, ask contributors to agree to
+    that, or keep track of who wrote what.
 - **Open-source licences of the libraries.** Every library the app ships is listed in
   [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and inside the app
   (*Help → Open-source licences*), and the licence texts are included in
