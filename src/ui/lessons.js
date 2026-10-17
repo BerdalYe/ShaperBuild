@@ -149,7 +149,7 @@ export const LESSONS = [
         },
         {
           title: 'Change a size',
-          text: 'Click the <b>50</b> on the rectangle, type <kbd>70</kbd> and press <kbd>Enter</kbd>. The rectangle stretches.',
+          text: 'Click the <b>50</b> on the rectangle, type <kbd>70</kbd> and press <kbd>Enter</kbd>. The rectangle stretches.<br><small>You can also click the shape and type its <b>Width</b> or <b>Height</b> in the bar at the bottom.</small>',
           place: 'top',
           done: () => tut.didMatch(/^Set /),
         },

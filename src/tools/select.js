@@ -3,7 +3,8 @@
 // arrow on selected profiles.
 import { Tool } from './base.js';
 import { moveSketchPoint, translateEntity, sub, add } from '../core/geom2d.js';
-import { solveSketch, refsAt, entityPoints } from '../core/solver.js';
+import { solveSketch, refsAt, entityPoints, CONSTRAINT_INFO } from '../core/solver.js';
+import { toast } from '../ui/overlays.js';
 import { planeFrame, to2D, rayPlane } from '../core/plane.js';
 import { sampleEntity } from '../core/geom2d.js';
 
@@ -160,7 +161,18 @@ export class SelectTool extends Tool {
   startPointDrag(hit) {
     const sketch = this.app.doc.sketch(hit.sketchId);
     if (!sketch) return { kind: 'none' };
+    this.sizeHint(sketch);
     return { kind: 'point', sketch, from: hit.point };
+  }
+
+  // Dimensions keep their sizes while you drag, so the shape moves instead
+  // of stretching; say how to change a size (now and then, not every drag).
+  sizeHint(sketch) {
+    if (!(sketch.constraints || []).some((c) => CONSTRAINT_INFO[c.type]?.dimension)) return;
+    const now = Date.now();
+    if (now - (this.sizeHintAt || 0) < 30000) return;
+    this.sizeHintAt = now;
+    toast('Sizes with a dimension stay as they are when you drag. To change one, click its label (like 38 mm) or type it in the bar at the bottom.', { ms: 5000 });
   }
 
   startCurveDrag(hit, e) {

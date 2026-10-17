@@ -9,6 +9,31 @@ const { win, errors, close } = await launch();
 const step = (msg) => console.log(`• ${msg}`);
 const A = (fn, arg) => win.evaluate(fn, arg);
 const width = (sel) => A((sel) => Math.round(document.querySelector(sel).getBoundingClientRect().width), sel);
+const screen = (p) =>
+  A((p) => {
+    const a = window.__shaper;
+    const s = a.vp.worldToScreen(p);
+    const r = a.vp.canvas.getBoundingClientRect();
+    return [r.left + s[0], r.top + s[1]];
+  }, p);
+async function clickAt(p) {
+  const [x, y] = await screen(p);
+  await win.mouse.move(x, y, { steps: 3 });
+  await win.waitForTimeout(60);
+  await win.mouse.click(x, y);
+  await win.waitForTimeout(150);
+}
+async function idle() {
+  await win.waitForFunction(() => window.__shaper.kernel.busy === 0, null, { timeout: 60000 });
+  await win.waitForTimeout(250);
+}
+const vol = () =>
+  A(async () => {
+    const a = window.__shaper;
+    const r = await a.kernel.call('measure', { items: [{ kind: 'body', id: a.doc.bodies[0].shapeId }] });
+    return r.items[0].volume;
+  });
+const near = (a, b, tol = 0.5) => assert.ok(Math.abs(a - b) < tol, `${a} != ${b}`);
 
 async function drag(sel, dx) {
   const box = await win.locator(sel).boundingBox();
@@ -152,6 +177,81 @@ try {
   assert.equal(start.designs, folder);
   assert.ok(path.isAbsolute(folder));
   void OUT;
+
+  step('a sketch shows its sizes in the bar; typing one resizes the body made from it');
+  await A(async () => {
+    const a = window.__shaper;
+    await a.files.reset();
+    a.home.hide();
+    a.vp.rig.fromJSON({ az: 0.5, el: 0.6, dist: 200, target: [0, 0, 0], ortho: false });
+  });
+  await win.waitForTimeout(300);
+  await win.keyboard.press('r');
+  await clickAt([-19, -19, 0]);
+  await win.keyboard.type('38');
+  await win.keyboard.press('Tab');
+  await win.keyboard.type('38');
+  await win.keyboard.press('Enter');
+  await idle();
+  await win.keyboard.press('Escape');
+  await win.waitForFunction(() => window.__shaper.regionCache.get('s1')?.data?.regions.length === 1);
+  await clickAt([0, 0, 0]);
+  await win.keyboard.press('e');
+  await win.waitForTimeout(300);
+  await win.keyboard.type('20');
+  await win.waitForTimeout(500);
+  await win.keyboard.press('Enter');
+  await idle();
+  await clickAt([0, 0, 20]);
+  await win.keyboard.press('h');
+  await win.waitForTimeout(300);
+  await win.keyboard.type('2');
+  await win.waitForTimeout(500);
+  await win.keyboard.press('Enter');
+  await idle();
+  near(await vol(), 38 * 38 * 20 - 34 * 34 * 18);
+  await win.locator('#items .item', { hasText: 'Sketch 1' }).click();
+  const widthIn = win.locator('#context-bar .cb-sizes input[data-size="Width"]');
+  await widthIn.waitFor();
+  assert.equal(await win.locator('#context-bar .cb-sizes input[data-size="Height"]').inputValue(), '38');
+  await widthIn.fill('50');
+  await widthIn.press('Enter');
+  await idle();
+  await win.waitForTimeout(300);
+  near(await vol(), 50 * 38 * 20 - 46 * 34 * 18);
+  await shot(win, '86-sketch-sizes');
+
+  step('a sketch drawn without typed sizes still offers its width and height');
+  await A(async () => {
+    const a = window.__shaper;
+    await a.files.reset();
+    a.settings.snap = true;
+  });
+  await win.keyboard.press('r');
+  await clickAt([-10, -10, 0]);
+  await clickAt([10, 6, 0]);
+  await idle();
+  await win.keyboard.press('Escape');
+  await win.waitForFunction(() => window.__shaper.regionCache.get('s1')?.data?.regions.length === 1);
+  await clickAt([0, 0, 0]);
+  const w2 = win.locator('#context-bar .cb-sizes input[data-size="Width"]');
+  await w2.waitFor();
+  assert.equal(await w2.inputValue(), '20');
+  await w2.fill('30');
+  await w2.press('Enter');
+  await win.waitForTimeout(300);
+  const lengths = await A(() => window.__shaper.doc.sketches[0].constraints.filter((c) => c.type === 'length').map((c) => c.value));
+  assert.deepEqual(lengths, [30]);
+
+  step('dragging a corner held by its sizes explains how to change them');
+  await A(() => window.__shaper.selection.clear());
+  const corner = await A(() => window.__shaper.doc.sketches[0].entities[0].a);
+  const [cx, cy] = await screen([corner[0], corner[1], 0]);
+  await win.mouse.move(cx, cy, { steps: 3 });
+  await win.mouse.down();
+  await win.mouse.move(cx + 30, cy + 10, { steps: 5 });
+  await win.mouse.up();
+  await win.waitForSelector('.toast', { hasText: 'click its label' });
 
   assert.deepEqual(errors, [], `renderer errors:\n${errors.join('\n')}`);
   console.log('\nfeedback: all passed');
