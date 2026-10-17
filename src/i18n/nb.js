@@ -1723,6 +1723,10 @@ export const NB = {
   'Choose what it shows': 'Velg hva den viser',
   'Turn views on or off, pick the scale and the paper size, and add a title. Sizes are added for you.': 'Slå visninger av eller på, velg målestokk og papirstørrelse, og legg til en tittel. Målene legges til for deg.',
   'Save it as <b>PDF</b> to print, <b>SVG</b> for the web, or <b>DXF</b> for laser cutters and CNC machines.': 'Lagre den som <b>PDF</b> for utskrift, <b>SVG</b> for nettet eller <b>DXF</b> for laserkuttere og CNC-maskiner.',
+  'Sizes with a dimension stay as they are when you drag. To change one, click its label (like 38 mm) or type it in the bar at the bottom.': 'Mål med en målsetting beholder størrelsen når du drar. For å endre et mål klikker du på merkelappen (som 38 mm) eller skriver det i linjen nederst.',
+  'Type a new size and press Enter. Bodies made from this sketch follow.': 'Skriv et nytt mål og trykk Enter. Objekter laget av denne skissen følger etter.',
+  'Click the <b>50</b> on the rectangle, type <kbd>70</kbd> and press <kbd>Enter</kbd>. The rectangle stretches.<br><small>You can also click the shape and type its <b>Width</b> or <b>Height</b> in the bar at the bottom.</small>': 'Klikk på <b>50</b> ved rektangelet, skriv <kbd>70</kbd> og trykk <kbd>Enter</kbd>. Rektangelet strekkes.<br><small>Du kan også klikke på formen og skrive <b>Bredde</b> eller <b>Høyde</b> i linjen nederst.</small>',
+  'Resize sketch': 'Endre størrelse på skissen',
 };
 
 const upper = (s) => s.charAt(0).toUpperCase() + s.slice(1);

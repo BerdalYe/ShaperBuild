@@ -291,7 +291,12 @@ svg.icon {
   color: var(--text);
 }
 
-.vp-label.dim-label:hover,
+.vp-label.dim-label:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
 .vp-label.cons-glyph:hover {
   border-color: var(--accent);
   color: var(--text);
@@ -1224,6 +1229,15 @@ body.resizing-panel .items-panel {
 .cb-prop .num-input {
   width: 84px;
   height: 28px;
+}
+
+/* Several sizes of a sketch: a little space between each size and the next. */
+.cb-sizes .num-input {
+  width: 64px;
+}
+
+.cb-sizes .num-input + span {
+  margin-right: 6px;
 }
 
 .view-controls {

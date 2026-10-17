@@ -797,11 +797,15 @@ export class App {
   }
 
   // Show sketch entities without committing (while dragging).
-  previewSketch(sketchId, entities) {
+  // Show a sketch as it is being dragged; `constraints` carries the sizes
+  // that follow the drag, so their labels move and count along.
+  previewSketch(sketchId, entities, constraints = null) {
     const view = this.vp.sketchViews.get(sketchId);
     const sk = this.doc.sketch(sketchId);
     if (!view || !sk) return;
     view.update({ ...sk, entities }, null);
+    this.constraints.preview = { sketchId, entities, constraints: constraints || sk.constraints };
+    this.constraints.update();
     this.vp.requestRender();
   }
 

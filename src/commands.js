@@ -150,7 +150,9 @@ export class Commands {
 
   // Replace a sketch's entities. Constraints on removed entities (and on
   // ids in `dropFor`) are dropped.
-  setSketchEntities(sketchId, entities, label = 'Edit sketch', { dropFor = [] } = {}) {
+  // `constraints` replaces the sketch's constraints (e.g. sizes changed by
+  // dragging).
+  setSketchEntities(sketchId, entities, label = 'Edit sketch', { dropFor = [], constraints = null } = {}) {
     this.doc.apply(label, (d) => {
       const ents = d.withIds(entities);
       if (!ents.length) {
@@ -158,7 +160,7 @@ export class Commands {
         return d.removeSketch(sketchId);
       }
       const sk = d.sketch(sketchId);
-      const cons = pruneConstraints(dropConstraintsFor(sk.constraints, dropFor), ents);
+      const cons = pruneConstraints(dropConstraintsFor(constraints || sk.constraints, dropFor), ents);
       d.updateSketch(sketchId, { entities: ents, constraints: cons });
     });
   }

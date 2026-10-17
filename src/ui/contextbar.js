@@ -158,6 +158,11 @@ export class ContextBar {
     const app = this.app;
     if (list.length === 1 && list[0].kind === 'image') return this.imageProps(list[0].imageId);
     if (list.length === 1 && list[0].kind === 'constraint') return null;
+    // A shape (region), points or the whole sketch: the sketch's sizes.
+    const sketches = new Set(list.map((it) => it.sketchId));
+    if (sketches.size === 1 && !sketches.has(undefined) && list.some((it) => it.kind !== 'curve') && list.every((it) => ['region', 'sketch', 'spoint', 'curve'].includes(it.kind))) {
+      return this.sketchProps(list[0].sketchId);
+    }
     if (list.length !== 1 || list[0].kind !== 'curve') return null;
     const it = list[0];
     const sk = app.doc.sketch(it.sketchId);
@@ -169,9 +174,11 @@ export class ContextBar {
     const value = type === 'length' ? dist(en.a, en.b) : type === 'diameter' ? en.r * 2 : en.r;
     const existing = (sk.constraints || []).find((c) => c.type === type && c.e === en.id);
     const inp = h('input.num-input', { type: 'text', value: formatLength(value, app.units, { suffix: false }) });
+    let done = false;
     const commit = () => {
       const v = parseLength(inp.value, app.units);
-      if (!(v > 0) || Math.abs(v - value) < 1e-9) return;
+      if (done || !(v > 0) || Math.abs(v - value) < 1e-9) return;
+      done = true;
       if (existing) app.cmd.setConstraintValue(sk.id, existing.id, v);
       else app.cmd.addConstraint(sk.id, { type, e: en.id, value: v });
       app.selection.set([it]);
@@ -184,4 +191,85 @@ export class ContextBar {
     inp.addEventListener('change', commit);
     return h('span.cb-prop', h('span', { text: label }), inp, h('span', { text: app.units }));
   }
+
+  // The sizes of a sketch, ready to type over: its dimensions, or for a
+  // sketch without them, the width and height of its rectangle and the
+  // sizes of its circles. Typing a size adds or changes a dimension, and
+  // bodies made from the sketch follow.
+  sketchProps(sketchId) {
+    const app = this.app;
+    const sk = app.doc.sketch(sketchId);
+    const rows = sk ? sketchSizes(sk) : [];
+    if (!rows.length) return null;
+    const box = h('span.cb-prop.cb-sizes');
+    for (const row of rows) {
+      const inp = h('input.num-input', { type: 'text', value: formatLength(row.value, app.units, { suffix: false }) });
+      inp.dataset.size = row.label;
+      // Enter applies; the change event that follows when the bar is
+      // redrawn must not add the dimension a second time.
+      let done = false;
+      const commit = () => {
+        const v = parseLength(inp.value, app.units);
+        if (done || !(v > 0) || Math.abs(v - row.value) < 1e-9) return;
+        done = true;
+        const keep = app.selection.list;
+        if (row.cid) app.cmd.setConstraintValue(sk.id, row.cid, v);
+        else app.cmd.addConstraint(sk.id, { type: row.type, e: row.e, value: v });
+        app.selection.set(keep);
+      };
+      inp.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') commit();
+        if (e.key === 'Escape') inp.blur();
+      });
+      inp.addEventListener('change', commit);
+      // Show which curve a size belongs to.
+      inp.addEventListener('mouseenter', () => app.selection.setHover({ kind: 'curve', sketchId: sk.id, entityId: row.e }));
+      inp.addEventListener('mouseleave', () => app.selection.setHover(null));
+      box.append(h('span', { text: row.label }), inp, h('span', { text: app.units }));
+    }
+    box.title = t('Type a new size and press Enter. Bodies made from this sketch follow.');
+    return box;
+  }
+}
+
+const SIZE_TYPES = { line: 'length', circle: 'diameter', arc: 'radius' };
+
+// [{ label, type, e, value, cid? }]: at most four sizes worth showing.
+export function sketchSizes(sk) {
+  const cons = sk.constraints || [];
+  const ents = sk.entities.filter((en) => !en.construction);
+  const byId = new Map(sk.entities.map((en) => [en.id, en]));
+  const has = (type, id) => cons.some((c) => c.type === type && c.e === id);
+  // Level lines read as widths, upright ones as heights.
+  const lineLabel = (en) => {
+    const dx = Math.abs(en.b[0] - en.a[0]);
+    const dy = Math.abs(en.b[1] - en.a[1]);
+    if (has('horizontal', en.id) || dy < 1e-9 * Math.max(1, dx)) return 'Width';
+    if (has('vertical', en.id) || dx < 1e-9 * Math.max(1, dy)) return 'Height';
+    return 'Length';
+  };
+  const size = (en, type) => (type === 'length' ? dist(en.a, en.b) : type === 'diameter' ? en.r * 2 : en.r);
+  const rows = [];
+  const seen = new Set();
+  for (const c of cons) {
+    const en = byId.get(c.e);
+    if (!en || SIZE_TYPES[en.type] !== c.type) continue;
+    const label = c.type === 'length' ? lineLabel(en) : c.type === 'diameter' ? 'Diameter' : 'Radius';
+    rows.push({ label, type: c.type, e: en.id, value: c.value, cid: c.id });
+    seen.add(label);
+  }
+  // Sketches without dimensions (drawn by clicking): offer the obvious ones.
+  // Long outlines (text, traced pictures) have no single size worth showing.
+  if (ents.length <= 12) {
+    for (const en of ents) {
+      const type = SIZE_TYPES[en.type];
+      if (!type || cons.some((c) => c.type === type && c.e === en.id)) continue;
+      const label = type === 'length' ? lineLabel(en) : type === 'diameter' ? 'Diameter' : 'Radius';
+      if (label === 'Length' || seen.has(label)) continue;
+      rows.push({ label, type, e: en.id, value: size(en, type) });
+      seen.add(label);
+    }
+  }
+  return rows.slice(0, 4);
 }
