@@ -69,8 +69,9 @@ try {
   near(len(sk.entities[1]), 20);
   isRect(sk.entities);
 
-  step('dragging a corner keeps the rectangle and its sizes');
+  step('dragging a corner stretches the rectangle, and its sizes follow');
   const corner = sk.entities[1].b;
+  const opposite = sk.entities.map((e) => e.a).sort((p, q) => Math.hypot(q[0] - corner[0], q[1] - corner[1]) - Math.hypot(p[0] - corner[0], p[1] - corner[1]))[0];
   const [cx, cy] = await screen([corner[0], corner[1], 0]);
   await win.mouse.move(cx, cy, { steps: 3 });
   await win.mouse.down();
@@ -80,12 +81,18 @@ try {
   await win.waitForTimeout(200);
   sk = await sketch();
   isRect(sk.entities);
-  near(len(sk.entities[0]), 60);
-  near(len(sk.entities[1]), 20);
-  assert.ok(Math.abs(sk.entities[1].b[0] - corner[0]) > 1, 'the rectangle moved');
+  const W1 = len(sk.entities[0]);
+  const H1 = len(sk.entities[1]);
+  near(Math.abs(W1 - 60), 15, 1.5);
+  near(Math.abs(H1 - 20), 8, 1.5);
+  const dimOf = (e) => sk.constraints.find((c) => c.type === 'length' && c.e === e.id).value;
+  near(dimOf(sk.entities[0]), W1, 1e-6);
+  near(dimOf(sk.entities[1]), H1, 1e-6);
+  // The opposite corner stays where it was.
+  assert.ok(sk.entities.some((e) => Math.hypot(e.a[0] - opposite[0], e.a[1] - opposite[1]) < 1e-3), 'the opposite corner stays');
 
-  step('remove the height dimension, then drag: the height changes but it stays a rectangle');
-  const heightC = sk.constraints.find((c) => c.type === 'length' && c.value === 20);
+  step('remove the height dimension, then drag up: only the height changes and it stays a rectangle');
+  const heightC = sk.constraints.find((c) => c.type === 'length' && c.e === sk.entities[1].id);
   await A(([sid, cid]) => window.__shaper.cmd.removeConstraints([{ sketchId: sid, cid }]), [sk.id, heightC.id]);
   sk = await sketch();
   const c2 = sk.entities[1].b;
@@ -98,8 +105,8 @@ try {
   await win.waitForTimeout(200);
   sk = await sketch();
   isRect(sk.entities);
-  near(len(sk.entities[0]), 60);
-  near(len(sk.entities[1]), 30, 0.6);
+  near(len(sk.entities[0]), W1, 1e-3);
+  near(Math.abs(len(sk.entities[1]) - H1), 10, 0.6);
 
   step('circle with typed diameter, then make a line tangent to it');
   await win.keyboard.press('c');
@@ -176,7 +183,8 @@ try {
     const a = window.__shaper;
     return a.regionCache.get(a.doc.sketches.at(-1).id).data.regions.map((r) => r.area);
   });
-  assert.ok(regions.some((a) => Math.abs(a - 60 * 30) < 20), `regions ${regions}`);
+  const rect = (await sketch()).entities;
+  assert.ok(regions.some((a) => Math.abs(a - len(rect[0]) * len(rect[1])) < 20), `regions ${regions}`);
 
   assert.deepEqual(errors, [], `renderer errors:\n${errors.join('\n')}`);
   console.log('\nconstraints: all steps passed');

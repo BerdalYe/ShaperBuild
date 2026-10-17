@@ -221,6 +221,30 @@ try {
   near(await vol(), 50 * 38 * 20 - 46 * 34 * 18);
   await shot(win, '86-sketch-sizes');
 
+  step('dragging a side of the sketch under a box resizes the box');
+  await A(() => window.__shaper.selection.clear());
+  const side = await A(() => {
+    const sk = window.__shaper.doc.sketches[0];
+    const vert = sk.entities.filter((e) => Math.abs(e.a[0] - e.b[0]) < 1e-4);
+    const right = vert.sort((u, v) => v.a[0] - u.a[0])[0];
+    return { x: right.a[0], y: (right.a[1] + right.b[1]) / 2 };
+  });
+  {
+    const [x0, y0] = await screen([side.x, side.y, 0]);
+    const [x1, y1] = await screen([side.x + 10, side.y, 0]);
+    await win.mouse.move(x0, y0, { steps: 3 });
+    await win.waitForTimeout(80);
+    await win.mouse.down();
+    await win.mouse.move(x1, y1, { steps: 8 });
+    await win.waitForTimeout(150);
+    await win.mouse.up();
+    await idle();
+    await win.waitForTimeout(400);
+  }
+  const newWidth = await A(() => window.__shaper.doc.sketches[0].constraints.find((c) => c.type === 'length' && c.value !== 38).value);
+  near(newWidth, 60, 1.5);
+  near(await vol(), newWidth * 38 * 20 - (newWidth - 4) * 34 * 18);
+
   step('a sketch drawn without typed sizes still offers its width and height');
   await A(async () => {
     const a = window.__shaper;
@@ -243,15 +267,69 @@ try {
   const lengths = await A(() => window.__shaper.doc.sketches[0].constraints.filter((c) => c.type === 'length').map((c) => c.value));
   assert.deepEqual(lengths, [30]);
 
-  step('dragging a corner held by its sizes explains how to change them');
+  step('drag a side of a shape to resize it; its size label follows');
   await A(() => window.__shaper.selection.clear());
-  const corner = await A(() => window.__shaper.doc.sketches[0].entities[0].a);
-  const [cx, cy] = await screen([corner[0], corner[1], 0]);
-  await win.mouse.move(cx, cy, { steps: 3 });
-  await win.mouse.down();
-  await win.mouse.move(cx + 30, cy + 10, { steps: 5 });
-  await win.mouse.up();
-  await win.waitForSelector('.toast', { hasText: 'click its label' });
+  const box2 = () =>
+    A(() => {
+      const sk = window.__shaper.doc.sketches[0];
+      const xs = sk.entities.flatMap((e) => [e.a[0], e.b[0]]);
+      const ys = sk.entities.flatMap((e) => [e.a[1], e.b[1]]);
+      const dims = (sk.constraints || []).filter((c) => c.type === 'length').map((c) => c.value);
+      return { w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys), dims, x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
+    });
+  let b = await box2();
+  assert.equal(b.dims.length, 1);
+  near(b.dims[0], b.w, 1e-6);
+  const dragWorld = async (from, to) => {
+    const [x0, y0] = await screen(from);
+    const [x1, y1] = await screen(to);
+    await win.mouse.move(x0, y0, { steps: 3 });
+    await win.waitForTimeout(80);
+    await win.mouse.down();
+    await win.mouse.move((x0 + x1) / 2, (y0 + y1) / 2, { steps: 5 });
+    await win.mouse.move(x1, y1, { steps: 5 });
+    await win.waitForTimeout(150);
+    await win.mouse.up();
+    await idle();
+  };
+  // The right side, from its middle, 10 mm further out.
+  const midY = (b.y0 + b.y1) / 2;
+  await dragWorld([b.x1, midY, 0], [b.x1 + 10, midY + 3, 0]);
+  const b2 = await box2();
+  // Snapping lands the side on the grid near where the pointer went.
+  near(b2.w, b.w + 10, 1.5);
+  near(b2.h, b.h, 1e-3);
+  near(b2.x0, b.x0, 1e-3);
+  near(b2.dims[0], b2.w, 1e-6);
+  near(b2.dims[0], Math.round(b2.dims[0]), 1e-9);
+  assert.equal(await A(() => window.__shaper.doc.past.at(-1).label), 'Resize sketch');
+  step('drag a corner to change width and height at once');
+  await dragWorld([b2.x1, b2.y1, 0], [b2.x1 + 4, b2.y1 + 6, 0]);
+  const b3 = await box2();
+  near(b3.w, b2.w + 4, 1.5);
+  near(b3.h, b2.h + 6, 1.5);
+  near(b3.x0, b2.x0, 1e-3);
+  near(b3.y0, b2.y0, 1e-3);
+  near(b3.dims[0], b3.w, 1e-6);
+  await shot(win, '87-drag-resize');
+
+  step('drag the rim of a circle to change its size');
+  await A(() => window.__shaper.selection.clear());
+  await win.keyboard.press('c');
+  await clickAt([60, 0, 0]);
+  await win.keyboard.type('10');
+  await win.keyboard.press('Enter');
+  await idle();
+  await win.keyboard.press('Escape');
+  await win.keyboard.press('Escape');
+  const circleOf = () => A(() => window.__shaper.doc.sketches.flatMap((sk) => sk.entities.map((e) => ({ e, sk }))).find(({ e }) => e.type === 'circle'));
+  let ci = await circleOf();
+  near(ci.e.r, 5, 1e-6);
+  await dragWorld([ci.e.c[0] + 5, ci.e.c[1], 0], [ci.e.c[0] + 10, ci.e.c[1], 0]);
+  ci = await circleOf();
+  near(ci.e.r, 10, 1);
+  near(ci.e.c[0], 60, 1e-3);
+  near(ci.sk.constraints.find((c) => c.type === 'diameter').value, ci.e.r * 2, 1e-6);
 
   assert.deepEqual(errors, [], `renderer errors:\n${errors.join('\n')}`);
   console.log('\nfeedback: all passed');

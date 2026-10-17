@@ -62,8 +62,11 @@ export class ConstraintLayer {
     const seen = new Set();
     const active = this.activeSketches();
     const selected = new Set(app.selection.list.filter((it) => it.kind === 'constraint').map((it) => `${it.sketchId}:${it.cid}`));
+    // A sketch being dragged shows its sizes as they change.
+    const pv = this.preview;
+    const sketches = pv ? app.doc.sketches.map((s) => (s.id === pv.sketchId ? { ...s, entities: pv.entities, constraints: pv.constraints } : s)) : app.doc.sketches;
     if (!app.visual) {
-      for (const sk of app.doc.sketches) {
+      for (const sk of sketches) {
         if (sk.visible === false || !sk.constraints?.length) continue;
         const f = planeFrame(sk.plane);
         const stack = new Map();

@@ -3,8 +3,7 @@
 // arrow on selected profiles.
 import { Tool } from './base.js';
 import { moveSketchPoint, translateEntity, sub, add } from '../core/geom2d.js';
-import { solveSketch, refsAt, entityPoints, CONSTRAINT_INFO } from '../core/solver.js';
-import { toast } from '../ui/overlays.js';
+import { solveSketch, refsAt, entityPoints, measure, CONSTRAINT_INFO } from '../core/solver.js';
 import { planeFrame, to2D, rayPlane } from '../core/plane.js';
 import { sampleEntity } from '../core/geom2d.js';
 
@@ -29,6 +28,7 @@ export class SelectTool extends Tool {
   deactivate() {
     this.app.vp.overlay.clear('sel-');
     this.removeBox();
+    this.app.constraints.preview = null;
   }
 
   // With "Bodies only", a face stands for its whole body.
@@ -80,7 +80,15 @@ export class SelectTool extends Tool {
     this.drag = null;
     if (g) {
       if (g.kind === 'box') this.finishBox(d.x, d.y, e.x, e.y, e.shift || e.ctrl);
-      else if ((g.kind === 'point' || g.kind === 'curve') && g.entities) this.app.cmd.setSketchEntities(g.sketch.id, g.entities, g.kind === 'point' ? 'Move point' : 'Move curve');
+      else if (g.kind === 'point' || g.kind === 'curve') {
+        this.app.constraints.preview = null;
+        if (g.entities) {
+          const resized = g.constraints?.some((c, i) => c !== g.sketch.constraints[i]);
+          // Land exactly on the (rounded) new sizes.
+          if (resized) this.app.cmd.solveAndStore(g.sketch.id, g.entities, g.constraints, 'Resize sketch');
+          else this.app.cmd.setSketchEntities(g.sketch.id, g.entities, g.kind === 'point' ? 'Move point' : 'Move curve', { constraints: g.constraints });
+        }
+      }
       return;
     }
     this.click(d.hit, e);
@@ -161,18 +169,7 @@ export class SelectTool extends Tool {
   startPointDrag(hit) {
     const sketch = this.app.doc.sketch(hit.sketchId);
     if (!sketch) return { kind: 'none' };
-    this.sizeHint(sketch);
     return { kind: 'point', sketch, from: hit.point };
-  }
-
-  // Dimensions keep their sizes while you drag, so the shape moves instead
-  // of stretching; say how to change a size (now and then, not every drag).
-  sizeHint(sketch) {
-    if (!(sketch.constraints || []).some((c) => CONSTRAINT_INFO[c.type]?.dimension)) return;
-    const now = Date.now();
-    if (now - (this.sizeHintAt || 0) < 30000) return;
-    this.sizeHintAt = now;
-    toast('Sizes with a dimension stay as they are when you drag. To change one, click its label (like 38 mm) or type it in the bar at the bottom.', { ms: 5000 });
   }
 
   startCurveDrag(hit, e) {
@@ -183,7 +180,12 @@ export class SelectTool extends Tool {
     // Move every selected curve of this sketch if the grabbed one is selected.
     const grabbed = { kind: 'curve', sketchId: sketch.id, entityId: hit.entityId };
     const ids = sel.has(grabbed) ? sel.list.filter((it) => it.kind === 'curve' && it.sketchId === sketch.id).map((it) => it.entityId) : [hit.entityId];
-    return { kind: 'curve', sketch, start, ids: new Set(ids) };
+    const one = ids.length === 1 ? sketch.entities.find((en) => en.id === ids[0]) : null;
+    // A circle grabbed by its rim changes size (drag its centre to move it).
+    const circle = one?.type === 'circle' && start ? { id: one.id, r: one.r, grab: Math.hypot(start[0] - one.c[0], start[1] - one.c[1]) } : null;
+    // A side of a shape moves straight out or in, so the shape stretches.
+    const side = one?.type === 'line' && (refsAt(sketch.entities, one.a).length > 1 || refsAt(sketch.entities, one.b).length > 1) ? one : null;
+    return { kind: 'curve', sketch, start, ids: new Set(ids), circle, side };
   }
 
   updateSketchDrag(g, e) {
@@ -198,22 +200,53 @@ export class SelectTool extends Tool {
     if (single && !sk.constraints?.length) {
       const res = solveSketch(sk.entities, [], { drags: [{ ref: single, to: p }], loose: [single] });
       g.entities = res.entities;
-    } else if (sk.constraints?.length) {
+    } else if (sk.constraints?.length || g.kind === 'curve') {
       // Let the constraint solver decide how the rest of the sketch follows.
-      let drags;
+      // Sizes follow the drag: dimensions let go while you drag and take the
+      // new sizes (except those typed with a variable, which stay).
+      const free = (c) => CONSTRAINT_INFO[c.type]?.dimension && !c.expr;
+      const held = (sk.constraints || []).filter((c) => !free(c));
+      let ents = sk.entities;
+      let drags = [];
       if (g.kind === 'point') drags = refsAt(sk.entities, g.from).slice(0, 1).map((ref) => ({ ref, to: p }));
-      else {
-        const d = sub(p, g.start);
+      else if (g.circle) {
+        const en = sk.entities.find((x) => x.id === g.circle.id);
+        const r = Math.max(1e-3, g.circle.r + Math.hypot(p[0] - en.c[0], p[1] - en.c[1]) - g.circle.grab);
+        ents = sk.entities.map((x) => (x.id === en.id ? { ...x, r } : x));
+      } else {
+        let d = sub(p, g.start);
+        if (g.side) {
+          // The side follows the pointer across itself (so it lands on the
+          // grid when snapping), not along itself.
+          const dir = sub(g.side.b, g.side.a);
+          const len = Math.hypot(dir[0], dir[1]) || 1;
+          const n = [-dir[1] / len, dir[0] / len];
+          const k = p[0] * n[0] + p[1] * n[1] - (g.side.a[0] * n[0] + g.side.a[1] * n[1]);
+          d = [n[0] * k, n[1] * k];
+        }
         drags = sk.entities.filter((en) => g.ids.has(en.id)).flatMap((en) => entityPoints(en).map((pt) => ({ ref: { e: en.id, p: pt.p }, to: add(pt.at, d) })));
       }
-      const res = solveSketch(sk.entities, sk.constraints, { drags, loose: single ? [single] : [] });
-      if (res.ok) g.entities = res.entities;
+      const res = solveSketch(ents, held, { drags, loose: single ? [single] : [] });
+      if (res.ok) {
+        g.entities = res.entities;
+        g.constraints = (sk.constraints || []).map((c) => {
+          if (!free(c)) return c;
+          let v = measure(c, res.entities);
+          if (v === null || !Number.isFinite(v)) return c;
+          if (c.type !== 'angle') v = Math.abs(v);
+          // Sizes the drag did not change keep their exact value; new ones
+          // drop the solver's last decimals (a snapped drag gives 40, not
+          // 39.99998).
+          if (Math.abs(v - c.value) < 1e-9) return c;
+          return { ...c, value: Math.round(v * 1e4) / 1e4 };
+        });
+      }
     } else if (g.kind === 'point') g.entities = moveSketchPoint(sk.entities, g.from, p);
     else {
       const d = sub(p, g.start);
       g.entities = sk.entities.map((en) => (g.ids.has(en.id) ? translateEntity(en, d) : en));
     }
-    if (g.entities) app.previewSketch(sk.id, g.entities);
+    if (g.entities) app.previewSketch(sk.id, g.entities, g.constraints);
   }
 
   // ---- box selection -----------------------------------------------------
