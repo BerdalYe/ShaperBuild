@@ -47,7 +47,7 @@ export function appCommands(app) {
     { id: 'items', label: 'Show or hide the items list', icon: 'items', kbd: 'Tab', keywords: 'panel bodies sketches manager sidebar', run: () => app.toggleItems() },
     { id: 'theme', label: 'Dark / light theme', icon: 'color', keywords: 'colors appearance', run: () => app.toggleTheme() },
     { id: 'settings', label: 'Settings', icon: 'settings', kbd: `${m},`, keywords: 'preferences options units mouse trackpad', run: () => app.dialogs.settings() },
-    { id: 'tutorial', label: 'Interactive tutorial', icon: 'learn', keywords: 'help learn guide tour start basics beginner', run: () => app.tutorial.start() },
+    { id: 'tutorial', label: 'Tutorials…', icon: 'learn', keywords: 'help learn guide tour start basics beginner lesson course interactive', run: () => app.tutorial.library() },
     { id: 'nav-help', label: 'How to move around (navigation)', icon: 'mouse', keywords: 'help orbit pan zoom rotate view mouse trackpad camera', run: () => app.navHelp.toggle(true) },
     { id: 'shortcuts', label: 'Keyboard shortcuts', icon: 'keyboard', kbd: `${m}/`, keywords: 'help keys hotkeys', run: () => app.dialogs.shortcuts() },
     { id: 'check-updates', label: 'Check for updates', icon: 'sparkle', keywords: 'update upgrade new version download', run: () => app.updates.check(true) },

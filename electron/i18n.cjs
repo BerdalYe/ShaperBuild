@@ -64,7 +64,7 @@ const NB = {
   'Tool Names in Tools Menu': 'Verktøynavn i verktøymenyen',
   'Toggle Full Screen': 'Fullskjerm av/på',
   Help: 'Hjelp',
-  'Interactive Tutorial': 'Interaktiv innføring',
+  'Tutorials…': 'Opplæring…',
   'How to Move Around': 'Slik beveger du deg rundt',
   'Find a Tool…': 'Finn et verktøy…',
   'Keyboard Shortcuts': 'Hurtigtaster',

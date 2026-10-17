@@ -1450,13 +1450,45 @@ export class Kernel {
         for (const i of faces) list.Append(this.face(id, i));
         const b = r(new oc.BRepOffsetAPI_MakeThickSolid());
         b.MakeThickSolidByJoin(shape, list, outward ? thickness : -thickness, 1e-3, oc.BRepOffset_Mode.BRepOffset_Skin, false, false, oc.GeomAbs_JoinType.GeomAbs_Arc, false, r(new oc.Message_ProgressRange()));
-        return b.Shape();
+        const out = b.Shape();
+        // OpenCascade gives back the body unchanged when a rounded face
+        // meets an opened face along a smooth edge; build the walls another way.
+        const v0 = this.volumeOf(shape, r);
+        if (Math.abs(this.volumeOf(out, r) - v0) > 1e-6 * Math.max(1, v0)) return out;
+        return this.shellByOffset(shape, faces.map((i) => this.face(id, i)), thickness, outward, r);
       } finally {
         r.free();
       }
     });
     const ids = this.storeSolids(res);
     return this.result(ids.map((nid, i) => (i === 0 ? { id: nid, replaces: id } : { id: nid, from: id })));
+  }
+
+  volumeOf(shape, r) {
+    const props = r(new this.oc.GProp_GProps());
+    this.oc.BRepGProp.VolumeProperties(shape, props, false, false, false);
+    return Math.abs(props.Mass());
+  }
+
+  // Shell as "body minus a smaller copy of itself": offset the whole body
+  // inwards, then cut through the wall at each opened (flat) face.
+  shellByOffset(shape, openFaces, thickness, outward, r) {
+    const oc = this.oc;
+    if (outward) throw new Error('walls on the outside do not work where a rounded edge meets the opened face. Use Inside, or shell before rounding the edges.');
+    const off = r(new oc.BRepOffsetAPI_MakeOffsetShape());
+    off.PerformByJoin(shape, -thickness, 1e-3, oc.BRepOffset_Mode.BRepOffset_Skin, false, false, oc.GeomAbs_JoinType.GeomAbs_Arc, false, r(new oc.Message_ProgressRange()));
+    if (!off.IsDone()) throw new Error('could not offset the walls');
+    // The inner copy of each opened face, pushed out through the wall.
+    const punches = [];
+    for (const face of openFaces) {
+      const info = this.faceInfo(face);
+      if (info.type !== 'plane') throw new Error('the opened faces must be flat where they meet rounded edges');
+      const gen = off.Generated(face);
+      if (!gen.Size()) throw new Error('could not offset the walls');
+      const base = oc.TopoDS.Face(gen.First());
+      punches.push(r(new oc.BRepPrimAPI_MakePrism(base, this.vec(r, info.normal.map((c) => c * (thickness * 2 + 1))), false, true)).Shape());
+    }
+    return this.cutAll(shape, [off.Shape(), ...punches], 'Shell');
   }
 
   // Tilt faces by `angle` degrees about their line on a neutral plane

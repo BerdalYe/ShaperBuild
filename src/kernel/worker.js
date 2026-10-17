@@ -6,7 +6,12 @@ import { Kernel } from './kernel.js';
 
 let kernel = null;
 const ready = (async () => {
-  const [oc, mf] = await Promise.all([OC(), ManifoldModule()]);
+  // Report each engine as it finishes loading (the startup screen shows it).
+  const step = (name) => (mod) => {
+    self.postMessage({ type: 'stage', stage: name });
+    return mod;
+  };
+  const [oc, mf] = await Promise.all([OC().then(step('cad')), ManifoldModule().then(step('mesh'))]);
   mf.setup();
   kernel = new Kernel(oc, mf);
 })();

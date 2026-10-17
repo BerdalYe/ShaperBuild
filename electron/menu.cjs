@@ -127,7 +127,7 @@ function buildMenu({ send, recent = [], isDev = false }) {
     {
       label: t('Help'),
       submenu: [
-        cmd('Interactive Tutorial', 'tutorial'),
+        cmd('Tutorials…', 'tutorial'),
         cmd('How to Move Around', 'navigation-help'),
         cmd('Find a Tool…', 'find-tool', 'CmdOrCtrl+K'),
         { type: 'separator' },
