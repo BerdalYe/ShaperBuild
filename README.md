@@ -32,16 +32,27 @@ It shows the size, volume and roughly how much plastic it takes. Then save a **3
 
 The first time you open ShaperBuild it asks for your language: **English** or **Norwegian (bokmål)**. Everything follows the choice — tools, hints, menus, messages, file dialogs and drawings, with decimal commas in Norwegian (typing `12,5` or `12.5` both work). Change it later under **Settings → Language**; the window restarts and your open design stays as it was.
 
-Then it offers an **interactive tutorial** (about 3 minutes). It shows you how to move around, draw a rectangle, pull it into 3D and round its edges, and it waits for you to try each step. You can start it again any time from **Help → Interactive tutorial** or the home screen.
+Then it offers an **interactive tutorial** (about 3 minutes). It shows you how to move around, draw a rectangle, pull it into 3D and round its edges, and it waits for you to try each step.
+
+There are **13 tutorials** in all, from easy to hard, under **Help → Tutorials** and on the home screen:
+
+- *Beginner:* the basics · shapes, moving and cutting · exact sizes in sketches · push and pull faces
+- *Intermediate:* round, bevel and hollow · revolve · a plate with a row of holes · text and engraving
+- *Advanced:* changing a design later with History · sizes with names (variables) · materials, light and pictures · getting ready to 3D print · 2D drawings
+
+The home screen shows the next tutorial to do and ticks off the ones you have finished.
+
+Your designs go in **Documents/ShaperBuild** unless you pick another folder (**Settings → Save designs in**). Open and save dialogs start in the folder you used last.
 
 Finding your way around:
 
-- **Tools** are on the right, with names, grouped into Sketch, Model, Transform, Shapes and Inspect. Hover one to see what it does.
+- **Tools** are on the right, with names, grouped into Sketch, Model, Transform, Shapes and Inspect. Hover one to see what it does and its key.
 - **Search tools** (Ctrl+K / ⌘K) finds any tool or command by name or purpose — try "hole", "round" or "print".
 - **Items** on the left lists everything in your design: bodies, meshes, sketches, planes and images. Hide, rename, recolour or delete them there, and sort them into **folders** — folders can hold other folders (the folder button at the top, or drag items and folders onto a folder).
 - **History** (the tab next to Items, or Shift+H) lists every step that made your design, in order. Click a step to change it.
 - The **bar at the bottom** suggests tools for whatever you selected. While a tool is active, a hint there tells you what to do next.
-- The **buttons under the view cube** fit the view, jump to standard views, zoom, and switch on **Orbit** or **Pan** mode for dragging with the left button. The **mouse** button explains every way to move around.
+- The **buttons under the view cube** fit the view, jump to standard views, zoom, and switch on **Orbit** or **Pan** mode for dragging with the left button. Hover a button to see what it does; the **mouse** button explains every way to move around.
+- Drag the inner edge of the **Items** list or the **tools menu** to make it wider or narrower (double-click the edge for the normal width).
 
 ## What it does
 
@@ -69,13 +80,13 @@ Finding your way around:
 
 **View** – Display as shaded, **wireframe** or **zebra stripes** (to check how smoothly surfaces join), with or without **hidden edges** dashed. **Isolate** (Shift+I) shows only the selected items until you click *Show all*. **Save a view** (camera and section) from the views menu and go back to it any time; saved views are kept in the design.
 
-**Visualization** – Soft shadows and 28 materials in groups with search (plastics, paints, metals such as steel, gold and copper, glass, wood, stone, leather…) with any colour or hex code. Change a body's roughness, opacity and see-through. Put pictures (logos, labels) on bodies as **decals**. Turn the light and the sun's height, set the brightness and the camera's field of view. **Screenshots** up to 8K, with a transparent background if you like.
+**Visualization** – Lit like a photo studio, with soft shadows. 32 materials in groups with search (plastics, carbon fibre, paints, metals such as steel, gold and copper, glass, three woods, concrete, stone, marble, leather, fabric…) with any colour or hex code. Wood, brushed metal, carbon fibre, concrete, marble, leather and fabric have real **textures** (grain, brushing, weave), and any picture can be used as a texture too; set the texture size with a slider. Change a body's roughness, opacity and see-through. Put pictures (logos, labels) on bodies as **decals**. Turn the light and the sun's height, set the brightness and the camera's field of view. **Screenshots** up to 8K, with a transparent background if you like.
 
 **2D drawings** – Front, top and side views with hidden lines dashed, overall sizes, an optional 3D view, a **section** through the middle (hatched) and an enlarged **detail** view, in 1st-angle (Europe) or 3rd-angle (USA) layout on A4–A1, Letter or Tabloid, landscape or portrait, at a standard scale you choose. The title block has title, drawing number, drawn by, material and revision, plus notes; they are kept with the design. Save as PDF, SVG or DXF.
 
 **STL and mesh files** – Import STL (binary or text), OBJ and 3MF. Meshes can be moved, scaled, mirrored, patterned and combined with solids (union / subtract / intersect). *Mesh → Solid* turns a mesh into an editable solid, merging flat triangles into real faces so you can push/pull and fillet them.
 
-**Files** – Save designs as `.shaperbuild`. Every save keeps the version before it: *File → Versions…* lists them and restores any one as the latest. On the home screen, the **⋯** menu on a design renames, duplicates, shows versions or moves it to the bin. Export STL, 3MF, OBJ (with a colour file), STEP, **GLB** (with colours, for web and 3D viewers), **USDZ** (AR on iPhone and iPad), DXF (sketches, for laser cutters) and PNG images. Import STEP, DXF (becomes a sketch) and pictures (PNG, JPG, WebP, GIF, BMP). Autosave with crash recovery. Drag and drop files onto the window. Unlimited undo/redo.
+**Files** – Save designs as `.shaperbuild`. Every save keeps the version before it: *File → Versions…* lists them and restores any one as the latest. On the home screen, the **⋯** menu on a design renames, duplicates, shows versions or moves it to the bin. Export STL, 3MF, OBJ (with a colour file), STEP, **GLB** (with colours and textures, for web and 3D viewers), **USDZ** (AR on iPhone and iPad), DXF (sketches, for laser cutters) and PNG images. Import STEP, DXF (becomes a sketch) and pictures (PNG, JPG, WebP, GIF, BMP). Autosave with crash recovery. Drag and drop files onto the window. Unlimited undo/redo.
 
 The geometry engine is [OpenCascade](https://dev.opencascade.org/) (a real B-rep CAD kernel, through `replicad-opencascadejs`), with [Manifold](https://github.com/elalish/manifold) for mesh booleans.
 

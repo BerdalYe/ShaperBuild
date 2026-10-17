@@ -4,7 +4,7 @@
 import { h } from './dom.js';
 
 const PANELS = {
-  items: { el: 'items', side: 'left', key: 'itemsWidth', min: 180, max: 520, normal: 248 },
+  items: { el: 'items', side: 'left', key: 'itemsWidth', min: 180, max: 520, normal: 256 },
   tools: { el: 'tools', side: 'right', key: 'toolsWidth', min: 150, max: 460, normal: 236 },
   toolsCompact: { el: 'tools', side: 'right', key: 'toolsWidthCompact', min: 104, max: 300, normal: 146 },
 };
@@ -12,13 +12,14 @@ const PANELS = {
 export class PanelResizer {
   constructor(app) {
     this.app = app;
-    const vp = document.getElementById('viewport');
+    // On the panels' inner borders (see .panel-resizer in the styles).
+    const ws = document.querySelector('.workspace');
     this.handles = {};
     for (const side of ['left', 'right']) {
       const el = h(`div.panel-resizer.${side}`, { title: 'Drag to resize · double-click for the normal width' });
       el.addEventListener('pointerdown', (e) => this.start(e, side));
       el.addEventListener('dblclick', () => this.reset(side));
-      vp.append(el);
+      ws.append(el);
       this.handles[side] = el;
     }
     this.apply();

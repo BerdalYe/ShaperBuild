@@ -84,7 +84,7 @@ try {
   assert.equal(await width('#items'), 180);
   await win.locator('.panel-resizer.left').dblclick();
   await win.waitForTimeout(450);
-  assert.equal(await width('#items'), 248);
+  assert.equal(await width('#items'), 256);
   await win.locator('.panel-resizer.right').dblclick();
   await win.waitForTimeout(250);
   assert.equal(await width('#tools'), 236);

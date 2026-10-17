@@ -332,7 +332,7 @@ svg.icon {
 
 /* ---- items panel ------------------------------------------------------ */
 .items-panel {
-  width: var(--itemsWidth, 248px);
+  width: var(--itemsWidth, 256px);
   background: var(--panel);
   border-right: 1px solid var(--border);
   display: flex;
@@ -341,23 +341,31 @@ svg.icon {
   transition: width 0.18s ease;
 }
 
-/* Drag handles on the edges of the view that resize the side panels. */
+/* Drag handles on the inner borders of the Items list and the tools menu. */
 .panel-resizer {
   position: absolute;
   top: 0;
   bottom: 0;
   width: 7px;
-  z-index: 7;
+  z-index: 9;
   cursor: col-resize;
   touch-action: none;
 }
 
 .panel-resizer.left {
-  left: 0;
+  left: calc(var(--itemsWidth, 256px) - 4px);
 }
 
 .panel-resizer.right {
-  right: 0;
+  right: calc(var(--toolsWidth, 236px) - 4px);
+}
+
+.tools-menu.compact ~ .panel-resizer.right {
+  right: calc(var(--toolsWidthCompact, 146px) - 4px);
+}
+
+.items-panel.collapsed ~ .panel-resizer.left {
+  display: none;
 }
 
 .panel-resizer::after {
@@ -365,18 +373,11 @@ svg.icon {
   position: absolute;
   top: 0;
   bottom: 0;
+  left: 3px;
   width: 2px;
   background: var(--accent);
   opacity: 0;
   transition: opacity 0.12s;
-}
-
-.panel-resizer.left::after {
-  left: 0;
-}
-
-.panel-resizer.right::after {
-  right: 0;
 }
 
 .panel-resizer:hover::after,
@@ -394,10 +395,6 @@ body.resizing-panel .items-panel {
   transition: none;
 }
 
-.items-panel.collapsed ~ .viewport .panel-resizer.left {
-  display: none;
-}
-
 .items-panel.collapsed {
   width: 0;
   border-right: 0;
@@ -408,7 +405,8 @@ body.resizing-panel .items-panel {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 8px 4px 12px;
+  gap: 4px;
+  padding: 8px 6px 4px 10px;
   min-height: 40px;
   font-weight: 600;
   font-size: 13px;
@@ -417,11 +415,12 @@ body.resizing-panel .items-panel {
 
 .ih-actions {
   display: flex;
-  gap: 2px;
+  flex: none;
+  gap: 1px;
 }
 
 .ih-btn {
-  width: 28px;
+  width: 26px;
   height: 28px;
   border: 0;
   border-radius: 7px;
@@ -3413,7 +3412,8 @@ body.resizing-panel .items-panel {
   color: var(--muted);
   font-weight: 600;
   font-size: 12px;
-  padding: 4px 10px;
+  padding: 4px 8px;
+  white-space: nowrap;
   border-radius: 6px;
 }
 
