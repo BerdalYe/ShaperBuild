@@ -182,7 +182,7 @@ export class MaterialsPanel {
         reset.addEventListener('click', () => app.cmd.setLook(this.targets(), null));
         finish.append(reset);
       }
-      this.el.append(h('div.mp-sub', { text: 'Finish' }), finish);
+      this.el.append(h('div.mp-sub', { text: 'Surface finish' }), finish);
     }
 
     this.el.append(this.decalsSection(), this.lightSection(), this.cameraSection());
@@ -310,7 +310,7 @@ export class MaterialsPanel {
     });
     return h(
       'div',
-      h('div.mp-sub', { text: 'Light' }),
+      h('div.mp-sub', { text: 'Lighting' }),
       h(
         'div.mp-props',
         this.slider('Light direction', l.rotation, 0, 360, 1, (v) => apply({ rotation: v }), (v) => keep({ rotation: v }), (v) => `${fmt(v, 0)}°`),

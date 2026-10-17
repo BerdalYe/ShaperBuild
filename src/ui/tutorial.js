@@ -79,8 +79,8 @@ export class Tutorial {
     return this.labels.some((l) => labels.includes(l));
   }
 
-  didStart(prefix) {
-    return this.labels.some((l) => l.startsWith(prefix));
+  didMatch(re) {
+    return this.labels.some((l) => re.test(l));
   }
 
   tool(id) {

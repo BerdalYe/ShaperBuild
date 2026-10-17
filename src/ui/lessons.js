@@ -1,7 +1,8 @@
 // The tutorials, from easy to hard. Each lesson is a list of steps; a step
 // with `done` waits until you have done what it asks for. `tut` (the running
 // Tutorial) gives the helpers: tut.did('Fillet') is true once a change with
-// that name has happened during the step, tut.toolBtn('rect') points at a
+// that name has happened during the step (tut.didMatch(/^Set /) for names
+// that start the same), tut.toolBtn('rect') points at a
 // tool in the tools menu, tut.ctx('Extrude') at a button in the bar at the
 // bottom of the view.
 import { modKey, isMac } from './dom.js';
@@ -150,13 +151,13 @@ export const LESSONS = [
           title: 'Change a size',
           text: 'Click the <b>50</b> on the rectangle, type <kbd>70</kbd> and press <kbd>Enter</kbd>. The rectangle stretches.',
           place: 'top',
-          done: () => tut.didStart('Set '),
+          done: () => tut.didMatch(/^Set /),
         },
         {
           title: 'Add a dimension',
           text: 'Press <kbd>L</kbd> and draw a line next to the rectangle: click, click, then <kbd>Esc</kbd>. Press <kbd>D</kbd> for <b>Dimension</b>, click the line, type <kbd>25</kbd> and press <kbd>Enter</kbd>.',
           place: 'top',
-          done: () => tut.didStart('Set '),
+          done: () => tut.didMatch(/^Set /),
         },
         finish('Dimensions <b>drive</b> the sketch: change the number and the drawing follows. Select two lines and use <b>Constrain</b> in the bar at the bottom to make them parallel, equal or at an angle.'),
       ];
@@ -402,7 +403,7 @@ export const LESSONS = [
         text: 'Click the <b>Fillet</b> step. Change its radius to <kbd>8</kbd> and press <kbd>Enter</kbd>. The edge is rebuilt.',
         target: () => document.getElementById('items'),
         place: 'right',
-        done: () => tut.didStart('Edit '),
+        done: () => tut.didMatch(/^Edit /),
       },
       finish('Drag the blue bar in the History list up to see the design as it was earlier. Right-click a step to turn it off or delete it.'),
     ],
@@ -496,7 +497,7 @@ export const LESSONS = [
       },
       {
         title: 'Set the light',
-        text: 'Scroll down to <b>Light</b> and drag <b>Light direction</b> to move the shadows.',
+        text: 'Scroll down to <b>Lighting</b> and drag <b>Light direction</b> to move the shadows.',
         target: () => document.getElementById('materials'),
         place: 'left',
         enter: () => (tut.light = JSON.stringify(tut.app.settings.lighting || null)),
