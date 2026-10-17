@@ -86,6 +86,86 @@ try {
   assert.ok((await A(() => window.__shaper.tools.active.controls?.translationSnap)) > 0, 'snapping again');
   await win.keyboard.press('Escape');
 
+  step('dragging the Move arrow saves the move at once, without Done');
+  const zOf = (i = 0) => A((i) => window.__shaper.bodyMesh(window.__shaper.doc.bodies[i].id).bbox.min[2], i);
+  // Hover along the blue arrow until it lights up, then drag it up the screen.
+  async function dragZ(dy) {
+    const c = await A(() => window.__shaper.tools.active.pivot.toArray());
+    const [cx, cy] = await screen(c);
+    const [ux, uy] = await screen([c[0], c[1], c[2] + 10]);
+    const len = Math.hypot(ux - cx, uy - cy);
+    let at = null;
+    for (let k = 8; k < 240 && !at; k += 4) {
+      const p = [cx + ((ux - cx) / len) * k, cy + ((uy - cy) / len) * k];
+      await win.mouse.move(p[0], p[1]);
+      if ((await A(() => window.__shaper.tools.active.controls.axis)) === 'Z') at = p;
+    }
+    assert.ok(at, 'found the Z arrow');
+    await win.mouse.down();
+    await win.mouse.move(at[0], at[1] - dy / 2, { steps: 5 });
+    await win.mouse.move(at[0], at[1] - dy, { steps: 5 });
+    await win.mouse.up();
+    await win.waitForTimeout(100);
+    await idle();
+  }
+  await A(() => {
+    const a = window.__shaper;
+    a.selection.set([{ kind: 'body', bodyId: a.doc.bodies[0].id }]);
+    a.tools.activate('move');
+  });
+  await win.waitForTimeout(300);
+  const z0 = await zOf();
+  await dragZ(80);
+  const z1 = await zOf();
+  assert.ok(z1 > z0 + 1, `moved up: ${z0} → ${z1}`);
+  const after1 = await A(() => {
+    const a = window.__shaper;
+    return { tool: a.tools.active?.def.id, z: a.panel.values.z, undo: a.doc.past.at(-1)?.label };
+  });
+  assert.deepEqual(after1, { tool: 'move', z: 0, undo: 'Move' });
+  await dragZ(60);
+  const z2 = await zOf();
+  assert.ok(z2 > z1 + 1, `moved again: ${z1} → ${z2}`);
+  await shot(win, '85-move-without-done');
+  await A(() => window.__shaper.doc.undo());
+  await win.waitForTimeout(200);
+  near(await zOf(), z1, 1e-6);
+
+  step('with Make a copy, the copy is moved and the next drag moves the copy');
+  await A(() => window.__shaper.tools.activate('select'));
+  await A(() => {
+    const a = window.__shaper;
+    a.selection.set([{ kind: 'body', bodyId: a.doc.bodies[0].id }]);
+    a.tools.activate('move');
+  });
+  await win.waitForTimeout(300);
+  await win.locator('#tool-panel label.toggle input').check();
+  await dragZ(60);
+  const copy = await A(() => {
+    const a = window.__shaper;
+    return { bodies: a.doc.bodies.length, picked: a.tools.active.items('items').map((it) => it.bodyId), copy: a.tools.active.values.copy, checked: document.querySelector('#tool-panel label.toggle input').checked };
+  });
+  assert.equal(copy.bodies, 2);
+  assert.deepEqual(copy.picked, [await A(() => window.__shaper.doc.bodies[1].id)]);
+  assert.equal(copy.copy, false);
+  assert.equal(copy.checked, false);
+  const zc = await zOf(1);
+  near(await zOf(0), z1, 1e-6);
+  await dragZ(60);
+  assert.equal(await A(() => window.__shaper.doc.bodies.length), 2, 'no second copy');
+  assert.ok((await zOf(1)) > zc + 1, 'the copy moved');
+  near(await zOf(0), z1, 1e-6);
+  await win.keyboard.press('Escape');
+  assert.equal(await A(() => window.__shaper.tools.isSelect), true);
+  assert.equal(await A(() => window.__shaper.doc.bodies.length), 2, 'Esc keeps the moves');
+  await A(() => {
+    const a = window.__shaper;
+    a.doc.undo();
+    a.doc.undo();
+  });
+  await win.waitForTimeout(200);
+  assert.equal(await A(() => window.__shaper.doc.bodies.length), 1);
+
   step('the settings icon is a gear');
   assert.match(await A(() => document.getElementById('btn-settings').innerHTML), /<circle cx="12" cy="12" r="3"/);
 
