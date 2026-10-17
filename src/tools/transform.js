@@ -49,7 +49,7 @@ export class TransformTool extends OpTool {
   }
 
   hint() {
-    return 'Drag the gizmo or type exact values. Rotation happens around the selection center.';
+    return 'Drag an arrow or ring: the move is saved when you let go. Or type exact values and press Enter.';
   }
 
   init() {
@@ -62,6 +62,8 @@ export class TransformTool extends OpTool {
     vp.scene.add(this.helper);
     this.controls.addEventListener('change', () => vp.requestRender());
     this.controls.addEventListener('objectChange', () => this.fromGizmo());
+    // Letting go of the gizmo saves the move; the tool stays open for the next one.
+    this.controls.addEventListener('mouseUp', () => (this.pending = this.commitDrag()));
     this.offCam = vp.on('camera', () => {
       if (this.controls.camera !== vp.camera) this.controls.camera = vp.camera;
     });
@@ -199,8 +201,25 @@ export class TransformTool extends OpTool {
 
   async apply() {
     if (!this.ready()) return toast('Select bodies, sketches, planes or images to move', { type: 'error' });
+    await this.pending;
+    if (await this.commit()) this.done();
+  }
+
+  async commitDrag() {
+    if (!this.ready()) return;
+    this.controls.enabled = false;
+    try {
+      const ok = await this.commit();
+      if (ok && this.app.tools.active === this) this.setupPivot();
+    } finally {
+      this.controls.enabled = true;
+    }
+  }
+
+  // Save the current move or rotation. False when it could not be done.
+  async commit() {
     const m = this.matrix();
-    if (m.equals(new THREE.Matrix4())) return this.done();
+    if (m.equals(new THREE.Matrix4())) return true;
     const app = this.app;
     const bodies = this.items('items').filter((it) => it.kind === 'body');
     const sketches = this.items('items').filter((it) => it.kind === 'sketch');
@@ -214,18 +233,31 @@ export class TransformTool extends OpTool {
         result = await app.kernel.call('transform', { ids: bodies.map((b) => app.doc.body(b.bodyId).shapeId), matrix: m.elements, copy: !!this.values.copy, move });
       } catch (err) {
         toast(err.message, { type: 'error' });
-        return;
+        return false;
       } finally {
         app.busy(false);
       }
     }
     this.restoreViews();
     const copy = !!this.values.copy;
-    app.cmd.applyResult(copy ? 'Copy' : 'Move', result, {
+    const ids = (list) => new Set(list.map((x) => x.id));
+    const had = { sketch: ids(app.doc.sketches), plane: ids(app.doc.planes), image: ids(app.doc.images) };
+    const created = app.cmd.applyResult(copy ? 'Copy' : 'Move', result, {
       sketches: sketches.map((s) => ({ id: s.sketchId, matrix: m.elements, copy })),
       planes: this.items('items').filter((it) => it.kind === 'plane').map((it) => ({ id: it.planeId, matrix: m.elements, copy })),
       images: this.items('items').filter((it) => it.kind === 'image').map((it) => ({ id: it.imageId, matrix: m.elements, copy })),
     });
-    this.done();
+    if (copy) {
+      // Go on with the copies, so the next drag moves them instead of making more.
+      const slot = this.slots.find((s) => s.key === 'items');
+      slot.items = [
+        ...created.map((bodyId) => ({ kind: 'body', bodyId })),
+        ...app.doc.sketches.filter((x) => !had.sketch.has(x.id)).map((x) => ({ kind: 'sketch', sketchId: x.id })),
+        ...app.doc.planes.filter((x) => !had.plane.has(x.id)).map((x) => ({ kind: 'plane', planeId: x.id })),
+        ...app.doc.images.filter((x) => !had.image.has(x.id)).map((x) => ({ kind: 'image', imageId: x.id })),
+      ];
+      this.values.copy = false;
+    }
+    return true;
   }
 }

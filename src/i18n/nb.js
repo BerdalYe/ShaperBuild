@@ -504,7 +504,6 @@ export const NB = {
   'Rotate Z': 'Roter Z',
   'Make a copy': 'Lag en kopi',
   'Select bodies, sketches, planes or images to move': 'Velg objekter, skisser, plan eller bilder som skal flyttes',
-  'Drag the gizmo or type exact values. Rotation happens around the selection center.': 'Dra håndtaket eller skriv inn nøyaktige verdier. Rotasjonen skjer rundt midten av utvalget.',
   '1 object': '1 objekt',
   '{n} objects': '{n} objekter',
   'New design': 'Ny modell',
@@ -1727,6 +1726,7 @@ export const NB = {
   'Type a new size and press Enter. Bodies made from this sketch follow.': 'Skriv et nytt mål og trykk Enter. Objekter laget av denne skissen følger etter.',
   'Click the <b>50</b> on the rectangle, type <kbd>70</kbd> and press <kbd>Enter</kbd>. The rectangle stretches.<br><small>You can also click the shape and type its <b>Width</b> or <b>Height</b> in the bar at the bottom.</small>': 'Klikk på <b>50</b> ved rektangelet, skriv <kbd>70</kbd> og trykk <kbd>Enter</kbd>. Rektangelet strekkes.<br><small>Du kan også klikke på formen og skrive <b>Bredde</b> eller <b>Høyde</b> i linjen nederst.</small>',
   'Resize sketch': 'Endre størrelse på skissen',
+  'Drag an arrow or ring: the move is saved when you let go. Or type exact values and press Enter.': 'Dra en pil eller ring: flyttingen lagres når du slipper. Eller skriv inn nøyaktige verdier og trykk Enter.',
 };
 
 const upper = (s) => s.charAt(0).toUpperCase() + s.slice(1);

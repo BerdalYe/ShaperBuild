@@ -81,7 +81,7 @@ Finding your way around:
 
 **Variables and formulas** – Any number field takes a formula: `20 + 5`, `1in + 2mm`, `1' 6"`, `width / 2`, `max(a, b)`, `sin(30)`… Add variables (lengths, angles or plain numbers) at the top of the History tab and use their names anywhere. Values typed with a variable stay linked: change the variable and every size made from it updates, including sketch dimensions (marked ƒ). Renaming a variable updates every formula. Number fields also have − / + buttons, and you can drag a field's name left or right to change it.
 
-**Transform** – Move/Rotate with a gizmo or exact values, Translate (from one point to another), Rotate around an axis, Align (put a face, edge or corner onto another), Scale (uniform, or X/Y/Z separately for meshes), Mirror, Linear patterns in up to three directions, Circular patterns, Duplicate.
+**Transform** – Move/Rotate with a gizmo or exact values (each drag of an arrow or ring is saved as soon as you let go, so you can keep moving without pressing Done; with *Make a copy*, the copy is what moves on), Translate (from one point to another), Rotate around an axis, Align (put a face, edge or corner onto another), Scale (uniform, or X/Y/Z separately for meshes), Mirror, Linear patterns in up to three directions, Circular patterns, Duplicate.
 
 **Shapes** – Box, Cylinder, Sphere, Cone and Torus, placed by clicking.
 
