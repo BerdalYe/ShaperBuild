@@ -332,13 +332,70 @@ svg.icon {
 
 /* ---- items panel ------------------------------------------------------ */
 .items-panel {
-  width: 248px;
+  width: var(--itemsWidth, 248px);
   background: var(--panel);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   min-height: 0;
   transition: width 0.18s ease;
+}
+
+/* Drag handles on the edges of the view that resize the side panels. */
+.panel-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  z-index: 7;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.panel-resizer.left {
+  left: 0;
+}
+
+.panel-resizer.right {
+  right: 0;
+}
+
+.panel-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.panel-resizer.left::after {
+  left: 0;
+}
+
+.panel-resizer.right::after {
+  right: 0;
+}
+
+.panel-resizer:hover::after,
+body.resizing-panel .panel-resizer::after {
+  opacity: 0.9;
+}
+
+body.resizing-panel,
+body.resizing-panel * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
+body.resizing-panel .items-panel {
+  transition: none;
+}
+
+.items-panel.collapsed ~ .viewport .panel-resizer.left {
+  display: none;
 }
 
 .items-panel.collapsed {
@@ -584,7 +641,7 @@ svg.icon {
 
 /* ---- tools menu ------------------------------------------------------- */
 .tools-menu {
-  width: 236px;
+  width: var(--toolsWidth, 236px);
   background: var(--panel);
   border-left: 1px solid var(--border);
   display: flex;
@@ -701,7 +758,8 @@ svg.icon {
 
 .tools-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* More columns as the menu gets wider. */
+  grid-template-columns: repeat(auto-fill, minmax(66px, 1fr));
   gap: 3px;
 }
 
@@ -744,13 +802,17 @@ svg.icon {
 
 /* Compact menu: icons only. */
 .tools-menu.compact {
-  width: 146px;
+  width: var(--toolsWidthCompact, 146px);
 }
 
 .tools-menu.compact .tb-label,
 .tools-menu.compact .tt-sub,
 .tools-menu.compact .tools-search kbd {
   display: none;
+}
+
+.tools-menu.compact .tools-grid {
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
 }
 
 .tools-menu.compact .tool-btn {

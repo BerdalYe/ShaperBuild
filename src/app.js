@@ -28,6 +28,7 @@ import { toast, showMenu, hideTooltip, modal } from './ui/overlays.js';
 import { icon } from './ui/icons.js';
 import { h, isTyping, modKey, translateStatic } from './ui/dom.js';
 import { BootScreen } from './ui/boot.js';
+import { PanelResizer } from './ui/resizer.js';
 import { t, language, setLanguage } from './core/i18n.js';
 import { Welcome } from './ui/welcome.js';
 import { buildKeymap, comboOf } from './core/keymap.js';
@@ -95,6 +96,7 @@ export class App {
     this.tools = new ToolManager(this);
     this.items = new ItemsPanel(document.getElementById('items'), this);
     this.toolsMenu = new ToolsMenu(document.getElementById('tools'), this);
+    this.resizer = new PanelResizer(this);
     this.context = new ContextBar(document.getElementById('context-bar'), this);
     this.home = new Home(document.getElementById('home'), this);
     this.constraints = new ConstraintLayer(this);
@@ -1070,6 +1072,7 @@ export class App {
     for (const b of document.querySelectorAll('#mode-seg button')) b.classList.toggle('on', (b.dataset.mode === 'visual') === on);
     if (on) this.tools.activate('select');
     document.getElementById('tools').style.display = on ? 'none' : '';
+    this.resizer.handles.right.hidden = on;
     this.materials.show(on);
     this.vp.setVisualization(on);
     this.applyIsolation();
