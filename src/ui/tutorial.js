@@ -1,11 +1,14 @@
-// Interactive first-run tutorial. Each step points at a part of the window
-// and waits until you have actually done the thing it asks for.
-import { h, clear, modKey, isMac } from './dom.js';
+// Interactive tutorials (the lessons are in lessons.js). Each step points at
+// a part of the window and waits until you have actually done the thing it
+// asks for.
+import { h, clear } from './dom.js';
 import { icon } from './icons.js';
 import { modal } from './overlays.js';
 import { t } from '../core/i18n.js';
+import { LESSONS, LEVELS } from './lessons.js';
 
 const SEEN_KEY = 'shaperbuild.tutorialSeen.v1';
+const DONE_KEY = 'shaperbuild.lessonsDone.v1';
 
 export class Tutorial {
   constructor(app) {
@@ -16,6 +19,11 @@ export class Tutorial {
     this.ring = null;
     this.timer = 0;
     this.navCount = { orbit: 0, pan: 0, zoom: 0 };
+    // Names of the changes made during the current step (tut.did('Fillet')).
+    this.labels = [];
+    app.doc.on('change', (ev) => {
+      if (this.active && ev?.label) this.labels.push(ev.label);
+    });
     const check = () => this.evaluate();
     app.vp.on('nav', (type) => {
       if (!this.active) return;
@@ -42,6 +50,86 @@ export class Tutorial {
     } catch {}
   }
 
+  // Lessons finished to the end.
+  get done() {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(DONE_KEY) || '[]'));
+    } catch {
+      return new Set();
+    }
+  }
+
+  markDone(id) {
+    const done = this.done;
+    done.add(id);
+    try {
+      localStorage.setItem(DONE_KEY, JSON.stringify([...done]));
+    } catch {}
+  }
+
+  // The first lesson not finished yet.
+  get nextLesson() {
+    const done = this.done;
+    return LESSONS.find((l) => !done.has(l.id)) || null;
+  }
+
+  // ---- helpers for the lessons ---------------------------------------------
+
+  did(...labels) {
+    return this.labels.some((l) => labels.includes(l));
+  }
+
+  didMatch(re) {
+    return this.labels.some((l) => re.test(l));
+  }
+
+  tool(id) {
+    return this.app.tools.activeId === id;
+  }
+
+  // A tool's button in the tools menu (a step target).
+  toolBtn(id) {
+    return () => document.querySelector(`#tools .tool-btn[data-tool="${id}"]`);
+  }
+
+  // Unfold the tools-menu section that holds a tool.
+  openTool(id) {
+    document.querySelector(`#tools .tool-btn[data-tool="${id}"]`)?.closest('.tools-section')?.classList.remove('collapsed');
+  }
+
+  // A button in the bar at the bottom of the view (a step target).
+  ctx(label) {
+    return () => [...document.querySelectorAll('#context-bar .cb-btn')].find((b) => b.textContent.trim() === t(label)) || document.getElementById('context-bar');
+  }
+
+  // ---- the lessons list ----------------------------------------------------
+
+  async library() {
+    const done = this.done;
+    const body = h('div.lessons');
+    let close;
+    for (const level of LEVELS) {
+      const list = LESSONS.filter((l) => l.level === level.id);
+      body.append(h('div.lessons-level', h('b', { text: level.label }), h('span', { text: level.desc })));
+      for (const l of list) {
+        const finished = done.has(l.id);
+        const row = h(
+          `button.lesson${finished ? '.done' : ''}`,
+          h('span.lesson-icon', { html: icon(l.icon) }),
+          h('span.lesson-text', h('b', { text: l.title }), h('span', { text: l.desc })),
+          h('span.lesson-meta', { html: finished ? `${icon('check')}<span>${t('Done')}</span>` : `<span>${t('{n} min', { n: l.minutes })}</span>` }),
+        );
+        row.dataset.lesson = l.id;
+        row.addEventListener('click', () => {
+          close?.();
+          this.start(l.id);
+        });
+        body.append(row);
+      }
+    }
+    await modal({ title: 'Tutorials', body, width: 600, className: 'lessons-modal', buttons: [{ label: 'Close' }], bind: (c) => (close = c) });
+  }
+
   // Welcome dialog on the very first launch.
   async offer() {
     this.markSeen();
@@ -50,7 +138,7 @@ export class Tutorial {
       h('div.wl-art', { html: icon('logo') }),
       h('p', { html: 'ShaperBuild lets you sketch in 2D, pull your sketches into 3D, and export them for 3D printing.' }),
       h('p', { html: 'The <b>interactive tutorial</b> shows you the basics in about 3 minutes: moving around, drawing a sketch, making it 3D and rounding its edges.' }),
-      h('p.wl-small', { text: 'You can start it again any time from Help → Interactive tutorial.' }),
+      h('p.wl-small', { text: 'You can start it again, and find more tutorials, under Help → Tutorials.' }),
     );
     const v = await modal({
       title: 'Welcome to ShaperBuild',
@@ -64,146 +152,10 @@ export class Tutorial {
     if (v === 'start') this.start();
   }
 
-  steps() {
+  async start(id = 'basics') {
     const app = this.app;
-    const mac = isMac();
-    const trackpad = app.vp.scrollMode === 'orbit';
-    const doc = app.doc;
-    const ctxButton = (label) => () => [...document.querySelectorAll('#context-bar .cb-btn')].find((b) => b.textContent.trim() === label) || document.getElementById('context-bar');
-    return [
-      {
-        title: 'Welcome! Let’s build your first part',
-        text: 'In a few short steps you will learn to move around, draw a sketch, turn it into a 3D body and round its edges.<br><br>Each step waits for you to try it. Use <b>Skip</b> if you already know it.',
-        place: 'center',
-      },
-      {
-        title: 'Orbit: turn the view',
-        text: trackpad
-          ? 'Swipe with <b>two fingers</b> on the trackpad, or hold the <b>right mouse button</b> and drag.<br><small>No mouse? Hold <kbd>Space</kbd> and drag, or press the arrow keys.</small>'
-          : 'Hold the <b>right mouse button</b> and drag in the view.<br><small>On a laptop: hold <kbd>Space</kbd> and drag, or press the arrow keys.</small>',
-        place: 'top',
-        enter: () => (this.navCount.orbit = 0),
-        done: () => this.navCount.orbit >= 6,
-      },
-      {
-        title: 'Pan: slide the view',
-        text: trackpad
-          ? 'Hold <kbd>Shift</kbd> and swipe with two fingers, or drag with the <b>middle mouse button</b>.<br><small>Or hold <kbd>Shift</kbd>+<kbd>Space</kbd> and drag.</small>'
-          : 'Drag with the <b>middle mouse button</b> (press the wheel), or hold <kbd>Shift</kbd> and right-drag.<br><small>Or hold <kbd>Shift</kbd>+<kbd>Space</kbd> and drag.</small>',
-        place: 'top',
-        enter: () => (this.navCount.pan = 0),
-        done: () => this.navCount.pan >= 5,
-      },
-      {
-        title: 'Zoom: get closer',
-        text: trackpad ? '<b>Pinch</b> on the trackpad, or press <kbd>+</kbd> and <kbd>−</kbd>. It zooms towards your pointer.' : 'Turn the <b>scroll wheel</b> over the spot you want to see, or press <kbd>+</kbd> and <kbd>−</kbd>.',
-        place: 'top',
-        enter: () => (this.navCount.zoom = 0),
-        done: () => this.navCount.zoom >= 3,
-      },
-      {
-        title: 'Your view controls',
-        text: 'These buttons help too: <b>Fit</b> shows everything (<kbd>Z</kbd>), <b>Views</b> jumps to top/front/right, and <b>Orbit</b> / <b>Pan</b> let you drag with the left button. Click the <b>cube</b> to face a side.<br><br>The <b>mouse</b> button lists every control.',
-        target: () => document.getElementById('view-controls'),
-        place: 'left',
-      },
-      {
-        title: 'All tools are on the right',
-        text: t('Tools are grouped into <b>Sketch</b>, <b>Model</b>, <b>Transform</b>, <b>Shapes</b> and <b>Inspect</b>. Hover a tool to see what it does.<br><br>Can’t find something? Type in <b>Search tools</b> (<kbd>{mod}K</kbd>) — try “hole” or “round”.', { mod: modKey() }),
-        target: () => document.getElementById('tools'),
-        place: 'left',
-      },
-      {
-        title: 'Pick the Rectangle tool',
-        text: 'Click <b>Rectangle</b> in the Sketch tools, or press <kbd>R</kbd>.',
-        target: () => document.querySelector('#tools .tool-btn[data-tool="rect"]'),
-        place: 'left',
-        enter: () => {
-          const s = document.querySelector('#tools .tools-section[data-section="Sketch"]');
-          s?.classList.remove('collapsed');
-        },
-        done: () => app.tools.activeId === 'rect',
-      },
-      {
-        title: 'Draw a rectangle',
-        text: 'Click on the grid for the first corner, move the pointer, and click again for the opposite corner.<br><small>For an exact size, type <kbd>40</kbd> <kbd>Tab</kbd> <kbd>30</kbd> <kbd>Enter</kbd> after the first click.</small>',
-        place: 'top',
-        done: () => doc.sketches.some((s) => s.entities.filter((e) => e.type === 'line').length >= 4),
-      },
-      {
-        title: 'Finish the sketch',
-        text: 'Press <kbd>Esc</kbd> (or the ✕ in the Rectangle panel) to put the tool away.',
-        target: () => document.querySelector('#tool-panel:not([hidden])'),
-        place: 'right',
-        done: () => app.tools.isSelect,
-      },
-      {
-        title: 'Select the shape',
-        text: 'Click <b>inside</b> your rectangle. The shaded area is a <b>region</b> — a closed shape you can turn into 3D.',
-        place: 'top',
-        done: () => app.selection.list.some((it) => it.kind === 'region'),
-      },
-      {
-        title: 'Extrude it',
-        text: 'The bar at the bottom suggests tools for what you selected. Click <b>Extrude</b> (or press <kbd>E</kbd>).',
-        target: ctxButton('Extrude'),
-        place: 'top',
-        done: () => app.tools.activeId === 'extrude',
-      },
-      {
-        title: 'Pull it up',
-        text: 'Drag the <b>blue arrow</b> up, or type a height like <kbd>20</kbd>. Then press <kbd>Enter</kbd> or click <b>Done</b>.',
-        place: 'top',
-        enter: () => (this.bodyCount = doc.bodies.length),
-        done: () => doc.bodies.length > this.bodyCount && app.tools.isSelect,
-      },
-      {
-        title: 'Select an edge',
-        text: 'Nice, that’s a 3D body! Now click one of the <b>edges</b> on its top (the lines around the faces).<br><small>Click more edges to add them. Click empty space to clear the selection.</small>',
-        place: 'top',
-        done: () => app.selection.list.some((it) => it.kind === 'edge'),
-      },
-      {
-        title: 'Round it with Fillet',
-        text: 'Click <b>Fillet</b> in the bar at the bottom (or press <kbd>F</kbd>).',
-        target: ctxButton('Fillet'),
-        place: 'top',
-        done: () => app.tools.activeId === 'fillet',
-      },
-      {
-        title: 'Set the radius',
-        text: 'Drag the arrow or type a radius like <kbd>3</kbd>, then press <kbd>Enter</kbd>.',
-        place: 'top',
-        enter: () => (this.shapes = doc.bodies.map((b) => b.shapeId).join()),
-        done: () => app.tools.isSelect && doc.bodies.map((b) => b.shapeId).join() !== this.shapes,
-      },
-      {
-        title: 'Everything you made',
-        text: 'The <b>Items</b> list shows your bodies, meshes and sketches. Click the <b>eye</b> to hide one, double-click a name to rename it, right-click for more.<br><small>Show or hide this list with <kbd>Tab</kbd>.</small>',
-        target: () => document.getElementById('items'),
-        place: 'right',
-        enter: () => {
-          if (document.getElementById('items').classList.contains('collapsed')) app.toggleItems();
-        },
-      },
-      {
-        title: 'Ready to print',
-        text: t('Click <b>3D Print</b> to check your part (closed shape, fits your printer) and save an STL or 3MF file — or open it straight in your slicer.<br><br>Made a mistake? <b>Undo</b> with <kbd>{mod}Z</kbd>. Save your design with <kbd>{mod}S</kbd>.', { mod: modKey() }),
-        target: () => document.getElementById('btn-print'),
-        place: 'bottom',
-      },
-      {
-        title: 'You’re ready!',
-        text: t('That’s the basics. A few more tips:<br>• Draw on any flat face of a body to add or cut shapes.<br>• Select a face and drag its arrow to push or pull it.<br>• {key}+K finds any tool. The <b>?</b> button has help and shortcuts.', { key: mac ? '⌘' : 'Ctrl' }),
-        place: 'center',
-        final: true,
-      },
-    ];
-  }
-
-  async start() {
-    const app = this.app;
-    if (this.active) return;
+    const lesson = LESSONS.find((l) => l.id === id) || LESSONS[0];
+    if (this.active) this.end();
     this.markSeen();
     app.navHelp?.close();
     if (!app.doc.isEmpty || app.files.path) {
@@ -215,19 +167,27 @@ export class Tutorial {
     app.tools.activate('select');
     app.selection.clear();
     app.vp.setView('iso', { fit: true });
-    this.list = this.steps();
+    if (app.items.tab !== 'items') app.items.setTab('items');
+    this.lesson = lesson;
+    await lesson.setup?.(app);
+    this.list = lesson.steps(this);
     this.active = true;
     document.body.classList.add('tutorial-on');
     app.starter?.update();
     this.ring = h('div.tut-ring', { hidden: true });
     this.card = h('div.tut-card');
     document.body.append(this.ring, this.card);
-    this.timer = setInterval(() => this.place(), 250);
+    // Some steps wait for things without an event (a tab, a dialog).
+    this.timer = setInterval(() => {
+      this.place();
+      this.evaluate();
+    }, 250);
     this.go(0);
   }
 
-  end() {
+  end(finished = false) {
     if (!this.active) return;
+    if (finished) this.markDone(this.lesson.id);
     this.active = false;
     clearInterval(this.timer);
     clearTimeout(this.advanceTimer);
@@ -240,9 +200,10 @@ export class Tutorial {
 
   go(i) {
     clearTimeout(this.advanceTimer);
-    if (i >= this.list.length) return this.end();
+    if (i >= this.list.length) return this.end(true);
     this.index = Math.max(0, i);
     this.completed = false;
+    this.labels = [];
     const step = this.list[this.index];
     step.enter?.();
     this.render();
@@ -273,15 +234,27 @@ export class Tutorial {
     else if (step.done) next = h('button.btn', { text: 'Skip step' });
     else next = h('button.btn.primary', { text: step.final ? 'Finish' : this.index === 0 ? 'Let’s go' : 'Next' });
     next.addEventListener('click', () => this.go(this.index + 1));
+    // The last step offers the next lesson.
+    const i = LESSONS.indexOf(this.lesson);
+    const following = step.final ? LESSONS.slice(i + 1).find((l) => !this.done.has(l.id)) || LESSONS[i + 1] : null;
+    let more = null;
+    if (following) {
+      more = h('button.btn.tut-next', { html: `<span>${t('Next: {title}', { title: t(following.title) })}</span>${icon('chevron')}` });
+      more.addEventListener('click', () => {
+        this.end(true);
+        this.start(following.id);
+      });
+    }
     const progress = h('div.tut-progress', h('div', { style: { width: `${((this.index + (this.completed ? 1 : 0)) / (n - 1)) * 100}%` } }));
     this.card.append(
-      h('div.tut-top', h('span.tut-count', { text: this.index === 0 ? 'Tutorial' : t('Step {i} of {n}', { i: this.index, n: n - 1 }) }), endBtn),
+      h('div.tut-top', h('span.tut-count', { str: this.index === 0 ? `${t('Tutorial')} · ${t(LEVELS.find((l) => l.id === this.lesson.level)?.label || '')}` : t('Step {i} of {n}', { i: this.index, n: n - 1 }) }), endBtn),
       progress,
       h('div.tut-title', { text: step.title }),
       h('div.tut-text', { html: step.text }),
     );
     if (step.done && !this.completed) this.card.append(h('div.tut-wait', { html: `<span class="pulse"></span>${t('Waiting for you to try it…')}` }));
     this.card.append(h('div.tut-buttons', back, next));
+    if (more) this.card.append(h('div.tut-more', more));
     this.card.classList.toggle('done', this.completed);
   }
 

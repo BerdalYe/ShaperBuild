@@ -277,12 +277,48 @@ const filters = () => ({
   png: [{ name: i18n.t('PNG image'), extensions: ['png'] }],
 });
 
+// ---- the designs folder ------------------------------------------------------
+// Designs and exports go to Documents/ShaperBuild unless the person picks
+// another folder (Settings). Dialogs open in the folder used last.
+function foldersFile() {
+  return path.join(app.getPath('userData'), 'folders.json');
+}
+function readFolders() {
+  try {
+    return JSON.parse(fs.readFileSync(foldersFile(), 'utf8')) || {};
+  } catch {
+    return {};
+  }
+}
+function writeFolders(patch) {
+  const next = { ...readFolders(), ...patch };
+  try {
+    fs.mkdirSync(path.dirname(foldersFile()), { recursive: true });
+    fs.writeFileSync(foldersFile(), JSON.stringify(next));
+  } catch {}
+  return next;
+}
+function designsFolder() {
+  const chosen = readFolders().designs;
+  const dir = chosen && fs.existsSync(chosen) ? chosen : path.join(app.getPath('documents'), 'ShaperBuild');
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+  } catch {}
+  return dir;
+}
+function startFolder() {
+  const last = readFolders().last;
+  return last && fs.existsSync(last) ? last : designsFolder();
+}
+
 ipcMain.handle('dialog:open', async (_e, { kind = 'open', multi = false } = {}) => {
   const res = await dialog.showOpenDialog(win, {
+    defaultPath: startFolder(),
     properties: multi ? ['openFile', 'multiSelections'] : ['openFile'],
     filters: filters()[kind] || filters().open,
   });
   if (res.canceled) return [];
+  writeFolders({ last: path.dirname(res.filePaths[0]) });
   return res.filePaths;
 });
 
@@ -290,11 +326,22 @@ ipcMain.handle('dialog:save', async (_e, { kind = 'project', defaultName = 'Unti
   const list = filters()[kind] || filters().project;
   const ext = list[0].extensions[0];
   const res = await dialog.showSaveDialog(win, {
-    defaultPath: path.join(app.getPath('documents'), `${defaultName}.${ext}`),
+    defaultPath: path.join(startFolder(), `${defaultName}.${ext}`),
     filters: list,
   });
-  return res.canceled ? null : res.filePath;
+  if (res.canceled) return null;
+  writeFolders({ last: path.dirname(res.filePath) });
+  return res.filePath;
 });
+
+ipcMain.handle('folders:get', () => ({ designs: designsFolder() }));
+ipcMain.handle('folders:choose', async () => {
+  const res = await dialog.showOpenDialog(win, { defaultPath: designsFolder(), properties: ['openDirectory', 'createDirectory'] });
+  if (res.canceled || !res.filePaths[0]) return null;
+  writeFolders({ designs: res.filePaths[0], last: res.filePaths[0] });
+  return res.filePaths[0];
+});
+ipcMain.on('folders:show', () => shell.openPath(designsFolder()));
 
 ipcMain.handle('fs:read', async (_e, file) => {
   const data = await fs.promises.readFile(file);
@@ -432,6 +479,18 @@ ipcMain.handle('recent:remove', (_e, file) => {
 });
 
 ipcMain.handle('recent:get', () => readRecent());
+// When each file was last changed (null: the file is gone).
+ipcMain.handle('files:times', async (_e, files) => {
+  const out = {};
+  for (const f of Array.isArray(files) ? files : []) {
+    try {
+      out[f] = (await fs.promises.stat(f)).mtimeMs;
+    } catch {
+      out[f] = null;
+    }
+  }
+  return out;
+});
 ipcMain.handle('recent:add', (_e, p) => addRecent(p));
 ipcMain.handle('recent:clear', () => {
   try {

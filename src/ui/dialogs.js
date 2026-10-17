@@ -100,6 +100,30 @@ export class Dialogs {
       if (lang.value !== language()) app.welcome.restartPrompt();
     });
     lang.dataset.setting = 'language';
+    // Where Save and Export start (Documents/ShaperBuild unless changed).
+    const native = window.native;
+    const folderPath = h('span.folder-path', { str: '' });
+    const folderRow = native?.getFolders
+      ? row(
+          'Save designs in',
+          h(
+            'div.folder-pick',
+            folderPath,
+            h('button.btn', {
+              text: 'Change…',
+              onClick: async () => {
+                const dir = await native.chooseDesignsFolder();
+                if (dir) folderPath.textContent = dir;
+              },
+            }),
+            h('button.btn', { text: 'Open folder', onClick: () => native.showDesignsFolder() }),
+          ),
+        )
+      : null;
+    native?.getFolders?.().then((f) => {
+      folderPath.textContent = f?.designs || '';
+      folderPath.title = f?.designs || '';
+    });
     const body = h(
       'div',
       h('h4', { text: 'General' }),
@@ -113,6 +137,7 @@ export class Dialogs {
       }),
       h('div', { style: { height: '8px' } }),
       row('Units for this design', select(app.units, Object.entries(UNITS).map(([k, u]) => [k, u.name]), (v) => app.cmd.setUnits(v))),
+      folderRow,
       h('h4', { text: 'Navigation' }),
       row(
         'Scroll wheel / two-finger swipe',

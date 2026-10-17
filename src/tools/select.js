@@ -99,7 +99,9 @@ export class SelectTool extends Tool {
   }
 
   onDblClick(e) {
-    const hit = e.pick(this.pickKinds);
+    // The push/pull arrow appears where the first click selected a flat face;
+    // look past it to the face.
+    const hit = e.pick(this.pickKinds.filter((k) => k !== 'handle'));
     if (!hit) return;
     const sel = this.app.selection;
     if (hit.kind === 'face' || hit.kind === 'edge' || hit.kind === 'body' || hit.kind === 'vertex') {

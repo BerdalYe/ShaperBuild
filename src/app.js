@@ -26,7 +26,9 @@ import { DrawingDialog } from './ui/drawingdialog.js';
 import { MaterialsPanel } from './ui/materials.js';
 import { toast, showMenu, hideTooltip, modal } from './ui/overlays.js';
 import { icon } from './ui/icons.js';
-import { h, isTyping, modKey, escapeHtml, translateStatic } from './ui/dom.js';
+import { h, isTyping, modKey, translateStatic } from './ui/dom.js';
+import { BootScreen } from './ui/boot.js';
+import { PanelResizer } from './ui/resizer.js';
 import { t, language, setLanguage } from './core/i18n.js';
 import { Welcome } from './ui/welcome.js';
 import { buildKeymap, comboOf } from './core/keymap.js';
@@ -79,6 +81,7 @@ export class App {
     setLanguage(language());
     translateStatic(document.getElementById('app'));
     this.kernel = new KernelClient();
+    this.boot = new BootScreen(this.kernel);
     this.doc = new Document();
     this.selection = new Selection();
     this.vp = new Viewport(document.getElementById('viewport'), { theme: this.settings.theme });
@@ -93,6 +96,7 @@ export class App {
     this.tools = new ToolManager(this);
     this.items = new ItemsPanel(document.getElementById('items'), this);
     this.toolsMenu = new ToolsMenu(document.getElementById('tools'), this);
+    this.resizer = new PanelResizer(this);
     this.context = new ContextBar(document.getElementById('context-bar'), this);
     this.home = new Home(document.getElementById('home'), this);
     this.constraints = new ConstraintLayer(this);
@@ -122,10 +126,10 @@ export class App {
     try {
       await this.kernel.ready;
     } catch (err) {
-      document.querySelector('#boot .boot-card').innerHTML = `<div style="color:var(--danger)">${t('The geometry engine failed to start.')}</div><div>${escapeHtml(t(err.message))}</div>`;
+      this.boot.fail(err.message);
       return;
     }
-    document.getElementById('boot').hidden = true;
+    this.boot.set(92, 'Opening your workspace…');
     if (window.native) {
       window.native.onMenu((cmd, arg) => this.onMenu(cmd, arg));
       window.native.onOpenPath((p) => this.files.openPath(p));
@@ -138,6 +142,7 @@ export class App {
     // home screen never pops up over work that has already started.
     const recovered = await this.files.offerRecovery().catch(() => false);
     if (!recovered && this.doc.isEmpty && !this.files.path) this.home.show();
+    this.boot.hide();
     this.ready = true;
     window.native?.ready();
     this.files.startAutosave();
@@ -1025,7 +1030,7 @@ export class App {
     const r = e.currentTarget.getBoundingClientRect();
     const m = modKey();
     showMenu(r.left, r.bottom + 6, [
-      { label: 'Interactive tutorial', icon: 'learn', action: () => this.tutorial.start() },
+      { label: 'Tutorials…', icon: 'learn', action: () => this.tutorial.library() },
       { label: 'How to move around', icon: 'mouse', action: () => this.navHelp.toggle(true) },
       { label: 'Find a tool', icon: 'search', kbd: `${m}K`, action: () => this.toolsMenu.focusSearch() },
       { label: 'Keyboard shortcuts', icon: 'keyboard', kbd: `${m}/`, action: () => this.dialogs.shortcuts() },
@@ -1067,6 +1072,7 @@ export class App {
     for (const b of document.querySelectorAll('#mode-seg button')) b.classList.toggle('on', (b.dataset.mode === 'visual') === on);
     if (on) this.tools.activate('select');
     document.getElementById('tools').style.display = on ? 'none' : '';
+    this.resizer.handles.right.hidden = on;
     this.materials.show(on);
     this.vp.setVisualization(on);
     this.applyIsolation();
@@ -1223,6 +1229,8 @@ export class App {
     this.settings.snap = !this.settings.snap;
     this.saveSettings();
     document.getElementById('btn-snap').classList.toggle('on', this.settings.snap);
+    // Tools that set up snapping when they start (the Move gizmo) follow at once.
+    this.tools.active?.onSnapChange?.();
     toast(this.settings.snap ? 'Snapping on' : 'Snapping off (hold Alt to skip snapping)', { ms: 1200 });
   }
 
@@ -1656,7 +1664,7 @@ export class App {
       case 'check-updates':
         return this.updates.check(true);
       case 'tutorial':
-        return this.tutorial.start();
+        return this.tutorial.library();
       case 'navigation-help':
         return this.navHelp.toggle(true);
       case 'find-tool':

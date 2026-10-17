@@ -29,17 +29,16 @@ export function attachTooltip(el, content) {
       tipEl = h('div.tooltip', { html: t(c) });
       document.body.append(tipEl);
       const r = el.getBoundingClientRect();
-      const t = tipEl.getBoundingClientRect();
-      let left = r.left - t.width - 10;
+      const box = tipEl.getBoundingClientRect();
+      let left = r.left - box.width - 10;
       if (left < 8) left = r.right + 10;
-      let top = r.top + r.height / 2 - t.height / 2;
-      if (r.right + t.width + 10 < window.innerWidth && left === r.right + 10) left = r.right + 10;
+      let top = r.top + r.height / 2 - box.height / 2;
       if (el.dataset.tipBelow) {
-        left = r.left + r.width / 2 - t.width / 2;
+        left = r.left + r.width / 2 - box.width / 2;
         top = r.bottom + 8;
       }
-      tipEl.style.left = `${Math.max(8, Math.min(window.innerWidth - t.width - 8, left))}px`;
-      tipEl.style.top = `${Math.max(8, Math.min(window.innerHeight - t.height - 8, top))}px`;
+      tipEl.style.left = `${Math.max(8, Math.min(window.innerWidth - box.width - 8, left))}px`;
+      tipEl.style.top = `${Math.max(8, Math.min(window.innerHeight - box.height - 8, top))}px`;
     }, 450);
   });
   el.addEventListener('mouseleave', hideTooltip);

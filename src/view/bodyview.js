@@ -5,6 +5,7 @@ import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makePickMeshMaterial, makePickLineMaterial, makePickPointMaterial, fillIdColors, idColor } from './pick.js';
+import { boxUVs, mapsFor } from './textures.js';
 
 const tmpColor = new THREE.Color();
 
@@ -18,15 +19,16 @@ export const MATERIALS = {
   softTouch: { label: 'Soft-touch', cat: 'Plastic', roughness: 0.7, metalness: 0, sheen: 0.6 },
   translucent: { label: 'Translucent plastic', cat: 'Plastic', roughness: 0.35, metalness: 0, transmission: 0.6, thickness: 6, ior: 1.46 },
   printed: { label: '3D-printed (PLA)', cat: 'Plastic', roughness: 0.55, metalness: 0, clearcoat: 0.2, clearcoatRoughness: 0.5 },
+  carbon: { label: 'Carbon fibre', cat: 'Plastic', roughness: 0.35, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.05, color: '#3b3e44', texture: 'carbon' },
   rubber: { label: 'Rubber', cat: 'Rubber and paint', roughness: 1, metalness: 0 },
   carPaint: { label: 'Car paint', cat: 'Rubber and paint', roughness: 0.35, metalness: 0.5, clearcoat: 1, clearcoatRoughness: 0.03 },
   satinPaint: { label: 'Satin paint', cat: 'Rubber and paint', roughness: 0.45, metalness: 0, clearcoat: 0.3, clearcoatRoughness: 0.3 },
   ceramic: { label: 'Ceramic', cat: 'Rubber and paint', roughness: 0.15, metalness: 0, clearcoat: 0.8, clearcoatRoughness: 0.08, color: '#f2efe8' },
-  metal: { label: 'Metal', cat: 'Metal', roughness: 0.36, metalness: 1 },
-  brushed: { label: 'Brushed metal', cat: 'Metal', roughness: 0.55, metalness: 1 },
+  metal: { label: 'Metal', cat: 'Metal', roughness: 0.3, metalness: 1 },
+  brushed: { label: 'Brushed metal', cat: 'Metal', roughness: 0.42, metalness: 1, color: '#c9cdd2', texture: 'brushed' },
   chrome: { label: 'Chrome', cat: 'Metal', roughness: 0.03, metalness: 1 },
   steel: { label: 'Steel', cat: 'Metal', roughness: 0.3, metalness: 1, color: '#b9bec4' },
-  aluminium: { label: 'Aluminium', cat: 'Metal', roughness: 0.4, metalness: 1, color: '#d4d7db' },
+  aluminium: { label: 'Aluminium', cat: 'Metal', roughness: 0.4, metalness: 1, color: '#d4d7db', texture: 'brushed', textureScale: 60 },
   gold: { label: 'Gold', cat: 'Metal', roughness: 0.2, metalness: 1, color: '#e3b65a' },
   copper: { label: 'Copper', cat: 'Metal', roughness: 0.28, metalness: 1, color: '#d08a62' },
   brass: { label: 'Brass', cat: 'Metal', roughness: 0.3, metalness: 1, color: '#d6b46a' },
@@ -35,11 +37,14 @@ export const MATERIALS = {
   glass: { label: 'Glass', cat: 'Glass', roughness: 0.04, metalness: 0, transmission: 1, thickness: 4, ior: 1.5 },
   frosted: { label: 'Frosted glass', cat: 'Glass', roughness: 0.45, metalness: 0, transmission: 1, thickness: 4, ior: 1.5 },
   tinted: { label: 'Tinted glass', cat: 'Glass', roughness: 0.04, metalness: 0, transmission: 0.85, thickness: 8, ior: 1.5, color: '#6d8fa8' },
-  wood: { label: 'Wood (oiled)', cat: 'Natural', roughness: 0.6, metalness: 0, clearcoat: 0.25, clearcoatRoughness: 0.4, color: '#a8754a' },
-  concrete: { label: 'Concrete', cat: 'Natural', roughness: 0.95, metalness: 0, color: '#a6a39e' },
-  stone: { label: 'Polished stone', cat: 'Natural', roughness: 0.2, metalness: 0, clearcoat: 0.6, clearcoatRoughness: 0.1, color: '#5d5f63' },
-  leather: { label: 'Leather', cat: 'Natural', roughness: 0.65, metalness: 0, sheen: 0.4, color: '#6b4630' },
-  fabric: { label: 'Fabric', cat: 'Natural', roughness: 1, metalness: 0, sheen: 1, color: '#4f5d73' },
+  wood: { label: 'Wood (oiled)', cat: 'Natural', roughness: 0.6, metalness: 0, clearcoat: 0.25, clearcoatRoughness: 0.4, color: '#b98455', texture: 'wood' },
+  oak: { label: 'Light oak', cat: 'Natural', roughness: 0.7, metalness: 0, color: '#d3ad7c', texture: 'wood' },
+  walnut: { label: 'Walnut', cat: 'Natural', roughness: 0.5, metalness: 0, clearcoat: 0.35, clearcoatRoughness: 0.3, color: '#6e4a31', texture: 'wood' },
+  concrete: { label: 'Concrete', cat: 'Natural', roughness: 0.95, metalness: 0, color: '#a6a39e', texture: 'concrete' },
+  stone: { label: 'Polished stone', cat: 'Natural', roughness: 0.2, metalness: 0, clearcoat: 0.6, clearcoatRoughness: 0.1, color: '#5d5f63', texture: 'concrete', textureScale: 60 },
+  marble: { label: 'Marble', cat: 'Natural', roughness: 0.18, metalness: 0, clearcoat: 0.7, clearcoatRoughness: 0.08, color: '#efede8', texture: 'marble' },
+  leather: { label: 'Leather', cat: 'Natural', roughness: 0.65, metalness: 0, sheen: 0.4, color: '#6b4630', texture: 'leather' },
+  fabric: { label: 'Fabric', cat: 'Natural', roughness: 1, metalness: 0, sheen: 1, color: '#4f5d73', texture: 'fabric' },
 };
 const MODELING_LOOK = { roughness: 0.55, metalness: 0.05, clearcoat: 0, clearcoatRoughness: 0, transmission: 0 };
 
@@ -98,6 +103,10 @@ export class BodyView {
       geom.setIndex(new THREE.BufferAttribute(d.indices, 1));
       this.geometry = geom;
     }
+    // Texture coordinates (box projection, in mm) for textured materials.
+    const pa = this.geometry.attributes.position;
+    const na = this.geometry.attributes.normal;
+    this.geometry.setAttribute('uv', new THREE.BufferAttribute(boxUVs(pa.array, na.array), 2));
     const g = this.geometry;
     const nVerts = g.attributes.position.count;
     this.colors = new Float32Array(nVerts * 3);
@@ -233,7 +242,8 @@ export class BodyView {
   applyColors() {
     const theme = this.ctx.theme;
     const h = this.highlight || {};
-    const base = tmpColor.set(h.body || this.body.color || theme.body);
+    // A picture texture shows its own colours.
+    const base = tmpColor.set(h.body || (this.pictureLook ? '#ffffff' : this.body.color || theme.body));
     const c = this.colors;
     for (let i = 0; i < c.length; i += 3) {
       c[i] = base.r;
@@ -300,6 +310,17 @@ export class BodyView {
     m.ior = look.ior || 1.5;
     m.sheen = look.sheen || 0;
     m.sheenRoughness = 0.6;
+    // Textures: built-in (wood, brushed metal…) or a picture.
+    const maps = this.visual && !this.xray ? mapsFor(look, () => this.visual && this.applyLook()) : null;
+    m.map = maps?.map || null;
+    m.roughnessMap = maps?.roughnessMap || null;
+    m.normalMap = maps?.normalMap || null;
+    const picture = !!maps?.picture;
+    if (picture !== !!this.pictureLook) {
+      this.pictureLook = picture;
+      this.applyColors();
+    }
+    this.ctx.requestRender?.();
     const opacity = look.opacity ?? 1;
     if (!this.xray) {
       m.transparent = opacity < 1;

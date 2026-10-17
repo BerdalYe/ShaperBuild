@@ -4,6 +4,7 @@
 import { h, clear } from './dom.js';
 import { icon } from './icons.js';
 import { MATERIALS } from '../view/bodyview.js';
+import { TEXTURES, swatchImage, shrinkPicture } from '../view/textures.js';
 import { LIGHTING } from '../view/viewport.js';
 import { BODY_COLORS } from '../view/theme.js';
 import { toast } from './overlays.js';
@@ -80,7 +81,19 @@ export class MaterialsPanel {
     for (const [cat, list] of cats) {
       const grid = h('div.mp-grid');
       for (const [key, m] of list) {
-        const b = h(`button.mp-mat${key === current ? '.on' : ''}`, h('span.mp-ball', { style: { background: swatch(m, m.color ? null : first?.color) } }), h('span', { text: m.label }));
+        const ball = h('span.mp-ball', { style: { background: swatch(m, m.color ? null : first?.color) } });
+        const img = m.texture && swatchImage(m.texture);
+        if (img) {
+          // The texture, in the material's colour, with a highlight.
+          Object.assign(ball.style, {
+            background: 'none',
+            backgroundImage: `radial-gradient(circle at 34% 28%, rgba(255,255,255,.7) 0, rgba(255,255,255,0) 45%), radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,.45) 100%), url(${img})`,
+            backgroundSize: 'cover',
+            backgroundColor: m.color || first?.color || '#aab4c0',
+            backgroundBlendMode: 'screen, normal, multiply',
+          });
+        }
+        const b = h(`button.mp-mat${key === current ? '.on' : ''}`, ball, h('span', { text: m.label }));
         b.dataset.material = key;
         b.addEventListener('click', () => {
           const tg = this.targets();
@@ -136,12 +149,40 @@ export class MaterialsPanel {
         prop('transmission', 'See-through (glass)', 0, 1, 0.01, look.transmission || 0),
       );
       if (look.transmission) finish.append(prop('ior', 'Refraction (IOR)', 1, 2.4, 0.01, look.ior || 1.5));
+      // Texture size (built-in textures and pictures).
+      if (look.image || look.texture) {
+        const key = look.image ? 'imageScale' : 'textureScale';
+        const value = look.image ? look.imageScale || 50 : look.textureScale || TEXTURES[look.texture]?.scale || 50;
+        finish.append(this.slider('Texture size', value, 5, 400, 1, null, (v) => app.cmd.setLook(this.targets(), { [key]: v }), (v) => `${fmt(v, 0)} mm`));
+      }
+      // A picture as the texture.
+      const file = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif,image/bmp', hidden: true });
+      file.addEventListener('change', async () => {
+        const f = file.files[0];
+        if (!f) return;
+        try {
+          const image = await shrinkPicture(f);
+          app.cmd.setLook(this.targets(), { image, imageScale: look.imageScale || 50 }, 'Picture texture');
+        } catch (err) {
+          toast(err.message, { type: 'error' });
+        }
+      });
+      const pick = h('button.btn.small', { html: `${icon('image')}<span>${t(look.image ? 'Change picture…' : 'Use a picture as texture…')}</span>` });
+      pick.dataset.action = 'picture-texture';
+      pick.addEventListener('click', () => file.click());
+      const row = h('div.mp-texrow', pick, file);
+      if (look.image) {
+        const remove = h('button.btn.small', { text: 'Remove picture' });
+        remove.addEventListener('click', () => app.cmd.setLook(this.targets(), { image: undefined, imageScale: undefined }, 'Picture texture'));
+        row.append(remove);
+      }
+      finish.append(row);
       if (ids.some((id) => app.doc.body(id)?.look)) {
         const reset = h('button.btn.small', { text: 'Reset finish' });
         reset.addEventListener('click', () => app.cmd.setLook(this.targets(), null));
         finish.append(reset);
       }
-      this.el.append(h('div.mp-sub', { text: 'Finish' }), finish);
+      this.el.append(h('div.mp-sub', { text: 'Surface finish' }), finish);
     }
 
     this.el.append(this.decalsSection(), this.lightSection(), this.cameraSection());
@@ -269,7 +310,7 @@ export class MaterialsPanel {
     });
     return h(
       'div',
-      h('div.mp-sub', { text: 'Light' }),
+      h('div.mp-sub', { text: 'Lighting' }),
       h(
         'div.mp-props',
         this.slider('Light direction', l.rotation, 0, 360, 1, (v) => apply({ rotation: v }), (v) => keep({ rotation: v }), (v) => `${fmt(v, 0)}°`),

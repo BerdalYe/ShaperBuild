@@ -494,12 +494,12 @@ export class Commands {
 
   // Changes to a body's finish ({ roughness, opacity, transmission, ior });
   // null clears them.
-  setLook(ids, patch, label = 'Finish') {
+  setLook(ids, patch, label = 'Surface finish') {
     this.doc.apply(label, (d) =>
       ids.forEach((id) => {
         const b = d.body(id);
         if (!b) return;
-        const look = patch ? { ...(b.look || {}), ...patch } : null;
+        const look = patch ? stripUndefined({ ...(b.look || {}), ...patch }) : null;
         d.updateBody(id, { look: look && Object.keys(look).length ? look : undefined });
       }),
     );

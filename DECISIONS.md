@@ -209,10 +209,22 @@ differently on purpose, the choice is written down here.
 
 ## Visualization
 
-- 28 built-in materials (colour and finish; no image textures, so wood and
-  stone are plain colours). Metals and some others bring their own colour
+- 32 built-in materials. Metals and some others bring their own colour
   when picked. Roughness, opacity, see-through and refraction can be changed
   per body; Reset finish goes back to the material.
+- Visualization is lit by a made-up photo studio (soft light boxes around
+  the part, rendered once into an environment map) plus the sun with
+  shadows, with neutral tone mapping so colours stay true. The light at the
+  camera that Modeling uses is turned almost off, because it hides
+  engraved and raised details.
+- **Textures** are drawn by code when first used (wood, brushed metal,
+  carbon fibre, concrete, marble, leather, fabric): they tile without seams,
+  need no downloads and are tinted by the body's colour. A picture can be
+  used as a texture as well (reduced to 1024 pixels and saved in the
+  design). Textures are box-projected in millimetres, so they keep their
+  size on any body, but they can show a seam where a curved face turns
+  past 45°, and they stay put in space when a body is moved. GLB and USDZ
+  exports include them.
 - The light direction, sun height, brightness, ground shadow and the
   camera's field of view are app settings (they apply to every design).
   There is no HDRI choice, depth of field, aperture or blur, and no AI
@@ -249,6 +261,23 @@ differently on purpose, the choice is written down here.
   There is no cloud sync, sharing or team spaces.
 - "Move to the bin" uses the system's recycle bin, so it can be undone
   there. The open design cannot be binned.
+
+## Start, home and learning
+
+- The startup screen covers the window while the geometry engine loads and
+  shows real progress (each engine reports when it is ready).
+- The home screen has the main actions on the left; on the right, the next
+  unfinished tutorial, recent designs (with when each file last changed;
+  moved or deleted files are marked) and all tutorials.
+- Tutorials check what you actually do (a change with the right name, a
+  tool, a selection, an open dialog) rather than where you click, so they
+  work with any way of doing the step; each step can be skipped. A
+  finished tutorial is remembered on this computer.
+- The Items list and the tools menu can be resized by dragging the edge of
+  the view (180–520 and 150–460 pixels); the widths are app settings.
+- New designs and exports go to Documents/ShaperBuild unless another
+  folder is chosen in Settings; open and save dialogs start in the folder
+  used last.
 
 ## Touch and pen
 

@@ -116,6 +116,10 @@ export class TransformTool extends OpTool {
     this.render();
   }
 
+  onSnapChange() {
+    this.applySnap();
+  }
+
   applySnap() {
     const snap = this.app.settings.snap;
     this.controls.setTranslationSnap(snap ? this.app.vp.grid.step : null);

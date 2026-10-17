@@ -139,6 +139,27 @@ test('shell removes a face and leaves walls', () => {
   near(volume(s.bodies[0].id), 1000 - 8 * 8 * 9, 1e-2);
 });
 
+test('shell still works when a rounded edge meets the opened face', () => {
+  const mid = (e) => e.a.map((v, i) => (v + e.b[i]) / 2);
+  const box = k.primitive({ type: 'box', params: { width: 50, depth: 40, height: 25 } }).bodies[0];
+  const edge = box.mesh.edgeInfo.findIndex((e) => e.type === 'line' && Math.hypot(...mid(e).map((v, i) => v - [0, -20, 25][i])) < 1e-6);
+  const round = k.fillet({ id: box.id, edges: [edge], radius: 4 }).bodies[0];
+  const top = round.mesh.faceInfo.findIndex((f) => f.type === 'plane' && f.normal[2] > 0.99);
+  const before = volume(round.id);
+  const s = k.shell({ id: round.id, faces: [top], thickness: 2 });
+  // Hollow: the body shrunk by 2 (46 × 36 × 21, its rounded corner now
+  // radius 2), plus the opening through the 2 mm top (46 × 34: the flat part
+  // of the top, shrunk the same way).
+  near(volume(s.bodies[0].id), before - (46 * 36 * 21 - (4 - Math.PI) * 46 + 46 * 34 * 2), 1);
+  // Walls on the outside: a real shell, or a clear message, never the body unchanged.
+  try {
+    const out = k.shell({ id: round.id, faces: [top], thickness: 2, outward: true });
+    assert.ok(Math.abs(volume(out.bodies[0].id) - before) > 100);
+  } catch (err) {
+    assert.match(err.message, /Use Inside/);
+  }
+});
+
 test('booleans: union, subtract, intersect between solids', () => {
   const a = makeBox(10, 10, 10);
   const b = k.transform({ ids: [makeBox(10, 10, 10)], matrix: translationMatrix([5, 0, 0]) }).bodies[0].id;

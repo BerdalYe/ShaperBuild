@@ -1,9 +1,20 @@
-// Start screen: new design, open, import and recent designs.
+// Start screen: new design, open, import, recent designs and tutorials.
 import { h, clear, escapeHtml } from './dom.js';
 import { icon } from './icons.js';
 import { loadThumbs, moveThumb } from '../fileops.js';
 import { showMenu, modal, toast } from './overlays.js';
-import { t } from '../core/i18n.js';
+import { t, language } from '../core/i18n.js';
+import { LESSONS, LEVELS } from './lessons.js';
+
+// "2 days ago", in the app's language.
+function ago(ms) {
+  const fmt = new Intl.RelativeTimeFormat(language() === 'nb' ? 'nb' : 'en', { numeric: 'auto' });
+  const s = (ms - Date.now()) / 1000;
+  for (const [unit, size] of [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]]) {
+    if (Math.abs(s) >= size) return fmt.format(Math.round(s / size), unit);
+  }
+  return fmt.format(0, 'minute');
+}
 
 export class Home {
   constructor(el, app) {
@@ -14,47 +25,88 @@ export class Home {
   async show() {
     const app = this.app;
     if (!app.tools.isSelect) app.tools.cancel();
-    clear(this.el);
-    const recent = (await window.native?.getRecent()) || [];
+    const native = window.native;
+    const recent = (await native?.getRecent()) || [];
+    const times = (await native?.fileTimes?.(recent).catch(() => null)) || {};
+    const info = await native?.info().catch(() => null);
     const thumbs = loadThumbs();
-    const action = (cls, ic, title, sub, fn) => {
-      const b = h(`button.home-action${cls}`, h('div.ha-icon', { html: icon(ic) }), h('div', h('b', { text: title }), h('span', { text: sub })));
+    clear(this.el);
+
+    // ---- left: what you can do ----
+    const side = (ic, label, fn, cls = '') => {
+      const b = h(`button.hs-btn${cls}`, { html: `${icon(ic)}<span>${escapeHtml(label)}</span>` });
       b.addEventListener('click', fn);
       return b;
     };
-    const inner = h(
-      'div.home-inner',
-      h('div.home-brand', h('div.logo', { html: icon('logo', 'logo') }), h('div', h('h1', { text: 'ShaperBuild' }), h('p', { text: 'Sketch, model and print — precise 3D design on your desktop' }))),
-      h(
-        'div.home-actions',
-        action('.primary', 'plus', 'New design', 'Start from an empty workspace', () => this.app.files.newDesign()),
-        action('', 'folder', 'Open…', 'A saved .shaperbuild design', () => this.app.files.openDialog()),
-        action('', 'import', 'Import STL / OBJ / 3MF / STEP', 'Open a 3D file as a new design', () => this.app.files.importDialog()),
-      ),
+    const help = side('help', t('Help'), (e) => app.helpMenu(e));
+    const sidebar = h(
+      'aside.home-side',
+      h('div.hs-brand', h('div.logo', { html: icon('logo', 'logo') }), h('b', { str: 'ShaperBuild' })),
+      side('plus', t('New design'), () => app.files.newDesign(), '.primary'),
+      side('folder', t('Open…'), () => app.files.openDialog()),
+      side('import', t('Import…'), () => app.files.importDialog()),
+      h('div.hs-sep'),
+      side('learn', t('Tutorials'), () => app.tutorial.library()),
+      native?.showDesignsFolder ? side('folder2', t('Designs folder'), () => native.showDesignsFolder()) : null,
+      h('div.hs-grow'),
+      side('settings', t('Settings'), () => app.dialogs.settings()),
+      help,
+      info?.version ? h('div.hs-version', { str: t('Version {v}', { v: info.version }) }) : null,
     );
-    const learn = h(
-      'button.home-learn',
-      h('div.hl-icon', { html: icon('learn') }),
-      h('div', h('b', { text: 'New here? Take the interactive tutorial' }), h('span', { text: 'Learn to move around, sketch, extrude and fillet in about 3 minutes.' })),
-      h('span.hl-go', { html: `<span>${t('Start')}</span>${icon('chevron')}` }),
-    );
-    learn.addEventListener('click', () => this.app.tutorial.start());
-    inner.append(learn);
+
+    // ---- right: your work and what to learn ----
+    const main = h('div.home-main');
     if (!app.doc.isEmpty || app.files.path) {
-      const back = h('button.btn', { html: `${icon('chevron')}<span>${escapeHtml(t('Back to {name}', { name: app.files.name }))}</span>` });
-      back.querySelector('svg').style.cssText = 'width:16px;height:16px;transform:rotate(180deg)';
+      const back = h('button.home-back', { html: `${icon('chevron')}<span>${escapeHtml(t('Back to {name}', { name: app.files.name }))}</span>` });
       back.addEventListener('click', () => this.hide());
-      inner.insertBefore(h('div', { style: { marginBottom: '22px' } }, back), inner.children[1]);
+      main.append(back);
     }
-    inner.append(h('h2', { text: 'Recent designs' }));
+    main.append(h('div.home-head', h('h1', { text: 'Welcome to ShaperBuild' }), h('p', { text: 'Sketch, model and print — precise 3D design on your desktop' })));
+
+    // Continue learning: the next tutorial not finished yet.
+    const next = app.tutorial.nextLesson;
+    const doneCount = app.tutorial.done.size;
+    if (next) {
+      const level = LEVELS.find((l) => l.id === next.level);
+      const start = h('button.btn.primary.hn-start', { html: `${icon('play')}<span>${escapeHtml(doneCount ? t('Start') : t('Start the tutorial'))}</span>` });
+      start.addEventListener('click', () => app.tutorial.start(next.id));
+      const all = h('button.btn.hn-all', { text: 'All tutorials' });
+      all.addEventListener('click', () => app.tutorial.library());
+      main.append(
+        h(
+          'section.home-next',
+          h('div.hn-icon', { html: icon(next.icon) }),
+          h(
+            'div.hn-text',
+            h('span.hn-kicker', { str: `${doneCount ? t('Next tutorial') : t('New here?')} · ${t(level.label)} · ${t('{n} min', { n: next.minutes })}` }),
+            h('b', { text: next.title }),
+            h('span', { text: next.desc }),
+            h('div.hn-progress', h('div', { style: { width: `${(doneCount / LESSONS.length) * 100}%` } })),
+            h('small', { str: t('{done} of {n} tutorials done', { done: doneCount, n: LESSONS.length }) }),
+          ),
+          h('div.hn-buttons', start, all),
+        ),
+      );
+    }
+
+    // Recent designs.
+    main.append(h('div.home-sec', h('h2', { text: 'Recent designs' }), recent.length ? h('span.count', { str: String(recent.length) }) : null));
     if (recent.length) {
       const grid = h('div.recent-grid');
       for (const p of recent) {
         const name = p.split(/[\\/]/).pop().replace(/\.[^.]+$/, '');
         const thumb = h('div.thumb');
         if (thumbs[p]) thumb.style.backgroundImage = `url(${thumbs[p]})`;
+        else thumb.append(h('span.thumb-empty', { html: icon('box') }));
         const more = h('span.rc-more', { html: icon('more'), title: 'More', role: 'button' });
-        const card = h('button.recent-card', thumb, h('div.meta', h('b', { str: name }), h('span', { str: p })), more);
+        const when = times[p];
+        const missing = p in times && when === null;
+        const card = h(
+          `button.recent-card${missing ? '.missing' : ''}`,
+          thumb,
+          h('div.meta', h('b', { str: name }), h('span.rc-when', { str: missing ? t('File not found') : when ? t('Changed {when}', { when: ago(when) }) : '' }), h('span.rc-path', { str: p, title: p })),
+          more,
+        );
         card.dataset.path = p;
         card.addEventListener('click', (e) => {
           if (more.contains(e.target)) return this.cardMenu(e, p, name);
@@ -66,11 +118,33 @@ export class Home {
         });
         grid.append(card);
       }
-      inner.append(grid);
+      main.append(grid);
     } else {
-      inner.append(h('div.home-empty', { text: 'Designs you save will show up here.' }));
+      const create = h('button.btn.primary', { html: `${icon('plus')}<span>${escapeHtml(t('New design'))}</span>` });
+      create.addEventListener('click', () => app.files.newDesign());
+      main.append(h('div.home-empty', h('div.he-icon', { html: icon('box') }), h('div', { text: 'Designs you save will show up here.' }), create));
     }
-    this.el.append(inner);
+
+    // Every tutorial, easy to hard.
+    main.append(h('div.home-sec', h('h2', { text: 'Tutorials' }), h('span.count', { str: t('{done} of {n} done', { done: doneCount, n: LESSONS.length }) })));
+    const done = app.tutorial.done;
+    const lessons = h('div.home-lessons');
+    for (const l of LESSONS) {
+      const level = LEVELS.find((x) => x.id === l.level);
+      const card = h(
+        `button.home-lesson${done.has(l.id) ? '.done' : ''}`,
+        h('span.hl-top', h('span.hl-ic', { html: icon(l.icon) }), h(`span.hl-level.lv${l.level}`, { text: level.label }), done.has(l.id) ? h('span.hl-check', { html: icon('check'), title: 'Done' }) : null),
+        h('b', { text: l.title }),
+        h('span.hl-desc', { text: l.desc }),
+        h('span.hl-min', { str: t('{n} min', { n: l.minutes }) }),
+      );
+      card.dataset.lesson = l.id;
+      card.addEventListener('click', () => app.tutorial.start(l.id));
+      lessons.append(card);
+    }
+    main.append(lessons);
+
+    this.el.append(sidebar, h('div.home-scroll', main));
     this.el.hidden = false;
     app.starter?.update();
   }

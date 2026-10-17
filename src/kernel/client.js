@@ -21,6 +21,7 @@ export class KernelClient extends Emitter {
 
   onMessage(msg) {
     if (msg.type === 'ready') return this._resolveReady();
+    if (msg.type === 'stage') return this.emit('stage', msg.stage);
     if (msg.type === 'fatal') return this._rejectReady(new Error(msg.message));
     const p = this.pending.get(msg.id);
     if (!p) return;
