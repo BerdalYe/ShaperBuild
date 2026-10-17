@@ -50,8 +50,20 @@ jobs:
       - name: Build installer
         run: npm run dist
         env:
-          # Builds are not code-signed.
+          # No paid certificates: Windows and Linux builds are not signed, and
+          # the Mac app gets a free ad-hoc signature ("identity": "-" in
+          # package.json). Without it, Apple Silicon Macs call the app
+          # "damaged". Ad-hoc signing uses no secrets, so it can run for pull
+          # requests too.
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          CSC_FOR_PULL_REQUEST: true
+      - name: Check the Mac app is signed
+        if: runner.os == 'macOS'
+        run: |
+          for app in dist/mac*/ShaperBuild.app; do
+            codesign --verify --deep --strict --verbose=2 "$app"
+            codesign -dv "$app" 2>&1 | grep -E 'Signature=adhoc|Authority='
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: ShaperBuild-${{ runner.os }}

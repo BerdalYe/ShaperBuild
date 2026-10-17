@@ -142,7 +142,9 @@
       ],
       "category": "public.app-category.graphics-design",
       "icon": "build/icon.png",
-      "artifactName": "ShaperBuild-${version}-${arch}.${ext}"
+      "artifactName": "ShaperBuild-${version}-${arch}.${ext}",
+      "identity": "-",
+      "hardenedRuntime": false
     },
     "linux": {
       "target": [

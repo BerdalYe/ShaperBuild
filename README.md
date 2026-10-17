@@ -14,9 +14,18 @@ Installers are built automatically by GitHub Actions:
   - **Linux:** `.AppImage` or `.deb`
 - Tagged versions (`v1.0.0` …) also appear on the **Releases** page.
 
-The installers are not code-signed yet, so the first launch shows a warning:
+The installers are not signed with a paid certificate, so the first launch shows a warning:
 - **Windows:** "Windows protected your PC" → *More info* → *Run anyway*.
-- **macOS:** right-click the app → *Open* → *Open*.
+- **macOS:** drag ShaperBuild to Applications and open it. When macOS says it "could not verify" the app, click *Done*, then open **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to ShaperBuild (on macOS 14 or older: right-click the app → *Open* → *Open*). You only do this once.
+
+If macOS says ShaperBuild **"is damaged and can't be opened"** (versions up to 1.3.0 on Apple Silicon), the app is fine: macOS refuses apps that are not signed at all. Newer versions are signed for free ("ad-hoc"); for an older one, open **Terminal** and run:
+
+```sh
+xattr -cr /Applications/ShaperBuild.app
+codesign --force --deep --sign - /Applications/ShaperBuild.app
+```
+
+Then open the app as usual.
 
 ## 3D printing
 
@@ -124,7 +133,7 @@ IGES, Parasolid and DWG files, AI rendering, tablet and AR apps, cloud sync and 
 
 ## Updates
 
-The installed app checks GitHub for new versions. On Windows and Linux it downloads them in the background and shows **Restart to update** in the top bar; on macOS it shows a **Download** button (the Mac build is not code-signed, which macOS needs for self-updating). Turn checks off in Settings, or use *Help → Check for Updates…*.
+The installed app checks GitHub for new versions. On Windows and Linux it downloads them in the background and shows **Restart to update** in the top bar; on macOS it shows a **Download** button (self-updating on macOS needs an Apple Developer signature, which the free build does not have). Turn checks off in Settings, or use *Help → Check for Updates…*.
 
 To publish a new version, push a tag like `v1.2.0` (or create a release with that tag on GitHub). CI builds the installers, uses the tag as the version, and attaches the files the updater needs.
 
