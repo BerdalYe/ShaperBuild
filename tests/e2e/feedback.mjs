@@ -89,6 +89,54 @@ try {
   await win.waitForTimeout(250);
   assert.equal(await width('#tools'), 236);
 
+  step('textured materials: wood grain on the body, its size can change');
+  await A(() => window.__shaper.setVisualization(true));
+  await win.waitForSelector('#materials .mp-mat[data-material="walnut"]');
+  await A(() => window.__shaper.selection.clear());
+  await win.locator('#materials .mp-mat[data-material="walnut"]').click();
+  await win.waitForTimeout(300);
+  const tex = await A(() => {
+    const a = window.__shaper;
+    const v = a.vp.bodyViews.get(a.doc.bodies[0].id);
+    return { material: a.doc.bodies[0].material, map: !!v.material.map, normal: !!v.material.normalMap, repeat: v.material.map?.repeat.x, uv: !!v.geometry.attributes.uv };
+  });
+  assert.deepEqual(tex, { material: 'walnut', map: true, normal: true, repeat: 1 / 90, uv: true });
+  await shot(win, '84-walnut');
+  const size = win.locator('#materials .mp-slider', { hasText: 'Texture size' }).locator('input');
+  await size.evaluate((el) => {
+    el.value = '45';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await win.waitForTimeout(200);
+  assert.equal(await A(() => window.__shaper.doc.bodies[0].look.textureScale), 45);
+  assert.equal(await A(() => window.__shaper.vp.bodyViews.get(window.__shaper.doc.bodies[0].id).material.map.repeat.x), 1 / 45);
+
+  step('a picture as the texture');
+  const pic = path.join(OUT, 'texture.png');
+  // A 2 × 2 PNG: red, green, blue, white.
+  fs.writeFileSync(pic, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP4z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==', 'base64'));
+  await win.locator('#materials .mp-texrow input[type="file"]').setInputFiles(pic);
+  await win.waitForFunction(() => {
+    const a = window.__shaper;
+    const v = a.vp.bodyViews.get(a.doc.bodies[0].id);
+    return !!a.doc.bodies[0].look?.image && v.material.map?.image?.width > 0 && v.pictureLook;
+  });
+  assert.match(await A(() => window.__shaper.doc.bodies[0].look.image), /^data:image\/jpeg;base64,/);
+  await shot(win, '85-picture-texture');
+  step('GLB export keeps the texture');
+  const glb = path.join(OUT, 'textured.glb');
+  await A((target) => window.__shaper.files.exportDialog('glb', null, { path: target }), glb);
+  const bytes = fs.readFileSync(glb);
+  const jsonLen = bytes.readUInt32LE(12);
+  const gltf = JSON.parse(bytes.subarray(20, 20 + jsonLen).toString());
+  assert.ok(gltf.images?.length >= 1, 'the GLB has an image');
+  assert.ok(gltf.meshes[0].primitives[0].attributes.TEXCOORD_0 !== undefined, 'the GLB has texture coordinates');
+  await win.locator('#materials .mp-texrow .btn', { hasText: 'Remove picture' }).click();
+  await win.waitForTimeout(200);
+  assert.equal(await A(() => window.__shaper.doc.bodies[0].look?.image), undefined);
+  await A(() => window.__shaper.setVisualization(false));
+
   step('settings show the designs folder');
   A(() => window.__shaper.dialogs.settings());
   await win.waitForSelector('.folder-pick .folder-path');

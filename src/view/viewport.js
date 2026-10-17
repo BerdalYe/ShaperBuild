@@ -2,6 +2,7 @@
 // and syncing bodies and sketches from the document.
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { StudioEnvironment } from './studio.js';
 import { CameraRig, VIEWS } from './camera.js';
 import { Grid } from './grid.js';
 import { PickRegistry, Picker } from './pick.js';
@@ -74,6 +75,11 @@ export class Viewport extends Emitter {
     // Lighting: soft environment plus a headlight that follows the camera.
     const pmrem = new THREE.PMREMGenerator(renderer);
     this.envMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    // Visualization lights the part like a photo studio.
+    const studio = new StudioEnvironment();
+    this.studioMap = pmrem.fromScene(studio, 0.02).texture;
+    studio.dispose();
+    pmrem.dispose();
     this.scene.environment = this.envMap;
     this.scene.environmentIntensity = 0.35;
     this.hemi = new THREE.HemisphereLight(0xffffff, 0x6f7480, 0.55);
@@ -81,7 +87,9 @@ export class Viewport extends Emitter {
     this.headlight = new THREE.DirectionalLight(0xffffff, 1.25);
     this.headlight.position.set(-0.6, 0.8, 1);
     this.rig.persp.add(this.headlight);
-    this.rig.ortho.add(this.headlight.clone());
+    // One light per camera (perspective and orthographic).
+    this.headlights = [this.headlight, this.headlight.clone()];
+    this.rig.ortho.add(this.headlights[1]);
     this.scene.add(this.rig.persp, this.rig.ortho);
     // Sun for visualization mode shadows.
     this.sun = new THREE.DirectionalLight(0xffffff, 2.2);
@@ -91,7 +99,7 @@ export class Viewport extends Emitter {
     this.sun.shadow.normalBias = 0.02;
     this.sun.visible = false;
     this.scene.add(this.sun, this.sun.target);
-    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShadowMaterial({ opacity: 0.28 }));
+    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShadowMaterial({ opacity: 0.38 }));
     this.ground.receiveShadow = true;
     this.ground.visible = false;
     this.scene.add(this.ground);
@@ -768,8 +776,8 @@ export class Viewport extends Emitter {
   applyLighting() {
     const on = this.visualization;
     const l = this.lighting || LIGHTING;
-    this.scene.environmentIntensity = on ? l.intensity : 0.35;
-    this.sun.intensity = 2.2 * l.intensity;
+    this.scene.environmentIntensity = on ? 0.9 * l.intensity : 0.35;
+    this.sun.intensity = 1.7 * l.intensity;
     this.ground.visible = !!on && l.ground;
     if (!on) return;
     const box = this.contentBox();
@@ -802,10 +810,14 @@ export class Viewport extends Emitter {
   setVisualization(on) {
     this.visualization = on;
     const r = this.renderer;
-    r.toneMapping = on ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
-    r.toneMappingExposure = on ? 1.05 : 1;
-    this.headlight.intensity = on ? 0.5 : 1.25;
-    this.hemi.intensity = on ? 0.35 : 0.55;
+    // Neutral tone mapping keeps colours true, like a product photo.
+    r.toneMapping = on ? THREE.NeutralToneMapping : THREE.NoToneMapping;
+    r.toneMappingExposure = 1;
+    this.scene.environment = on ? this.studioMap : this.envMap;
+    // The studio and the sun light the part; a light at the camera would
+    // flatten it (engraved text would disappear).
+    for (const hl of this.headlights) hl.intensity = on ? 0.12 : 1.25;
+    this.hemi.intensity = on ? 0.08 : 0.55;
     this.sun.visible = on;
     this.decalGroup.visible = on;
     this.applyLighting();

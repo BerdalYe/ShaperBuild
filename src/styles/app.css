@@ -3955,6 +3955,24 @@ body.resizing-panel .items-panel {
   margin-top: 6px;
 }
 
+.mp-texrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.mp-texrow .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.mp-texrow .btn svg {
+  width: 14px;
+  height: 14px;
+}
+
 .mp-hex {
   width: 100%;
   height: 26px;

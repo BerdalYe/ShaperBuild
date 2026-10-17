@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { USDZExporter } from 'three/addons/exporters/USDZExporter.js';
 import { MATERIALS } from '../view/bodyview.js';
+import { boxUVs, mapsFor, picturesReady } from '../view/textures.js';
 
 const DEFAULT_COLOR = '#c4ccd6';
 
@@ -21,10 +22,15 @@ export function sceneOf(parts) {
     g.setAttribute('position', new THREE.Float32BufferAttribute(p.positions, 3));
     g.setIndex(Array.from(p.indices));
     g.computeVertexNormals();
+    g.setAttribute('uv', new THREE.BufferAttribute(boxUVs(g.attributes.position.array, g.attributes.normal.array), 2));
     const look = { ...(MATERIALS[p.material] || MATERIALS.plastic), ...(p.look || {}) };
+    const maps = typeof document !== 'undefined' ? mapsFor(look) : null;
     const m = new THREE.MeshPhysicalMaterial({
       name: p.material || 'plastic',
-      color: new THREE.Color(p.color || DEFAULT_COLOR),
+      color: new THREE.Color(maps?.picture ? '#ffffff' : p.color || DEFAULT_COLOR),
+      map: maps?.map || null,
+      roughnessMap: maps?.roughnessMap || null,
+      normalMap: maps?.normalMap || null,
       roughness: look.roughness,
       metalness: look.metalness,
       clearcoat: look.clearcoat || 0,
@@ -51,6 +57,7 @@ function dispose(scene) {
 }
 
 export async function writeGLB(parts) {
+  await picturesReady(parts.map((p) => p.look));
   const scene = sceneOf(parts);
   try {
     const buf = await new GLTFExporter().parseAsync(scene, { binary: true });
@@ -61,13 +68,14 @@ export async function writeGLB(parts) {
 }
 
 export async function writeUSDZ(parts) {
+  await picturesReady(parts.map((p) => p.look));
   const scene = sceneOf(parts);
   try {
     // USDZ keeps standard materials (no clear coat or glass).
     scene.traverse((o) => {
       if (!o.isMesh) return;
       const m = o.material;
-      o.material = new THREE.MeshStandardMaterial({ name: m.name, color: m.color, roughness: m.roughness, metalness: m.metalness, opacity: m.transmission ? 0.35 : m.opacity, transparent: !!m.transmission || m.opacity < 1 });
+      o.material = new THREE.MeshStandardMaterial({ name: m.name, color: m.color, map: m.map, roughnessMap: m.roughnessMap, normalMap: m.normalMap, roughness: m.roughness, metalness: m.metalness, opacity: m.transmission ? 0.35 : m.opacity, transparent: !!m.transmission || m.opacity < 1 });
       m.dispose();
     });
     const data = await new USDZExporter().parseAsync(scene);

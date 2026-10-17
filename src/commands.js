@@ -499,7 +499,7 @@ export class Commands {
       ids.forEach((id) => {
         const b = d.body(id);
         if (!b) return;
-        const look = patch ? { ...(b.look || {}), ...patch } : null;
+        const look = patch ? stripUndefined({ ...(b.look || {}), ...patch }) : null;
         d.updateBody(id, { look: look && Object.keys(look).length ? look : undefined });
       }),
     );

@@ -489,7 +489,7 @@ export const LESSONS = [
       },
       {
         title: 'Pick a material',
-        text: 'Click a material on the right, like <b>Wood</b> or <b>Brushed steel</b>. Click a body first to change only that one.',
+        text: 'Click a material on the right, like <b>Walnut</b> or <b>Brushed metal</b>. Click a body first to change only that one.',
         target: () => document.getElementById('materials'),
         place: 'left',
         done: () => tut.did('Material'),
