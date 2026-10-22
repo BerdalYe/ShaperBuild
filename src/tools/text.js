@@ -50,13 +50,17 @@ export class TextTool extends SketchTool {
     return 'Type your text in the panel, then click where it should go — on the grid or a flat face. <kbd>Enter</kbd> puts it at the centre.';
   }
 
-  async loadFont() {
-    try {
-      this.font = await loadFont(this.fontKey === 'file' ? 'custom' : this.fontKey);
-    } catch (err) {
-      toast(err.message, { type: 'error' });
-    }
-    this.redraw();
+  // Placing the text waits for this (Enter can come before the font is in).
+  loadFont() {
+    this.fontLoading = (async () => {
+      try {
+        this.font = await loadFont(this.fontKey === 'file' ? 'custom' : this.fontKey);
+      } catch (err) {
+        toast(err.message, { type: 'error' });
+      }
+      this.redraw();
+    })();
+    return this.fontLoading;
   }
 
   onOption(key, value) {
@@ -150,7 +154,8 @@ export class TextTool extends SketchTool {
 
   async place(tg) {
     const app = this.app;
-    if (!this.font) return toast('The font is still loading…', { ms: 1500 });
+    if (!this.font) await this.fontLoading;
+    if (!this.font || this.app.tools.active !== this) return;
     const t = this.layout(tg.at);
     if (!t || !t.entities.length) return toast('Type some text first', { ms: 1800 });
     this.plane = tg.plane;
