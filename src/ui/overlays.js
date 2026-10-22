@@ -4,10 +4,19 @@ import { icon } from './icons.js';
 import { t } from '../core/i18n.js';
 
 // ---- toasts ----------------------------------------------------------------
-export function toast(message, { type = 'info', ms = 2600 } = {}) {
+// `action`: { label, run } adds a button (e.g. to take a change back).
+export function toast(message, { type = 'info', ms = 2600, action = null } = {}) {
   const root = document.getElementById('toasts');
   if (!root) return;
   const el = h(`div.toast${type !== 'info' ? '.' + type : ''}`, { text: message });
+  if (action) {
+    const b = h('button.toast-action', { text: action.label });
+    b.addEventListener('click', () => {
+      el.remove();
+      action.run();
+    });
+    el.append(b);
+  }
   root.append(el);
   while (root.children.length > 3) root.firstElementChild.remove();
   setTimeout(() => {

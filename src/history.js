@@ -12,6 +12,13 @@ const CACHE_LIMIT = 120;
 // Tool panel fields for step values with other names.
 const FIELD_OF = { 'move.t.0': 'x', 'move.t.1': 'y', 'move.t.2': 'z', 'move.r.0': 'rx', 'move.r.1': 'ry', 'move.r.2': 'rz', 'scale.factor': 'factor', 'planeRef.offset': 'offset' };
 
+// Bodies a step made or changed.
+export function stepBodies(f) {
+  if (f.op === 'base') return f.bodies.map((x) => x.b);
+  if (f.op === 'delete') return [];
+  return (f.calls || []).flatMap((c) => c.out || []);
+}
+
 export class HistoryEngine extends Emitter {
   constructor(app) {
     super();
@@ -390,6 +397,13 @@ export class HistoryEngine extends Emitter {
     });
     this.trustDocument();
     this.emit('change');
+  }
+
+  // The latest step (still on) that changed body `id` after it was made,
+  // or null. Turning it off gives back the body as it was before.
+  lastChangeOf(id) {
+    const steps = this.features.filter((f) => !f.suppressed && !f.rolledBack && stepBodies(f).includes(id));
+    return steps.length > 1 ? steps.at(-1) : null;
   }
 
   toggleSuppress(id) {

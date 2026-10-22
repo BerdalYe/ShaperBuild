@@ -472,6 +472,87 @@ try {
   await shot(win, '89-duplicate-circle');
   await win.keyboard.press('Escape');
 
+  step('a Union can be taken back from the bottom bar; the pieces come back');
+  await A(async () => {
+    const a = window.__shaper;
+    await a.files.reset();
+    a.home.hide();
+    a.vp.rig.fromJSON({ az: 0.5, el: 0.6, dist: 200, target: [0, 0, 0], ortho: false });
+  });
+  await idle();
+  await A(async () => {
+    const a = window.__shaper;
+    const box = async (x) => {
+      const r = await a.kernel.call('primitive', { type: 'box', params: { width: 20, depth: 20, height: 20 } });
+      a.cmd.applyResult('Box', r);
+      const id = a.doc.bodies.at(-1).id;
+      if (x) {
+        a.selection.set([{ kind: 'body', bodyId: id }]);
+        a.tools.activate('move', { force: true });
+        a.tools.active.values.x = x;
+        a.tools.active.toGizmo();
+        await a.tools.active.apply();
+      }
+    };
+    await box(0);
+    await box(12);
+  });
+  await idle();
+  await A(() => {
+    const a = window.__shaper;
+    a.selection.set(a.doc.bodies.map((b) => ({ kind: 'body', bodyId: b.id })));
+  });
+  await win.locator('#context-bar .cb-btn', { hasText: 'Union' }).first().click();
+  await idle();
+  await win.keyboard.press('Enter');
+  await idle();
+  assert.equal(await A(() => window.__shaper.doc.bodies.length), 1, 'joined');
+  const vol1 = await vol();
+  await A(() => window.__shaper.selection.set([{ kind: 'body', bodyId: window.__shaper.doc.bodies[0].id }]));
+  await win.waitForTimeout(150);
+  const undoBtn = win.locator('#context-bar .cb-btn', { hasText: 'Undo Union' });
+  assert.equal(await undoBtn.count(), 1, 'the bar offers Undo Union');
+  await undoBtn.click();
+  await idle();
+  assert.equal(await A(() => window.__shaper.doc.bodies.length), 2, 'the two boxes are back');
+  assert.equal(await A(() => window.__shaper.history.features.at(-1).suppressed), true, 'the step is off, not gone');
+  await shot(win, '90-undo-union');
+  await win.locator('.toast .toast-action', { hasText: 'Turn on again' }).click();
+  await idle();
+  assert.equal(await A(() => window.__shaper.doc.bodies.length), 1, 'joined again');
+  near(await vol(), vol1, 1e-6);
+
+  step('History: one click turns a step off or on; the steps of the selection are marked');
+  await A(() => window.__shaper.items.setTab('history'));
+  await A(() => window.__shaper.selection.set([{ kind: 'body', bodyId: window.__shaper.doc.bodies[0].id }]));
+  await win.waitForTimeout(200);
+  assert.ok((await win.locator('#items .step.step-related').count()) >= 2, 'its steps are marked');
+  const unionRow = win.locator('#items .step', { hasText: 'Union' });
+  await unionRow.hover();
+  await unionRow.locator('.step-eye').click();
+  await idle();
+  assert.equal(await A(() => window.__shaper.doc.bodies.length), 2, 'off from the eye');
+  await shot(win, '91-history-eye');
+  await win.locator('#items .step', { hasText: 'Union' }).locator('.step-eye').click();
+  await idle();
+  assert.equal(await A(() => window.__shaper.doc.bodies.length), 1, 'on again');
+
+  step('the undo button says what it undoes; right-click goes back several changes');
+  assert.match(await win.locator('#btn-undo').getAttribute('title'), /^Undo Turn on Union/);
+  const pastBefore = await A(() => window.__shaper.doc.past.length);
+  await win.locator('#btn-undo').click({ button: 'right' });
+  await win.waitForSelector('.menu');
+  const listed = await win.locator('.menu button').allInnerTexts();
+  assert.ok(listed.length >= 3 && /Turn on Union/.test(listed[0]), listed.join(' | '));
+  await win.locator('.menu button').nth(2).click();
+  await idle();
+  assert.equal(await A(() => window.__shaper.doc.past.length), pastBefore - 3, 'three changes undone');
+  // Back to just after "Undo Union" in the bar: the boxes are apart.
+  assert.equal(await A(() => window.__shaper.doc.bodies.length), 2);
+  await A(() => window.__shaper.cmd.redo(3));
+  await idle();
+  assert.equal(await A(() => window.__shaper.doc.past.length), pastBefore);
+
   assert.deepEqual(errors, [], `renderer errors:\n${errors.join('\n')}`);
   console.log('\nfeedback: all passed');
 } catch (err) {

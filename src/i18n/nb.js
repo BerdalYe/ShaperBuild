@@ -1730,6 +1730,16 @@ export const NB = {
   'Click bodies, sketches, shapes, planes or images': 'Klikk objekter, skisser, former, plan eller bilder',
   'Select something to duplicate': 'Velg noe som skal dupliseres',
   'Drag an arrow to place the copy': 'Dra en pil for å plassere kopien',
+  'right-click for a list': 'høyreklikk for en liste',
+  '“{step}” is turned off. The bodies are as they were before it.': '«{step}» er slått av. Objektene er som de var før dette steget.',
+  'Turn on again': 'Slå på igjen',
+  'Undone: 1 change': 'Angret: 1 endring',
+  'Undone: {n} changes': 'Angret: {n} endringer',
+  'Redone: 1 change': 'Gjort om: 1 endring',
+  'Redone: {n} changes': 'Gjort om: {n} endringer',
+  'Turn off this step in History. The steps after it stay.': 'Slå av dette steget i Historikk. Stegene etter blir værende.',
+  'Turn this step on again': 'Slå på dette steget igjen',
+  'Turn this step off (it is skipped, not deleted)': 'Slå av dette steget (det hoppes over, ikke slettet)',
 };
 
 const upper = (s) => s.charAt(0).toUpperCase() + s.slice(1);

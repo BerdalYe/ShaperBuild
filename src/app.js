@@ -200,7 +200,7 @@ export class App {
     }
     this.updateVariables();
     this.syncView();
-    if (ev.kind === 'undo' || ev.kind === 'redo') toast(t(ev.kind === 'undo' ? 'Undo {label}' : 'Redo {label}', { label: t(ev.label || '') }).trim(), { ms: 1200 });
+    if ((ev.kind === 'undo' || ev.kind === 'redo') && !this.quietUndo) toast(t(ev.kind === 'undo' ? 'Undo {label}' : 'Redo {label}', { label: t(ev.label || '') }).trim(), { ms: 1200 });
     this.updateTitle();
     this.scheduleGC();
   }
@@ -882,8 +882,14 @@ export class App {
     const name = this.files.name;
     document.getElementById('doc-name').textContent = name;
     document.getElementById('doc-dirty').hidden = !this.doc.dirty;
-    document.getElementById('btn-undo').disabled = !this.doc.canUndo;
-    document.getElementById('btn-redo').disabled = !this.doc.canRedo;
+    // The buttons say what they will undo or redo.
+    const undo = document.getElementById('btn-undo');
+    const redo = document.getElementById('btn-redo');
+    const next = (list) => list.at(-1)?.label;
+    undo.disabled = !this.doc.canUndo;
+    redo.disabled = !this.doc.canRedo;
+    undo.title = `${this.doc.canUndo ? t('Undo {label}', { label: t(next(this.doc.past)) }) : t('Undo')} (${modKey()}Z) — ${t('right-click for a list')}`;
+    redo.title = `${this.doc.canRedo ? t('Redo {label}', { label: t(next(this.doc.future)) }) : t('Redo')} (${modKey()}Y)`;
     window.native?.setTitle(`${name}${this.doc.dirty ? ' •' : ''} — ShaperBuild`);
     window.native?.setDirty(this.doc.dirty);
     const sel = document.getElementById('unit-select');
@@ -1006,6 +1012,14 @@ export class App {
     $('btn-home').addEventListener('click', () => this.home.show());
     $('btn-undo').addEventListener('click', () => this.cmd.undo());
     $('btn-redo').addEventListener('click', () => this.cmd.redo());
+    // Right-click: the latest changes, to go back (or forward) several at once.
+    const changes = (list, run) => (e) => {
+      e.preventDefault();
+      const items = list.slice(-15).reverse().map((x, i) => ({ label: t(x.label), icon: i ? null : 'history', action: () => run(i + 1) }));
+      if (items.length) showMenu(e.clientX, e.clientY, items);
+    };
+    $('btn-undo').addEventListener('contextmenu', (e) => changes(this.doc.past, (n) => this.cmd.undo(n))(e));
+    $('btn-redo').addEventListener('contextmenu', (e) => changes(this.doc.future, (n) => this.cmd.redo(n))(e));
     $('btn-settings').addEventListener('click', () => this.dialogs.settings());
     $('btn-import').addEventListener('click', () => this.files.importDialog());
     $('btn-export').addEventListener('click', (e) => this.dialogs.exportMenu(e));

@@ -9,6 +9,7 @@ import { formatLength, parseLength, parseAngle, parseNumber, UNITS } from '../co
 import { nudgeControls } from './numfield.js';
 import { linkedText } from '../core/variables.js';
 import { t, tn, localNumber } from '../core/i18n.js';
+import { stepBodies } from '../history.js';
 
 const PRIMITIVE_ICONS = { box: 'box', cylinder: 'cylinder', sphere: 'sphere', cone: 'cone', torus: 'torus' };
 const BOOLEAN_ICONS = { union: 'union', subtract: 'subtract', intersect: 'intersect' };
@@ -32,13 +33,6 @@ function stepIcon(f) {
     default:
       return c.method;
   }
-}
-
-// Bodies a step made or changed.
-function stepBodies(f) {
-  if (f.op === 'base') return f.bodies.map((x) => x.b);
-  if (f.op === 'delete') return [];
-  return f.calls.flatMap((c) => c.out || []);
 }
 
 // Sketches a step was made from.
@@ -153,7 +147,10 @@ export class HistoryList {
   row(f, i) {
     const app = this.app;
     const open = this.open === f.id;
-    const row = h(`div.item.step${open ? '.selected' : ''}${f.suppressed || f.rolledBack ? '.step-off' : ''}${f.error ? '.step-bad' : ''}`);
+    // Steps that made or changed a selected body are marked.
+    const picked = new Set(app.selection.list.map((it) => it.bodyId).filter(Boolean));
+    const related = !open && stepBodies(f).some((b) => picked.has(b));
+    const row = h(`div.item.step${open ? '.selected' : ''}${related ? '.step-related' : ''}${f.suppressed || f.rolledBack ? '.step-off' : ''}${f.error ? '.step-bad' : ''}`);
     row.dataset.step = f.id;
     const num = h('span.step-num', { text: String(i + 1) });
     const ic = h('span.step-icon', { html: icon(stepIcon(f)) });
@@ -188,6 +185,15 @@ export class HistoryList {
     else if (f.suppressed) row.append(h('span.tag', { text: 'off', title: 'This step is turned off' }));
     else if (f.error) row.append(h('span.step-warn', { html: icon('close'), title: f.error }));
     else if (summary) row.append(h('span.tag', { text: summary }));
+    if (!f.rolledBack) {
+      // Turn the step off or on in one click.
+      const eye = h(`button.item-btn.step-eye${f.suppressed ? '.on' : ''}`, { title: f.suppressed ? 'Turn this step on again' : 'Turn this step off (it is skipped, not deleted)', html: icon(f.suppressed ? 'eyeOff' : 'eye') });
+      eye.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.run(() => app.history.toggleSuppress(f.id));
+      });
+      row.append(eye);
+    }
     const more = h('button.item-btn', { title: 'More', html: icon('more') });
     more.addEventListener('click', (e) => {
       e.stopPropagation();

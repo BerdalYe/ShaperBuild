@@ -17,14 +17,39 @@ export class Commands {
     return this.app.doc;
   }
 
-  undo() {
+  // `times`: undo several changes at once (from the list on the button).
+  undo(times = 1) {
     if (!this.app.tools.isSelect) this.app.tools.cancel();
-    if (!this.doc.undo()) toast('Nothing to undo', { ms: 1000 });
+    this.app.quietUndo = times > 1;
+    let done = 0;
+    while (done < times && this.doc.undo()) done++;
+    this.app.quietUndo = false;
+    if (!done) toast('Nothing to undo', { ms: 1000 });
+    else if (times > 1) toast(tn(done, 'Undone: 1 change', 'Undone: {n} changes'), { ms: 1400 });
   }
 
-  redo() {
+  redo(times = 1) {
     if (!this.app.tools.isSelect) this.app.tools.cancel();
-    if (!this.doc.redo()) toast('Nothing to redo', { ms: 1000 });
+    this.app.quietUndo = times > 1;
+    let done = 0;
+    while (done < times && this.doc.redo()) done++;
+    this.app.quietUndo = false;
+    if (!done) toast('Nothing to redo', { ms: 1000 });
+    else if (times > 1) toast(tn(done, 'Redone: 1 change', 'Redone: {n} changes'), { ms: 1400 });
+  }
+
+  // Take back one step of a body (say, a Union) without losing the steps
+  // after it: the step is turned off in History and can be turned on again.
+  undoStep(step) {
+    const app = this.app;
+    if (!app.tools.isSelect) app.tools.cancel();
+    const name = step.name || t(step.label);
+    app.history.toggleSuppress(step.id);
+    app.selection.clear();
+    toast(t('“{step}” is turned off. The bodies are as they were before it.', { step: name }), {
+      ms: 6000,
+      action: { label: t('Turn on again'), run: () => app.history.toggleSuppress(step.id) },
+    });
   }
 
   setUnits(units) {
