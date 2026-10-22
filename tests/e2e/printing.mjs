@@ -94,6 +94,17 @@ try {
   await win.keyboard.press('Escape');
   await win.waitForSelector('.print-modal', { state: 'detached' });
 
+  step('Enter before the font has loaded still places the text');
+  await A(async () => {
+    const a = window.__shaper;
+    await a.files.reset();
+    a.settings.textValue = 'Hi';
+    a.tools.activate('text');
+    // The font loads in the background; this comes before it is in.
+    a.tools.active.placeHere();
+  });
+  await win.waitForFunction(() => window.__shaper.selection.size === 3, null, { timeout: 30000 });
+
   step('text tool: type a name, place it, extrude it, print it');
   await A(() => window.__shaper.files.reset());
   await win.keyboard.press('Control+k');
