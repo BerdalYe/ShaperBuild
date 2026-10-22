@@ -200,7 +200,7 @@ export class App {
     }
     this.updateVariables();
     this.syncView();
-    if (ev.kind === 'undo' || ev.kind === 'redo') toast(t(ev.kind === 'undo' ? 'Undo {label}' : 'Redo {label}', { label: t(ev.label || '') }).trim(), { ms: 1200 });
+    if ((ev.kind === 'undo' || ev.kind === 'redo') && !this.quietUndo) toast(t(ev.kind === 'undo' ? 'Undo {label}' : 'Redo {label}', { label: t(ev.label || '') }).trim(), { ms: 1200 });
     this.updateTitle();
     this.scheduleGC();
   }
@@ -459,7 +459,29 @@ export class App {
       const v = this.vp.axisViews.get(it.axisId);
       return v ? new THREE.Box3().setFromPoints(v.ends().map((p) => new THREE.Vector3(...p))) : null;
     }
+    if (it.kind === 'curve' || it.kind === 'region') {
+      const sk = this.doc.sketch(it.sketchId);
+      const ids = this.curvesOf([it]).get(it.sketchId);
+      if (!sk || !ids) return null;
+      const f = planeFrame(sk.plane);
+      const pts = sk.entities.filter((en) => ids.has(en.id)).flatMap((en) => sampleEntity(en, 32).map((p) => new THREE.Vector3(...to3D(f, p))));
+      return pts.length ? new THREE.Box3().setFromPoints(pts) : null;
+    }
     return null;
+  }
+
+  // Sketch curves meant by curve and region items: Map(sketchId -> Set of curve ids).
+  curvesOf(items) {
+    const out = new Map();
+    for (const it of items) {
+      let ids = [];
+      if (it.kind === 'curve') ids = [it.entityId];
+      else if (it.kind === 'region') ids = this.vp.sketchViews.get(it.sketchId)?.regions[it.index]?.entities || [];
+      if (!ids.length) continue;
+      if (!out.has(it.sketchId)) out.set(it.sketchId, new Set());
+      for (const id of ids) out.get(it.sketchId).add(id);
+    }
+    return out;
   }
 
   findSketchOnPlane(plane) {
@@ -860,8 +882,14 @@ export class App {
     const name = this.files.name;
     document.getElementById('doc-name').textContent = name;
     document.getElementById('doc-dirty').hidden = !this.doc.dirty;
-    document.getElementById('btn-undo').disabled = !this.doc.canUndo;
-    document.getElementById('btn-redo').disabled = !this.doc.canRedo;
+    // The buttons say what they will undo or redo.
+    const undo = document.getElementById('btn-undo');
+    const redo = document.getElementById('btn-redo');
+    const next = (list) => list.at(-1)?.label;
+    undo.disabled = !this.doc.canUndo;
+    redo.disabled = !this.doc.canRedo;
+    undo.title = `${this.doc.canUndo ? t('Undo {label}', { label: t(next(this.doc.past)) }) : t('Undo')} (${modKey()}Z) — ${t('right-click for a list')}`;
+    redo.title = `${this.doc.canRedo ? t('Redo {label}', { label: t(next(this.doc.future)) }) : t('Redo')} (${modKey()}Y)`;
     window.native?.setTitle(`${name}${this.doc.dirty ? ' •' : ''} — ShaperBuild`);
     window.native?.setDirty(this.doc.dirty);
     const sel = document.getElementById('unit-select');
@@ -949,7 +977,7 @@ export class App {
       if (bodies.length) {
         items.push({ label: 'Hide', icon: 'eyeOff', action: () => bodies.forEach((id) => this.cmd.setVisible('body', id, false)) });
         items.push({ label: 'Duplicate', icon: 'duplicate', kbd: 'Ctrl+D', action: () => this.cmd.duplicate(bodies) });
-      }
+      } else if (list.some((it) => it.sketchId)) items.push({ label: 'Duplicate', icon: 'duplicate', kbd: 'Ctrl+D', action: () => this.cmd.duplicate() });
       const faces = list.filter((it) => it.kind === 'face');
       if (faces.length === 1) {
         const info = this.faceInfo(faces[0].bodyId, faces[0].index);
@@ -984,6 +1012,14 @@ export class App {
     $('btn-home').addEventListener('click', () => this.home.show());
     $('btn-undo').addEventListener('click', () => this.cmd.undo());
     $('btn-redo').addEventListener('click', () => this.cmd.redo());
+    // Right-click: the latest changes, to go back (or forward) several at once.
+    const changes = (list, run) => (e) => {
+      e.preventDefault();
+      const items = list.slice(-15).reverse().map((x, i) => ({ label: t(x.label), icon: i ? null : 'history', action: () => run(i + 1) }));
+      if (items.length) showMenu(e.clientX, e.clientY, items);
+    };
+    $('btn-undo').addEventListener('contextmenu', (e) => changes(this.doc.past, (n) => this.cmd.undo(n))(e));
+    $('btn-redo').addEventListener('contextmenu', (e) => changes(this.doc.future, (n) => this.cmd.redo(n))(e));
     $('btn-settings').addEventListener('click', () => this.dialogs.settings());
     $('btn-import').addEventListener('click', () => this.files.importDialog());
     $('btn-export').addEventListener('click', (e) => this.dialogs.exportMenu(e));

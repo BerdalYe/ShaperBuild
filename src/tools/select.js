@@ -64,6 +64,7 @@ export class SelectTool extends Tool {
       }
       if (hit?.kind === 'spoint') this.drag = this.startPointDrag(hit);
       else if (hit?.kind === 'curve') this.drag = this.startCurveDrag(hit, d.e);
+      else if (hit?.kind === 'region') this.drag = this.startShapeDrag(hit, d.e);
       else if (!hit) this.drag = { kind: 'box' };
       else this.drag = { kind: 'none' };
     }
@@ -186,6 +187,14 @@ export class SelectTool extends Tool {
     // A side of a shape moves straight out or in, so the shape stretches.
     const side = one?.type === 'line' && (refsAt(sketch.entities, one.a).length > 1 || refsAt(sketch.entities, one.b).length > 1) ? one : null;
     return { kind: 'curve', sketch, start, ids: new Set(ids), circle, side };
+  }
+
+  // Grabbing the inside of a shape moves the curves around it.
+  startShapeDrag(hit, e) {
+    const sketch = this.app.doc.sketch(hit.sketchId);
+    const ids = this.app.curvesOf([hit]).get(hit.sketchId);
+    if (!sketch || !ids) return { kind: 'none' };
+    return { kind: 'curve', sketch, start: this.sketchPointer(sketch, e), ids };
   }
 
   updateSketchDrag(g, e) {

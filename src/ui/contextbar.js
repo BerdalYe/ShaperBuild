@@ -28,6 +28,7 @@ export class ContextBar {
       if (list.filter((it) => it.kind === 'region' || it.kind === 'face').length >= 2 && planar) out.push(tool('loft', 'Loft'));
       if (kinds.has('face') && !kinds.has('region')) out.push(tool('shell', 'Shell'));
       if (kinds.has('region')) out.push(tool('sweep', 'Sweep'));
+      if (only('region')) out.push(tool('move', 'Move'), { label: 'Duplicate', icon: 'duplicate', action: () => app.cmd.duplicate() });
     }
     if (only('edge')) out.push(tool('fillet', 'Fillet'), tool('chamfer', 'Chamfer'));
     if (only('body', 'face')) {
@@ -36,6 +37,9 @@ export class ContextBar {
         out.push(tool('move', 'Move'), tool('mirror', 'Mirror'), tool('patternLinear', 'Pattern', 'patternLinear'));
         if (bodies.size >= 2) out.push(tool('union', 'Union'), tool('subtract', 'Subtract'), tool('intersect', 'Intersect'));
         out.push(tool('scale', 'Scale'));
+        // Take back the last step that changed this body (Union, Fillet…).
+        const step = bodies.size === 1 && kinds.has('body') ? app.history.lastChangeOf([...bodies][0]) : null;
+        if (step) out.push({ label: t('Undo {label}', { label: step.name || t(step.label) }), icon: 'undo', title: t('Turn off this step in History. The steps after it stay.'), action: () => app.cmd.undoStep(step) });
         if ([...bodies].some((id) => app.doc.body(id)?.kind === 'mesh')) out.push({ label: 'Convert to solid', icon: 'convert', action: () => app.cmd.convertToSolid() });
       }
     }
@@ -53,6 +57,7 @@ export class ContextBar {
       if (kinds.has('curve')) out.push({ label: 'Construction', icon: 'construction', action: () => app.tools.activate('construction') });
       if (kinds.has('curve')) out.push(tool('offset', 'Offset'));
       out.push(tool('move', 'Move'));
+      if (!kinds.has('spoint')) out.push({ label: 'Duplicate', icon: 'duplicate', action: () => app.cmd.duplicate() });
     }
     return out;
   }
@@ -106,7 +111,7 @@ export class ContextBar {
     const sug = this.suggestions();
     if (sug.length) this.el.append(h('span.cb-sep'));
     for (const s of sug) {
-      const b = h('button.cb-btn', { html: `${icon(s.icon)}<span>${t(s.label)}</span>` });
+      const b = h('button.cb-btn', { html: `${icon(s.icon)}<span>${t(s.label)}</span>`, title: s.title });
       b.addEventListener('click', s.action);
       this.el.append(b);
     }

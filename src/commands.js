@@ -2,7 +2,8 @@
 import * as THREE from 'three';
 import { toast, confirmDialog } from './ui/overlays.js';
 import { t, tn } from './core/i18n.js';
-import { samePlane, GROUND } from './core/plane.js';
+import { samePlane, GROUND, planeFrame, to2D, to3D } from './core/plane.js';
+import { translateEntity, rotateEntity } from './core/geom2d.js';
 import { solveSketch, measure, pruneConstraints, dropConstraintsFor, pointOf, CONSTRAINT_INFO } from './core/solver.js';
 import { nameProblem } from './core/expr.js';
 import { relink, renameEverywhere, usesOf, withUnit } from './core/variables.js';
@@ -16,14 +17,39 @@ export class Commands {
     return this.app.doc;
   }
 
-  undo() {
+  // `times`: undo several changes at once (from the list on the button).
+  undo(times = 1) {
     if (!this.app.tools.isSelect) this.app.tools.cancel();
-    if (!this.doc.undo()) toast('Nothing to undo', { ms: 1000 });
+    this.app.quietUndo = times > 1;
+    let done = 0;
+    while (done < times && this.doc.undo()) done++;
+    this.app.quietUndo = false;
+    if (!done) toast('Nothing to undo', { ms: 1000 });
+    else if (times > 1) toast(tn(done, 'Undone: 1 change', 'Undone: {n} changes'), { ms: 1400 });
   }
 
-  redo() {
+  redo(times = 1) {
     if (!this.app.tools.isSelect) this.app.tools.cancel();
-    if (!this.doc.redo()) toast('Nothing to redo', { ms: 1000 });
+    this.app.quietUndo = times > 1;
+    let done = 0;
+    while (done < times && this.doc.redo()) done++;
+    this.app.quietUndo = false;
+    if (!done) toast('Nothing to redo', { ms: 1000 });
+    else if (times > 1) toast(tn(done, 'Redone: 1 change', 'Redone: {n} changes'), { ms: 1400 });
+  }
+
+  // Take back one step of a body (say, a Union) without losing the steps
+  // after it: the step is turned off in History and can be turned on again.
+  undoStep(step) {
+    const app = this.app;
+    if (!app.tools.isSelect) app.tools.cancel();
+    const name = step.name || t(step.label);
+    app.history.toggleSuppress(step.id);
+    app.selection.clear();
+    toast(t('“{step}” is turned off. The bodies are as they were before it.', { step: name }), {
+      ms: 6000,
+      action: { label: t('Turn on again'), run: () => app.history.toggleSuppress(step.id) },
+    });
   }
 
   setUnits(units) {
@@ -277,6 +303,14 @@ export class Commands {
         const plane = transformPlane(im.plane, st.matrix);
         if (st.copy) d.addImage({ ...im, id: undefined, plane, name: t('{name} copy', { name: im.name }) });
         else d.updateImage(st.id, { plane });
+      }
+      // Some curves of a sketch moved (or copied) within their sketch.
+      for (const st of opts.curves || []) {
+        const sk = d.sketch(st.id);
+        if (!sk) continue;
+        const r = moveCurves(sk, new Set(st.ids), st.matrix, { copy: st.copy, newId: () => d.nextId('entity') });
+        d.updateSketch(st.id, { entities: r.entities, constraints: d.withConstraintIds(r.constraints) });
+        st.created = r.created;
       }
       for (const st of opts.sketches || []) {
         const sk = d.sketch(st.id);
@@ -543,7 +577,9 @@ export class Commands {
   async duplicate(ids = this.selectedBodyIds()) {
     const app = this.app;
     const sketches = app.selection.list.filter((it) => it.kind === 'sketch').map((it) => it.sketchId);
-    if (!ids.length && !sketches.length) return toast('Select bodies to duplicate');
+    const curves = app.curvesOf(app.selection.list.filter((it) => !sketches.includes(it.sketchId)));
+    if (!ids.length && !sketches.length && !curves.size) return toast('Select something to duplicate');
+    if (curves.size && !ids.length && !sketches.length) return this.duplicateCurves(curves);
     let result = { bodies: [], removed: [] };
     if (ids.length) {
       result = await app.kernel.call('transform', { ids: ids.map((id) => this.doc.body(id).shapeId), matrix: new THREE.Matrix4().elements, copy: true });
@@ -558,6 +594,16 @@ export class Commands {
       }
     });
     toast(tn(ids.length + sketches.length, 'Duplicated 1 item — use Move to place the copy', 'Duplicated {n} items — use Move to place the copy'), { ms: 2200 });
+  }
+
+  // Copy curves in their own sketch, then hand the copies to Move to place.
+  duplicateCurves(curves) {
+    const app = this.app;
+    const opts = { curves: [...curves].map(([id, ids]) => ({ id, ids: [...ids], matrix: new THREE.Matrix4().elements, copy: true })) };
+    this.applyResult('Duplicate', { bodies: [], removed: [] }, opts);
+    app.selection.set(opts.curves.flatMap((st) => (st.created || []).map((entityId) => ({ kind: 'curve', sketchId: st.id, entityId }))));
+    app.tools.activate('move', { force: true });
+    toast('Drag an arrow to place the copy', { ms: 2200 });
   }
 
   deleteSelection() {
@@ -665,6 +711,61 @@ function stripUndefined(o) {
 }
 
 // Apply a column-major 4x4 to a sketch plane.
+// Move (or with `copy`, copy) the curves `ids` of a sketch by a 3D matrix;
+// only the part of the move in the sketch plane counts. Sizes to other
+// curves are measured again, joints to curves that stay are let go.
+// Returns { entities, constraints, created } (`created`: ids of the copies).
+export function moveCurves(sk, ids, m, { copy = false, newId } = {}) {
+  const f = planeFrame(sk.plane);
+  const M = new THREE.Matrix4().fromArray(m);
+  const map = (p) => to2D(f, new THREE.Vector3(...to3D(f, p)).applyMatrix4(M).toArray());
+  const o = map([0, 0]);
+  const ex = map([1, 0]);
+  const angle = Math.atan2(ex[1] - o[1], ex[0] - o[0]);
+  const turned = Math.abs(angle) > 1e-9;
+  const move = (en) => translateEntity(turned ? rotateEntity(en, [0, 0], angle) : en, o);
+  const newIds = new Map();
+  let entities;
+  if (copy) {
+    const copies = sk.entities.filter((en) => ids.has(en.id)).map((en) => {
+      newIds.set(en.id, newId());
+      return { ...move(en), id: newIds.get(en.id) };
+    });
+    entities = [...sk.entities, ...copies];
+  } else entities = sk.entities.map((en) => (ids.has(en.id) ? move(en) : en));
+  const refs = (c) => [c.e, c.e2, c.p?.e, c.p2?.e].filter((x) => x !== undefined);
+  const remap = (c) => {
+    const r = (id) => newIds.get(id) ?? id;
+    const { id: _id, ...out } = c;
+    if (c.e !== undefined) out.e = r(c.e);
+    if (c.e2 !== undefined) out.e2 = r(c.e2);
+    if (c.p) out.p = { ...c.p, e: r(c.p.e) };
+    if (c.p2) out.p2 = { ...c.p2, e: r(c.p2.e) };
+    return out;
+  };
+  const resize = (c) => {
+    let v = measure(c, entities);
+    if (c.expr || v === null || !Number.isFinite(v)) return c;
+    if (c.type !== 'angle') v = Math.abs(v);
+    return Math.abs(v - c.value) < 1e-9 ? c : { ...c, value: Math.round(v * 1e6) / 1e6 };
+  };
+  const constraints = [];
+  for (const c of sk.constraints || []) {
+    const r = refs(c);
+    const moved = r.filter((id) => ids.has(id)).length;
+    if (copy) {
+      constraints.push(c);
+      // The copy takes the constraints that are only about the copied curves.
+      if (moved && moved === r.length && c.type !== 'fix') constraints.push(remap(c));
+      continue;
+    }
+    if (!moved) constraints.push(c);
+    else if (CONSTRAINT_INFO[c.type]?.dimension) constraints.push(resize(c));
+    else if (moved === r.length && c.type !== 'fix' && !(turned && (c.type === 'horizontal' || c.type === 'vertical'))) constraints.push(c);
+  }
+  return { entities, constraints, created: [...newIds.values()] };
+}
+
 export function transformPlane(plane, m) {
   const M = new THREE.Matrix4().fromArray(m);
   const o = new THREE.Vector3(...plane.origin).applyMatrix4(M);
