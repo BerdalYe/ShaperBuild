@@ -88,26 +88,30 @@ try {
 
   step('dragging the Move arrow saves the move at once, without Done');
   const zOf = (i = 0) => A((i) => window.__shaper.bodyMesh(window.__shaper.doc.bodies[i].id).bbox.min[2], i);
-  // Hover along the blue arrow until it lights up, then drag it up the screen.
-  async function dragZ(dy) {
+  // Hover along an arrow of the Move gizmo until it lights up, then drag it
+  // `px` pixels further along itself.
+  async function dragAxis(axis, px) {
     const c = await A(() => window.__shaper.tools.active.pivot.toArray());
     const [cx, cy] = await screen(c);
-    const [ux, uy] = await screen([c[0], c[1], c[2] + 10]);
+    const tip = c.map((v, i) => v + (i === 'XYZ'.indexOf(axis) ? 10 : 0));
+    const [ux, uy] = await screen(tip);
     const len = Math.hypot(ux - cx, uy - cy);
+    const dir = [(ux - cx) / len, (uy - cy) / len];
     let at = null;
     for (let k = 8; k < 240 && !at; k += 4) {
-      const p = [cx + ((ux - cx) / len) * k, cy + ((uy - cy) / len) * k];
+      const p = [cx + dir[0] * k, cy + dir[1] * k];
       await win.mouse.move(p[0], p[1]);
-      if ((await A(() => window.__shaper.tools.active.controls.axis)) === 'Z') at = p;
+      if ((await A(() => window.__shaper.tools.active.controls.axis)) === axis) at = p;
     }
-    assert.ok(at, 'found the Z arrow');
+    assert.ok(at, `found the ${axis} arrow`);
     await win.mouse.down();
-    await win.mouse.move(at[0], at[1] - dy / 2, { steps: 5 });
-    await win.mouse.move(at[0], at[1] - dy, { steps: 5 });
+    await win.mouse.move(at[0] + (dir[0] * px) / 2, at[1] + (dir[1] * px) / 2, { steps: 5 });
+    await win.mouse.move(at[0] + dir[0] * px, at[1] + dir[1] * px, { steps: 5 });
     await win.mouse.up();
     await win.waitForTimeout(100);
     await idle();
   }
+  const dragZ = (px) => dragAxis('Z', px);
   await A(() => {
     const a = window.__shaper;
     a.selection.set([{ kind: 'body', bodyId: a.doc.bodies[0].id }]);
@@ -410,6 +414,63 @@ try {
   near(ci.e.r, 10, 1);
   near(ci.e.c[0], 60, 1e-3);
   near(ci.sk.constraints.find((c) => c.type === 'diameter').value, ci.e.r * 2, 1e-6);
+
+  // Issue 7: a circle could not be moved on its own, nor duplicated.
+  step('drag the inside of a circle to move just the circle');
+  const sketchNow = () => A((id) => window.__shaper.doc.sketch(id), ci.sk.id);
+  const others = (sk) => JSON.stringify(sk.entities.filter((e) => e.id !== ci.e.id));
+  const before = await sketchNow();
+  await A(() => window.__shaper.selection.clear());
+  await dragWorld([ci.e.c[0] + ci.e.r / 2, ci.e.c[1] + ci.e.r / 3, 0], [ci.e.c[0] + ci.e.r / 2, ci.e.c[1] + ci.e.r / 3 - 15, 0]);
+  let after = await sketchNow();
+  let moved = after.entities.find((e) => e.id === ci.e.id);
+  near(moved.c[0], ci.e.c[0], 1);
+  near(moved.c[1], ci.e.c[1] - 15, 1);
+  near(moved.r, ci.e.r, 1e-6);
+  assert.equal(others(after), others(before), 'the other curves stay');
+  assert.deepEqual(after.plane, before.plane, 'the sketch itself stays');
+
+  step('Move on one circle moves only that circle');
+  await A((id) => {
+    const a = window.__shaper;
+    a.selection.set([{ kind: 'curve', sketchId: id, entityId: a.doc.sketch(id).entities.find((e) => e.type === 'circle').id }]);
+    a.tools.activate('move');
+  }, ci.sk.id);
+  await win.waitForTimeout(300);
+  await dragAxis('X', 60);
+  after = await sketchNow();
+  const moved2 = after.entities.find((e) => e.id === ci.e.id);
+  assert.ok(moved2.c[0] > moved.c[0] + 1, `moved along X: ${moved.c[0]} → ${moved2.c[0]}`);
+  near(moved2.c[1], moved.c[1], 1e-6);
+  assert.equal(others(after), others(before), 'the other curves stay');
+  assert.deepEqual(after.plane, before.plane, 'the sketch itself stays');
+  assert.equal(await A(() => window.__shaper.doc.past.at(-1)?.label), 'Move');
+  await shot(win, '88-move-one-circle');
+  await win.keyboard.press('Escape');
+
+  step('duplicate a circle; the copy can be dragged into place at once');
+  await A((id) => {
+    const a = window.__shaper;
+    a.selection.set([{ kind: 'curve', sketchId: id, entityId: a.doc.sketch(id).entities.find((e) => e.type === 'circle').id }]);
+  }, ci.sk.id);
+  await win.waitForTimeout(150);
+  await win.locator('#context-bar .cb-btn', { hasText: 'Duplicate' }).first().click();
+  await win.waitForTimeout(300);
+  after = await sketchNow();
+  const circles = after.entities.filter((e) => e.type === 'circle');
+  assert.equal(circles.length, 2, 'two circles');
+  assert.equal(after.constraints.filter((c) => c.type === 'diameter').length, 2, 'the copy keeps its diameter');
+  const copyId = circles.find((e) => e.id !== ci.e.id).id;
+  assert.deepEqual(await A(() => window.__shaper.tools.active.items('items').map((it) => it.entityId)), [copyId]);
+  await dragAxis('X', 60);
+  after = await sketchNow();
+  const orig = after.entities.find((e) => e.id === ci.e.id);
+  const copied = after.entities.find((e) => e.id === copyId);
+  assert.deepEqual(orig.c, moved2.c, 'the original stays');
+  assert.ok(copied.c[0] > orig.c[0] + 1, `the copy moved: ${copied.c[0]}`);
+  near(copied.r, orig.r, 1e-9);
+  await shot(win, '89-duplicate-circle');
+  await win.keyboard.press('Escape');
 
   assert.deepEqual(errors, [], `renderer errors:\n${errors.join('\n')}`);
   console.log('\nfeedback: all passed');

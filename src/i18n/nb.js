@@ -493,7 +493,6 @@ export const NB = {
   'Text added and selected. Press E to extrude it — a negative height engraves it into a face.': 'Teksten er lagt til og valgt. Trykk E for å ekstrudere den — negativ høyde graverer den inn i en flate.',
   'text regions': 'tekstområder',
   Objects: 'Objekter',
-  'Click bodies, sketches, planes or images': 'Klikk objekter, skisser, plan eller bilder',
   Handle: 'Håndtak',
   Rotate: 'Roter',
   'Move X': 'Flytt X',
@@ -1520,6 +1519,7 @@ export const NB = {
   'This file cannot be opened': 'Denne filen kan ikke åpnes',
   '.shapr files store their shapes in a closed format that ShaperBuild cannot read.': '.shapr-filer lagrer formene i et lukket format som ShaperBuild ikke kan lese.',
   'Open the design in the program that made it and export it as STEP (best: the shapes stay editable) or 3MF/STL. Then import that file here.': 'Åpne modellen i programmet som laget den, og eksporter den som STEP (best: formene kan fortsatt redigeres) eller 3MF/STL. Importer så den filen her.',
+  'Click bodies, sketches, planes or images': 'Klikk objekter, skisser, plan eller bilder',
   BOTTOM: 'BUNN',
   BACK: 'BAK',
   LEFT: 'VENSTRE',
@@ -1727,6 +1727,9 @@ export const NB = {
   'Click the <b>50</b> on the rectangle, type <kbd>70</kbd> and press <kbd>Enter</kbd>. The rectangle stretches.<br><small>You can also click the shape and type its <b>Width</b> or <b>Height</b> in the bar at the bottom.</small>': 'Klikk på <b>50</b> ved rektangelet, skriv <kbd>70</kbd> og trykk <kbd>Enter</kbd>. Rektangelet strekkes.<br><small>Du kan også klikke på formen og skrive <b>Bredde</b> eller <b>Høyde</b> i linjen nederst.</small>',
   'Resize sketch': 'Endre størrelse på skissen',
   'Drag an arrow or ring: the move is saved when you let go. Or type exact values and press Enter.': 'Dra en pil eller ring: flyttingen lagres når du slipper. Eller skriv inn nøyaktige verdier og trykk Enter.',
+  'Click bodies, sketches, shapes, planes or images': 'Klikk objekter, skisser, former, plan eller bilder',
+  'Select something to duplicate': 'Velg noe som skal dupliseres',
+  'Drag an arrow to place the copy': 'Dra en pil for å plassere kopien',
 };
 
 const upper = (s) => s.charAt(0).toUpperCase() + s.slice(1);

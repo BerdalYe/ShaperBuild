@@ -459,7 +459,29 @@ export class App {
       const v = this.vp.axisViews.get(it.axisId);
       return v ? new THREE.Box3().setFromPoints(v.ends().map((p) => new THREE.Vector3(...p))) : null;
     }
+    if (it.kind === 'curve' || it.kind === 'region') {
+      const sk = this.doc.sketch(it.sketchId);
+      const ids = this.curvesOf([it]).get(it.sketchId);
+      if (!sk || !ids) return null;
+      const f = planeFrame(sk.plane);
+      const pts = sk.entities.filter((en) => ids.has(en.id)).flatMap((en) => sampleEntity(en, 32).map((p) => new THREE.Vector3(...to3D(f, p))));
+      return pts.length ? new THREE.Box3().setFromPoints(pts) : null;
+    }
     return null;
+  }
+
+  // Sketch curves meant by curve and region items: Map(sketchId -> Set of curve ids).
+  curvesOf(items) {
+    const out = new Map();
+    for (const it of items) {
+      let ids = [];
+      if (it.kind === 'curve') ids = [it.entityId];
+      else if (it.kind === 'region') ids = this.vp.sketchViews.get(it.sketchId)?.regions[it.index]?.entities || [];
+      if (!ids.length) continue;
+      if (!out.has(it.sketchId)) out.set(it.sketchId, new Set());
+      for (const id of ids) out.get(it.sketchId).add(id);
+    }
+    return out;
   }
 
   findSketchOnPlane(plane) {
@@ -949,7 +971,7 @@ export class App {
       if (bodies.length) {
         items.push({ label: 'Hide', icon: 'eyeOff', action: () => bodies.forEach((id) => this.cmd.setVisible('body', id, false)) });
         items.push({ label: 'Duplicate', icon: 'duplicate', kbd: 'Ctrl+D', action: () => this.cmd.duplicate(bodies) });
-      }
+      } else if (list.some((it) => it.sketchId)) items.push({ label: 'Duplicate', icon: 'duplicate', kbd: 'Ctrl+D', action: () => this.cmd.duplicate() });
       const faces = list.filter((it) => it.kind === 'face');
       if (faces.length === 1) {
         const info = this.faceInfo(faces[0].bodyId, faces[0].index);

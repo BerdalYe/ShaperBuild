@@ -28,6 +28,7 @@ export class ContextBar {
       if (list.filter((it) => it.kind === 'region' || it.kind === 'face').length >= 2 && planar) out.push(tool('loft', 'Loft'));
       if (kinds.has('face') && !kinds.has('region')) out.push(tool('shell', 'Shell'));
       if (kinds.has('region')) out.push(tool('sweep', 'Sweep'));
+      if (only('region')) out.push(tool('move', 'Move'), { label: 'Duplicate', icon: 'duplicate', action: () => app.cmd.duplicate() });
     }
     if (only('edge')) out.push(tool('fillet', 'Fillet'), tool('chamfer', 'Chamfer'));
     if (only('body', 'face')) {
@@ -53,6 +54,7 @@ export class ContextBar {
       if (kinds.has('curve')) out.push({ label: 'Construction', icon: 'construction', action: () => app.tools.activate('construction') });
       if (kinds.has('curve')) out.push(tool('offset', 'Offset'));
       out.push(tool('move', 'Move'));
+      if (!kinds.has('spoint')) out.push({ label: 'Duplicate', icon: 'duplicate', action: () => app.cmd.duplicate() });
     }
     return out;
   }
