@@ -645,7 +645,7 @@ function basicsSteps(tut) {
     },
     {
       title: 'Finish the sketch',
-      text: 'Press <kbd>Esc</kbd> (or the ✕ in the Rectangle panel) to put the tool away.',
+      text: 'Press <kbd>Esc</kbd> (or the close button at the top of the Rectangle panel) to put the tool away.',
       target: () => document.querySelector('#tool-panel:not([hidden])'),
       place: 'right',
       done: () => app.tools.isSelect,

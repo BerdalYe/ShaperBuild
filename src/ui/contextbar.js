@@ -94,14 +94,14 @@ export class ContextBar {
     const cons = app.constraints.options();
     if (cons.length) {
       this.el.append(h('span.cb-sep'));
-      const b = h('button.cb-btn', { html: `<span class="glyph">⊥</span><span>${t('Constrain')}</span>${icon('chevronDown')}` });
+      const b = h('button.cb-btn', { html: `${icon('consPerpendicular')}<span>${t('Constrain')}</span>${icon('chevronDown')}` });
       b.querySelector('svg').style.cssText = 'width:14px;height:14px';
       b.addEventListener('click', () => {
         const r = b.getBoundingClientRect();
         const menu = showMenu(
           r.left,
           r.top,
-          cons.map((o) => ({ label: `<span class="glyph">${o.glyph}</span>${t(o.label)}`, action: () => app.constraints.apply(o) })),
+          cons.map((o) => ({ label: o.label, icon: o.icon, action: () => app.constraints.apply(o) })),
         );
         const mr = menu.getBoundingClientRect();
         menu.style.top = `${r.top - mr.height - 6}px`;

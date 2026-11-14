@@ -297,6 +297,18 @@ svg.icon {
   color: #fff;
 }
 
+.vp-label.cons-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vp-label.cons-glyph svg.icon {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2.2;
+}
+
 .vp-label.cons-glyph:hover {
   border-color: var(--accent);
   color: var(--text);
@@ -3195,10 +3207,30 @@ body.resizing-panel .items-panel {
   border-color: var(--ok);
   color: var(--ok);
   font-weight: 600;
+  cursor: pointer;
 }
 
 .update-pill.ready:hover {
   background: rgba(63, 191, 127, 0.12);
+}
+
+/* Downloaded and ready: a solid button that is hard to miss. */
+.update-pill.restart {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: #fff;
+}
+
+.update-pill.restart:hover {
+  background: #36a96f;
+}
+
+.update-version {
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .update-pill.busy {
@@ -4581,4 +4613,15 @@ body.resizing-panel .items-panel {
   white-space: pre-wrap;
   word-break: break-all;
   user-select: text;
+}
+
+/* Icons in the status bar (grid lock, snap options). */
+.sb-btn svg.icon {
+  width: 13px;
+  height: 13px;
+  vertical-align: -2px;
+}
+
+.sb-btn .sb-lock {
+  margin-left: 4px;
 }

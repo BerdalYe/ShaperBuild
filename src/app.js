@@ -1014,6 +1014,7 @@ export class App {
     $('btn-export').querySelector('.ic').innerHTML = icon('export');
     $('btn-print').querySelector('.ic').innerHTML = icon('printer');
     $('btn-ai').querySelector('.ic').innerHTML = icon('sparkle');
+    $('btn-snap-more').innerHTML = icon('chevronDown');
     $('btn-ai').addEventListener('click', () => this.aiChat.toggle());
     $('btn-print').addEventListener('click', () => this.print.open());
     $('btn-home').addEventListener('click', () => this.home.show());
@@ -1050,7 +1051,7 @@ export class App {
     const gridBtn = $('btn-grid-size');
     this.vp.grid.locked = this.settings.gridLock || null;
     const showGrid = (step) => {
-      gridBtn.textContent = `${t('Grid')} ${formatLength(step, this.units)}${this.settings.gridLock ? ' 🔒' : ''}`;
+      gridBtn.innerHTML = `${t('Grid')} ${formatLength(step, this.units)}${this.settings.gridLock ? icon('lock', 'sb-lock') : ''}`;
       gridBtn.classList.toggle('on', !!this.settings.gridLock);
     };
     this.vp.on('gridstep', showGrid);
@@ -1159,7 +1160,7 @@ export class App {
     const vp = this.vp;
     const r = anchor.getBoundingClientRect();
     const mode = vp.display || 'shaded';
-    const pick = (value, label, desc) => ({ label: `${mode === value ? '● ' : '○ '}${t(label)}`, raw: true, action: () => this.setDisplay(value), desc });
+    const pick = (value, label, desc) => ({ label, icon: mode === value ? 'radioOn' : 'radioOff', action: () => this.setDisplay(value), desc });
     const check = (on, label, change) => {
       const cb = h('input', { type: 'checkbox', checked: !!on });
       cb.addEventListener('change', () => change(cb.checked));

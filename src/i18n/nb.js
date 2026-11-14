@@ -800,7 +800,6 @@ export const NB = {
   'Click <b>Rectangle</b> in the Sketch tools, or press <kbd>R</kbd>.': 'Klikk <b>Rektangel</b> blant skisseverktøyene, eller trykk <kbd>R</kbd>.',
   'Click on the grid for the first corner, move the pointer, and click again for the opposite corner.<br><small>For an exact size, type <kbd>40</kbd> <kbd>Tab</kbd> <kbd>30</kbd> <kbd>Enter</kbd> after the first click.</small>': 'Klikk på rutenettet for det første hjørnet, flytt pekeren og klikk igjen for det motsatte hjørnet.<br><small>For en nøyaktig størrelse kan du skrive <kbd>40</kbd> <kbd>Tab</kbd> <kbd>30</kbd> <kbd>Enter</kbd> etter det første klikket.</small>',
   'Finish the sketch': 'Avslutt skissen',
-  'Press <kbd>Esc</kbd> (or the ✕ in the Rectangle panel) to put the tool away.': 'Trykk <kbd>Esc</kbd> (eller ✕ i Rektangel-panelet) for å legge bort verktøyet.',
   'Select the shape': 'Velg formen',
   'Click <b>inside</b> your rectangle. The shaded area is a <b>region</b> — a closed shape you can turn into 3D.': 'Klikk <b>inni</b> rektangelet. Det skraverte feltet er et <b>område</b> — en lukket form du kan gjøre om til 3D.',
   'Extrude it': 'Ekstruder den',
@@ -1832,6 +1831,7 @@ export const NB = {
   'Anthropic TypeScript SDK 1.3.0 (AI assistant) and the packages it uses': 'Anthropic TypeScript SDK 1.3.0 (AI-assistenten) og pakkene den bruker',
   'Apache-2.0, MIT, Unlicense': 'Apache-2.0, MIT, Unlicense',
   'AI settings…': 'AI-innstillinger …',
+  'Press <kbd>Esc</kbd> (or the close button at the top of the Rectangle panel) to put the tool away.': 'Trykk <kbd>Esc</kbd> (eller lukkeknappen øverst i Rektangel-panelet) for å legge bort verktøyet.',
 };
 
 const upper = (s) => s.charAt(0).toUpperCase() + s.slice(1);

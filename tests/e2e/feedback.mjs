@@ -553,6 +553,26 @@ try {
   await idle();
   assert.equal(await A(() => window.__shaper.doc.past.length), pastBefore);
 
+  step('a downloaded update shows a clear restart button with its version');
+  await A(() => {
+    const u = window.__shaper.updates;
+    u.state = { status: 'ready', version: '9.9.9' };
+    u.render();
+  });
+  const pill = win.locator('#update-pill');
+  assert.match(await pill.innerText(), /Restart to update\s*9\.9\.9/);
+  assert.equal(await pill.evaluate((el) => el.classList.contains('restart')), true);
+  assert.match(await pill.innerHTML(), /M12 7\.5v7/, 'the restart-and-update icon');
+  await A(() => {
+    const u = window.__shaper.updates;
+    u.state = null;
+    u.render();
+  });
+
+  step('the app uses drawn icons, no emoji');
+  const emoji = await A(() => [...document.querySelectorAll('body *')].map((el) => (el.children.length ? '' : el.textContent)).join(' ').match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu));
+  assert.equal(emoji, null, `emoji on screen: ${emoji}`);
+
   assert.deepEqual(errors, [], `renderer errors:\n${errors.join('\n')}`);
   console.log('\nfeedback: all passed');
 } catch (err) {
