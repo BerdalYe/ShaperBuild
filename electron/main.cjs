@@ -33,9 +33,17 @@ const MIME = {
 
 // `ShaperBuild --mcp` is started by an AI app (such as Claude Desktop) to
 // reach the open ShaperBuild over MCP. It has no window of its own.
+// It hands over to the bridge run as plain Node.js, which can read the
+// messages on every system, and passes on the same input and output.
 if (process.argv.includes('--mcp')) {
   app.dock?.hide();
-  require('./mcp.cjs').runBridge({ userData: app.getPath('userData'), version: app.getVersion() });
+  const { command, args, env } = require('./mcp.cjs').bridgeCommand({ userData: app.getPath('userData'), version: app.getVersion() });
+  const child = require('node:child_process').spawn(command, args, { stdio: 'inherit', env: { ...process.env, ...env }, windowsHide: true });
+  child.on('exit', (code) => app.exit(code ?? 0));
+  child.on('error', (err) => {
+    console.error(`ShaperBuild MCP bridge: ${err.message}`);
+    app.exit(1);
+  });
   return;
 }
 

@@ -90,7 +90,9 @@ function setup({ userData, version, getWindow }) {
   let serverError = null;
   const mcpState = () => {
     const c = mcp.readConfig(userData);
-    return { enabled: !!c.enabled, running: !!server, error: serverError, port: mcp.PORT, url: `http://127.0.0.1:${mcp.PORT}/mcp`, token: c.token || '', command: process.execPath, args: process.defaultApp ? [path.join(__dirname, '..'), '--mcp'] : ['--mcp'] };
+    // How an AI app starts the bridge: this program as plain Node.js.
+    const launch = mcp.bridgeCommand({ userData, version });
+    return { enabled: !!c.enabled, running: !!server, error: serverError, port: mcp.PORT, url: `http://127.0.0.1:${mcp.PORT}/mcp`, token: c.token || '', ...launch };
   };
   const startServer = () =>
     new Promise((resolve) => {
@@ -141,7 +143,7 @@ function setup({ userData, version, getWindow }) {
       } catch (err) {
         if (err.code !== 'ENOENT') return { error: `Could not read ${f}: ${err.message}` };
       }
-      config.mcpServers = { ...(config.mcpServers || {}), shaperbuild: { command: st.command, args: st.args } };
+      config.mcpServers = { ...(config.mcpServers || {}), shaperbuild: { command: st.command, args: st.args, env: st.env } };
       try {
         fs.mkdirSync(path.dirname(f), { recursive: true });
         fs.writeFileSync(f, `${JSON.stringify(config, null, 2)}\n`);

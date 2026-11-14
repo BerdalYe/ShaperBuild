@@ -58,7 +58,10 @@
     ],
     "asar": true,
     "asarUnpack": [
-      "node_modules/replicad-opencascadejs/dist/replicad_single.*"
+      "node_modules/replicad-opencascadejs/dist/replicad_single.*",
+      "electron/mcp.cjs",
+      "electron/mcp-bridge.cjs",
+      "src/ai/tools.json"
     ],
     "extraResources": [
       {

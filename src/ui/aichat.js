@@ -368,7 +368,7 @@ export class AiChat {
       body.append(h('label.toggle', on, h('span', { text: 'Let AI apps use ShaperBuild (Claude Desktop, Claude Code, Cursor and other apps that support MCP)' })));
       if (m.enabled) {
         if (m.error) body.append(h('div.ai-hint.bad', { str: t(m.error) }));
-        const desktop = JSON.stringify({ mcpServers: { shaperbuild: { command: m.command, args: m.args } } }, null, 2);
+        const desktop = JSON.stringify({ mcpServers: { shaperbuild: { command: m.command, args: m.args, env: m.env } } }, null, 2);
         const code = `claude mcp add --transport http shaperbuild ${m.url} --header "Authorization: Bearer ${m.token}"`;
         const snippet = (title, hint, text) =>
           h(
