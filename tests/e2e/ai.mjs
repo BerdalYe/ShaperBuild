@@ -222,14 +222,14 @@ try {
   await win.locator('.ai-settings label.toggle input').check();
   await win.waitForSelector('.ai-snippet');
   const snippets = await win.locator('.ai-snippet pre').allTextContents();
-  assert.match(snippets[0], /"mcpServers"[\s\S]*"--mcp"/);
+  assert.match(snippets[0], /"mcpServers"[\s\S]*mcp-bridge\.cjs[\s\S]*"ELECTRON_RUN_AS_NODE": "1"/);
   assert.match(snippets[1], /claude mcp add --transport http shaperbuild http:\/\/127\.0\.0\.1:45839\/mcp --header "Authorization: Bearer [\w-]{20,}"/);
   await win.locator('.ai-settings .btn', { hasText: 'Add to Claude Desktop' }).click();
   await win.waitForSelector('.ai-hint.ok:not([hidden])');
   const desktopConfig = JSON.parse(fs.readFileSync(path.join(claudeDir, 'claude_desktop_config.json'), 'utf8'));
   assert.deepEqual(desktopConfig.mcpServers.other, { command: 'other-app' }, 'other servers are kept');
   assert.equal(desktopConfig.theme, 'dark');
-  assert.deepEqual(desktopConfig.mcpServers.shaperbuild.args.at(-1), '--mcp');
+  assert.match(desktopConfig.mcpServers.shaperbuild.args[0], /mcp-bridge\.cjs$/);
   await shot(win, '91-ai-settings');
   await win.keyboard.press('Escape');
   const mcp = await A(() => window.native.mcpState());
@@ -259,37 +259,52 @@ try {
   assert.equal((await rpc({ jsonrpc: '2.0', id: 6, method: 'tools/list' }, { Authorization: 'Bearer wrong' })).status, 401);
   assert.equal((await rpc({ jsonrpc: '2.0', id: 7, method: 'tools/list' }, { Origin: 'https://example.com' })).status, 403);
 
-  step('Claude Desktop style: `ShaperBuild --mcp` passes messages to the open app');
+  // Claude Desktop starts the bridge from its settings file, with pipes for
+  // input and output. Both ways must work: what "Add to Claude Desktop"
+  // writes (plain Node.js), and `ShaperBuild --mcp` from older settings.
   const electronPath = createRequire(import.meta.url)('electron');
-  const bridge = spawn(electronPath, [ROOT, '--mcp', '--no-sandbox', `--user-data-dir=${dataDir}`], { stdio: ['pipe', 'pipe', 'pipe'] });
-  const lines = [];
-  let buf = '';
-  bridge.stdout.on('data', (c) => {
-    buf += c;
-    let i;
-    while ((i = buf.indexOf('\n')) >= 0) {
-      lines.push(JSON.parse(buf.slice(0, i)));
-      buf = buf.slice(i + 1);
-    }
-  });
-  const ask = async (msg) => {
-    bridge.stdin.write(`${JSON.stringify(msg)}\n`);
-    const t0 = Date.now();
-    while (!lines.some((l) => l.id === msg.id)) {
-      if (Date.now() - t0 > 30000) throw new Error(`no answer to ${msg.method}`);
-      await new Promise((r) => setTimeout(r, 50));
-    }
-    return lines.find((l) => l.id === msg.id);
-  };
-  const binit = await ask({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'desktop', version: '1' } } });
-  assert.equal(binit.result.protocolVersion, '2024-11-05');
-  bridge.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
-  assert.equal((await ask({ jsonrpc: '2.0', id: 2, method: 'tools/list' })).result.tools.length, list.result.tools.length);
-  const bmade = await ask({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'add_shape', arguments: { shape: 'box', width: 5, depth: 5, height: 5, position: [0, 0, 60], name: 'Bridge box' } } });
-  assert.equal(bmade.result.isError, false, bmade.result.content?.[0]?.text);
-  assert.ok(await A(() => window.__shaper.doc.bodies.some((b) => b.name === 'Bridge box')));
-  bridge.stdin.end();
-  await new Promise((r) => bridge.on('exit', r));
+  const desktop = desktopConfig.mcpServers.shaperbuild;
+  assert.equal(desktop.env.ELECTRON_RUN_AS_NODE, '1');
+  assert.ok(fs.existsSync(desktop.args[0]), `the bridge file exists: ${desktop.args[0]}`);
+  const ways = [
+    ['from the settings Claude Desktop got', desktop.command, desktop.args, desktop.env],
+    ['`ShaperBuild --mcp` (older settings)', electronPath, [ROOT, '--mcp', '--no-sandbox', `--user-data-dir=${dataDir}`], {}],
+  ];
+  for (const [n, [label, command, args, env]] of ways.entries()) {
+    step(`Claude Desktop style, ${label}: the bridge passes messages to the open app`);
+    const bridge = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ...env } });
+    const lines = [];
+    let buf = '';
+    let stderr = '';
+    bridge.stderr.on('data', (c) => (stderr += c));
+    bridge.stdout.on('data', (c) => {
+      buf += c;
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        lines.push(JSON.parse(buf.slice(0, i)));
+        buf = buf.slice(i + 1);
+      }
+    });
+    const ask = async (msg) => {
+      bridge.stdin.write(`${JSON.stringify(msg)}\n`);
+      const t0 = Date.now();
+      while (!lines.some((l) => l.id === msg.id)) {
+        if (Date.now() - t0 > 30000) throw new Error(`no answer to ${msg.method}; stderr: ${stderr}`);
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      return lines.find((l) => l.id === msg.id);
+    };
+    const binit = await ask({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'desktop', version: '1' } } });
+    assert.equal(binit.result.protocolVersion, '2024-11-05');
+    bridge.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
+    assert.equal((await ask({ jsonrpc: '2.0', id: 2, method: 'tools/list' })).result.tools.length, list.result.tools.length);
+    const name = `Bridge box ${n}`;
+    const bmade = await ask({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'add_shape', arguments: { shape: 'box', width: 5, depth: 5, height: 5, position: [n * 10, 0, 60], name } } });
+    assert.equal(bmade.result.isError, false, bmade.result.content?.[0]?.text);
+    assert.ok(await A((nm) => window.__shaper.doc.bodies.some((b) => b.name === nm), name));
+    bridge.stdin.end();
+    await new Promise((r) => bridge.on('exit', r));
+  }
 
   step('turning it off stops the server');
   await A(() => window.native.mcpSet(false));

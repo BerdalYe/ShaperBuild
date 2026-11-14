@@ -4,8 +4,9 @@
 //
 // The app runs a small MCP server on this computer only (127.0.0.1), with a
 // secret token. Apps that speak MCP over HTTP connect to it directly. Apps
-// that start a program instead (Claude Desktop) run `ShaperBuild --mcp`,
-// which passes messages between them and the open app (runBridge below).
+// that start a program instead (Claude Desktop) run mcp-bridge.cjs as plain
+// Node.js (bridgeCommand below), which passes messages between them and the
+// open app (runBridge). `ShaperBuild --mcp` still works and starts the same.
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -118,7 +119,7 @@ function createServer({ token, call, version }) {
   return server;
 }
 
-// `ShaperBuild --mcp`: read JSON-RPC lines on stdin, answer on stdout. The
+// The bridge: read JSON-RPC lines on stdin, answer on stdout. The
 // tool list is answered here (so it works before the app is open); tool
 // calls go to the open app.
 function runBridge({ userData, version }) {
@@ -185,4 +186,11 @@ function runBridge({ userData, version }) {
   });
 }
 
-module.exports = { PORT, readConfig, writeConfig, createServer, runBridge, handle };
+// The command, arguments and environment that start the bridge as plain
+// Node.js (the file is unpacked from the app archive, see package.json).
+function bridgeCommand({ userData, version }) {
+  const script = path.join(__dirname, 'mcp-bridge.cjs').replace(/app\.asar([\\/])/, 'app.asar.unpacked$1');
+  return { command: process.execPath, args: [script, '--user-data', userData], env: { ELECTRON_RUN_AS_NODE: '1', SHAPERBUILD_VERSION: version } };
+}
+
+module.exports = { PORT, readConfig, writeConfig, createServer, runBridge, handle, bridgeCommand };
