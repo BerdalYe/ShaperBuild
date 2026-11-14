@@ -46,6 +46,7 @@ contextBridge.exposeInMainWorld('native', {
   // process), the MCP server for AI apps, and tool calls from those apps.
   aiSettings: () => ipcRenderer.invoke('ai:settings'),
   aiSave: (patch) => ipcRenderer.invoke('ai:save', patch),
+  aiModels: () => ipcRenderer.invoke('ai:models'),
   aiChat: (req) => ipcRenderer.invoke('ai:chat', req),
   mcpState: () => ipcRenderer.invoke('mcp:state'),
   mcpSet: (enabled) => ipcRenderer.invoke('mcp:set', enabled),

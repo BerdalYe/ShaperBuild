@@ -37,13 +37,17 @@ const EXAMPLES = [
   'A simple phone stand',
 ];
 
-// Ready-made addresses for services with an OpenAI-style API.
-const SERVICES = [
-  ['OpenAI', 'https://api.openai.com/v1'],
-  ['OpenRouter', 'https://openrouter.ai/api/v1'],
-  ['Ollama', 'http://localhost:11434/v1'],
-  ['LM Studio', 'http://localhost:1234/v1'],
-];
+// Tool inputs as plainer JSON schema for OpenAI-style services: some (such
+// as Gemini) refuse `anyOf` and `additionalProperties`. A field that takes
+// "a number or a name" becomes text; the tools read numbers from text too.
+function plainSchema(s) {
+  if (Array.isArray(s)) return s.map(plainSchema);
+  if (!s || typeof s !== 'object') return s;
+  if (s.anyOf) return { type: 'string', ...(s.description ? { description: s.description } : {}) };
+  const out = {};
+  for (const [k, v] of Object.entries(s)) if (k !== 'additionalProperties') out[k] = plainSchema(v);
+  return out;
+}
 
 export class AiChat {
   constructor(app) {
@@ -76,9 +80,16 @@ export class AiChat {
     this.render();
   }
 
+  get service() {
+    const c = this.config || {};
+    return c.services?.find((x) => x.id === c.provider) || { id: c.provider };
+  }
+
   get ready() {
     const c = this.config || {};
-    return c.provider === 'anthropic' ? c.hasKey : !!(c.baseUrl && c.model);
+    if (c.provider === 'anthropic') return !!c.hasKey;
+    if (c.provider === 'custom') return !!(c.baseUrl && c.model);
+    return !!(c.model && (c.hasKey || this.service.local));
   }
 
   get modelName() {
@@ -172,7 +183,7 @@ export class AiChat {
     if (this.input) this.input.value = '';
     const app = this.app;
     const claude = this.config.provider === 'anthropic';
-    const tools = claude ? app.ai.tools : app.ai.tools.filter((tl) => tl.name !== 'screenshot');
+    const tools = claude ? app.ai.tools : app.ai.tools.filter((tl) => tl.name !== 'screenshot').map((tl) => ({ ...tl, input_schema: plainSchema(tl.input_schema) }));
     this.add(h('div.ai-msg.user', { str: text }));
     this.history.push({ role: 'user', content: text });
     this.setBusy(true);
@@ -264,71 +275,89 @@ export class AiChat {
       c = await native.aiSave(patch);
       this.config = c;
     };
-    const render = () => {
+    // The model list of the chosen service, shown as a menu once found.
+    let modelStatus = null;
+    const findModels = async () => {
+      if (!modelStatus) return;
+      modelStatus.textContent = t('Looking for models…');
+      const res = await native.aiModels();
+      if (res.error) {
+        modelStatus.textContent = t(res.error);
+        return;
+      }
+      if (!res.models.length) {
+        modelStatus.textContent = t('No models found.');
+        return;
+      }
+      if (!c.model || !res.models.includes(c.model)) await save({ model: res.models[0] });
+      render(res.models);
+    };
+    const render = (models = null) => {
       clear(body);
       body.append(h('h4', { text: 'Chat in ShaperBuild' }));
+      const svc = c.services.find((x) => x.id === c.provider) || c.services[0];
       const provider = h('select');
-      for (const [v, l] of [
-        ['anthropic', 'Claude (Anthropic)'],
-        ['openai', 'Other AI service (OpenAI-style API)'],
-      ])
-        provider.append(h('option', { value: v, text: l, selected: v === c.provider }));
+      for (const x of c.services) provider.append(h('option', { value: x.id, text: x.name, selected: x.id === svc.id }));
       provider.addEventListener('change', async () => {
-        await save({ provider: provider.value, model: '', baseUrl: provider.value === 'openai' ? SERVICES[0][1] : '' });
+        await save({ provider: provider.value });
         render();
+        const now = c.services.find((x) => x.id === c.provider);
+        if (c.provider !== 'anthropic' && !c.model && (c.hasKey || now?.local)) findModels();
       });
-      body.append(row('AI service', provider));
-      if (c.provider === 'anthropic') {
+      body.append(row('AI service', provider, svc.local ? 'Free. Install it, download a model in it, and keep it running while you chat.' : null));
+      if (svc.id === 'custom') {
+        const url = h('input', { type: 'text', value: c.baseUrl, placeholder: 'https://…/v1', spellcheck: false });
+        url.addEventListener('change', () => save({ baseUrl: url.value }));
+        body.append(row('Address', url, 'The web address of a service with an OpenAI-style API, usually ending in /v1. The services in the list above fill it in by themselves.'));
+      }
+      modelStatus = null;
+      if (svc.id === 'anthropic') {
         const model = h('select');
         for (const id of c.claudeModels) model.append(h('option', { value: id, str: id, selected: id === (c.model || c.claudeModels[0]) }));
         model.addEventListener('change', () => save({ model: model.value }));
         body.append(row('Model', model, 'Opus is the most capable; Sonnet and Haiku are faster and cheaper.'));
       } else {
-        const url = h('input', { type: 'text', value: c.baseUrl, placeholder: 'https://…/v1', spellcheck: false });
-        url.addEventListener('change', () => save({ baseUrl: url.value }));
-        const presets = h('div.ai-presets');
-        for (const [name, address] of SERVICES)
-          presets.append(
-            h('button.btn', {
-              str: name,
-              onClick: () => {
-                url.value = address;
-                save({ baseUrl: address });
-              },
-            }),
-          );
-        const model = h('input', { type: 'text', value: c.model, placeholder: 'e.g. gpt-5, llama3.1', spellcheck: false });
+        const list = models || this.models?.[svc.id];
+        if (models) this.models = { ...this.models, [svc.id]: models };
+        let model;
+        if (list?.length) {
+          model = h('select');
+          for (const id of list) model.append(h('option', { value: id, str: id, selected: id === c.model }));
+        } else model = h('input', { type: 'text', value: c.model, placeholder: 'Model name', spellcheck: false });
         model.addEventListener('change', () => save({ model: model.value }));
-        body.append(row('Address', h('div', url, presets)), row('Model', model, 'Pick a model that can use tools (function calling).'));
+        modelStatus = h('span.ai-hint');
+        const find = h('button.btn', { text: 'Find models', title: 'List the models this service offers', onClick: findModels });
+        body.append(row('Model', h('div', model, h('div.ai-presets', find, modelStatus)), 'Pick a model that can use tools (function calling).'));
       }
-      const key = h('input', { type: 'password', placeholder: c.hasKey ? '•••••••• (saved)' : c.provider === 'anthropic' ? 'sk-ant-…' : 'Not needed for Ollama or LM Studio', spellcheck: false, autocomplete: 'off' });
-      const keyBtns = h(
-        'div.ai-presets',
-        h('button.btn', {
-          text: 'Save key',
-          onClick: async () => {
-            if (!key.value.trim()) return;
-            await save({ key: key.value });
-            key.value = '';
-            toast('API key saved', { type: 'ok' });
-            render();
-          },
-        }),
-        c.hasKey
-          ? h('button.btn', {
-              text: 'Remove key',
-              onClick: async () => {
-                await save({ key: '' });
-                render();
-              },
-            })
-          : null,
-      );
-      const keyHint =
-        c.provider === 'anthropic'
-          ? `${t('Get a key at')} <a href="#" data-url="https://console.anthropic.com/settings/keys">console.anthropic.com</a>. ${t('You pay Anthropic for what you use; a request usually costs a few cents. The key is stored encrypted on this computer.')}`
-          : t('The key is stored encrypted on this computer.');
-      body.append(row('API key', h('div', key, keyBtns), keyHint));
+      if (!svc.local) {
+        const key = h('input', { type: 'password', placeholder: c.hasKey ? '•••••••• (saved)' : svc.id === 'anthropic' ? 'sk-ant-…' : 'Paste the key here', spellcheck: false, autocomplete: 'off' });
+        const keyBtns = h(
+          'div.ai-presets',
+          h('button.btn', {
+            text: 'Save key',
+            onClick: async () => {
+              if (!key.value.trim()) return;
+              await save({ key: key.value });
+              key.value = '';
+              toast('API key saved', { type: 'ok' });
+              render();
+              if (svc.id !== 'anthropic' && !c.model) findModels();
+            },
+          }),
+          c.hasKey
+            ? h('button.btn', {
+                text: 'Remove key',
+                onClick: async () => {
+                  await save({ key: '' });
+                  render();
+                },
+              })
+            : null,
+        );
+        const where = svc.keyUrl ? `${t('Get a key at')} <a href="#" data-url="${svc.keyUrl}">${new URL(svc.keyUrl).host}</a>. ` : '';
+        const cost = svc.id === 'anthropic' ? t('You pay Anthropic for what you use; a request usually costs a few cents.') : svc.id === 'gemini' ? t('Google has a free tier with daily limits.') : '';
+        body.append(row('API key', h('div', key, keyBtns), `${where}${cost} ${t('Each service keeps its own key, stored encrypted on this computer.')}`));
+      }
 
       body.append(h('h4', { text: 'Other AI apps (MCP)' }));
       const on = h('input', { type: 'checkbox', checked: m.enabled });

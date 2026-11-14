@@ -30,12 +30,16 @@ const near = (a, b, tol = 0.5) => assert.ok(Math.abs(a - b) < tol, `${a} != ${b}
 
 // A stand-in AI service: answers each request with the next scripted reply
 // and keeps what it was sent.
-function fakeService(replies) {
+function fakeService(replies, models = []) {
   const seen = [];
   const server = http.createServer((req, res) => {
     let raw = '';
     req.on('data', (c) => (raw += c));
     req.on('end', () => {
+      if (req.method === 'GET' && req.url.endsWith('/models')) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ object: 'list', data: models.map((id) => ({ id, object: 'model' })) }));
+      }
       seen.push({ url: req.url, headers: req.headers, body: JSON.parse(raw || '{}') });
       const reply = replies[Math.min(seen.length - 1, replies.length - 1)];
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -148,7 +152,7 @@ try {
     { choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: 'Here is your ball.' } }] },
   ]);
   await A(async (url) => {
-    await window.native.aiSave({ provider: 'openai', baseUrl: url, model: 'llama3.1', key: '' });
+    await window.native.aiSave({ provider: 'custom', baseUrl: url, model: 'llama3.1', key: '' });
     await window.__shaper.aiChat.refresh();
     window.__shaper.aiChat.reset();
   }, other.url);
@@ -162,6 +166,51 @@ try {
   assert.deepEqual(other.seen[1].body.messages.at(-1).role, 'tool');
   assert.equal(other.seen[1].body.messages.at(-1).tool_call_id, 'call_1');
   other.server.close();
+
+  step('Google Gemini: its own key, a model from its list, plain tool inputs it accepts');
+  const gemini = await fakeService(
+    [
+      { choices: [{ finish_reason: 'tool_calls', message: { role: 'assistant', content: null, tool_calls: [{ id: 'g1', type: 'function', function: { name: 'add_shape', arguments: JSON.stringify({ shape: 'box', width: 10, depth: 10, height: 10, position: [0, 60, 0], name: 'Gem' }) } }] } }] },
+      { choices: [{ finish_reason: 'tool_calls', message: { role: 'assistant', content: null, tool_calls: [{ id: 'g2', type: 'function', function: { name: 'fillet', arguments: JSON.stringify({ body_id: 'Gem', edges: '0,1', radius: 1 }) } }] } }] },
+      { choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: 'A small rounded box.' } }] },
+    ],
+    ['models/gemini-test-flash', 'models/gemini-test-pro', 'models/text-embedding-004', 'models/imagen-test'],
+  );
+  await A(async (url) => {
+    await window.native.aiSave({ provider: 'gemini', baseUrl: url, key: 'AIza-test-key' });
+    window.__shaper.aiChat.reset();
+  }, gemini.url);
+  await win.locator('.ai-gear').click();
+  await win.waitForSelector('.ai-settings');
+  assert.equal(await win.locator('.ai-settings select').first().inputValue(), 'gemini');
+  assert.match(await win.locator('.ai-settings').innerText(), /aistudio\.google\.com/);
+  assert.equal(await win.locator('.ai-settings input[placeholder="https://…/v1"]').count(), 0, 'no address to fill in for Gemini');
+  await win.locator('.ai-settings .btn', { hasText: 'Find models' }).click();
+  await win.waitForSelector('.ai-settings select >> nth=1');
+  const offered = await win.locator('.ai-settings select').nth(1).locator('option').allInnerTexts();
+  assert.deepEqual(offered, ['gemini-test-flash', 'gemini-test-pro'], 'chat models only');
+  await shot(win, '92-ai-gemini');
+  await win.locator('.modal .btn.primary', { hasText: 'Done' }).click();
+  const keys = await A(async () => {
+    const g = await window.native.aiSettings();
+    await window.native.aiSave({ provider: 'anthropic' });
+    const c = await window.native.aiSettings();
+    await window.native.aiSave({ provider: 'gemini' });
+    await window.__shaper.aiChat.refresh();
+    return { gemini: g.hasKey, model: g.model, claude: c.hasKey };
+  });
+  assert.deepEqual(keys, { gemini: true, model: 'gemini-test-flash', claude: true }, 'each service keeps its own key');
+  await win.locator('.ai-input').fill('a small box with rounded edges');
+  await win.locator('.ai-input').press('Enter');
+  await win.waitForSelector('.ai-msg.assistant >> text=A small rounded box', { timeout: 60000 });
+  const sent = gemini.seen.filter((x) => x.url.endsWith('/chat/completions'));
+  assert.equal(sent[0].headers.authorization, 'Bearer AIza-test-key', 'the Gemini key, not the Claude one');
+  assert.equal(sent[0].body.model, 'gemini-test-flash');
+  const schemas = JSON.stringify(sent[0].body.tools);
+  assert.ok(!schemas.includes('anyOf') && !schemas.includes('additionalProperties'), 'tool inputs Gemini accepts');
+  assert.match(sent[1].body.messages.at(-1).content, /"name":"Gem"/);
+  assert.match(sent[2].body.messages.at(-1).content, /"changed"/, 'edges given as text "0,1" were rounded');
+  gemini.server.close();
 
   step('the settings show how to connect AI apps over MCP');
   await win.locator('.ai-gear').click();
