@@ -76,10 +76,19 @@ async function sketchSummary(app, sk) {
   };
 }
 
+// "0, 3" or [0, 3] → [0, 3]; anything else → null. (Some AI services send
+// lists as text.)
+function numberList(v) {
+  if (Array.isArray(v)) return v.map(Number);
+  if (typeof v === 'string' && /^\s*\d+(\s*,\s*\d+)*\s*$/.test(v)) return v.split(',').map(Number);
+  return null;
+}
+
 // Face index from a number or a side name.
 function faceIndex(app, bodyId, sel) {
   const m = app.bodyMesh(bodyId);
   const faces = m?.faceInfo || [];
+  if (typeof sel === 'string' && /^\d+$/.test(sel.trim())) sel = Number(sel);
   if (typeof sel === 'number') {
     if (!faces[sel]) throw new ToolError(`Body ${bodyId} has no face ${sel} (it has ${faces.length})`);
     return sel;
@@ -99,6 +108,7 @@ function faceIndex(app, bodyId, sel) {
 function edgeIndices(app, bodyId, sel) {
   const m = app.bodyMesh(bodyId);
   const edges = m?.edgeInfo || [];
+  sel = numberList(sel) ?? sel;
   if (Array.isArray(sel)) {
     for (const i of sel) if (!edges[i]) throw new ToolError(`Body ${bodyId} has no edge ${i} (it has ${edges.length})`);
     return sel;
@@ -166,7 +176,7 @@ async function profiles(app, { sketch_id, regions, body_id, face }) {
   const sk = sketchOf(app, sketch_id);
   const { key, regions: all } = await regionsOf(app, sk.id);
   if (!all.length) throw new ToolError(`Sketch ${sk.id} has no closed regions`);
-  const picked = regions === undefined || regions === 'all' ? all.map((r) => r.index) : [].concat(regions);
+  const picked = regions === undefined || regions === 'all' ? all.map((r) => r.index) : [].concat(numberList(regions) ?? regions);
   for (const i of picked) if (!all.some((r) => r.index === i)) throw new ToolError(`Sketch ${sk.id} has no region ${i} (it has ${all.map((r) => r.index).join(', ')})`);
   return picked.map((index) => ({ kind: 'region', sketchId: sk.id, index, regionKey: key }));
 }

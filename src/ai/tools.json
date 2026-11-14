@@ -127,8 +127,87 @@
           },
           "shapes": {
             "type": "array",
+            "description": "The shapes to draw. Each has a type and the fields that type uses.",
             "items": {
-              "type": "object"
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "rect",
+                    "circle",
+                    "polygon",
+                    "regular_polygon",
+                    "line",
+                    "arc"
+                  ]
+                },
+                "x": {
+                  "type": "number",
+                  "description": "Centre x (rect, circle, regular_polygon, arc)"
+                },
+                "y": {
+                  "type": "number",
+                  "description": "Centre y"
+                },
+                "width": {
+                  "type": "number",
+                  "description": "rect"
+                },
+                "height": {
+                  "type": "number",
+                  "description": "rect"
+                },
+                "radius": {
+                  "type": "number",
+                  "description": "circle, regular_polygon, arc"
+                },
+                "sides": {
+                  "type": "integer",
+                  "description": "regular_polygon"
+                },
+                "points": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "description": "polygon corners [[x,y],…]"
+                },
+                "from": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "description": "line start [x,y]"
+                },
+                "to": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "description": "line end [x,y]"
+                },
+                "start_angle": {
+                  "type": "number",
+                  "description": "arc, degrees"
+                },
+                "end_angle": {
+                  "type": "number",
+                  "description": "arc, degrees"
+                }
+              },
+              "required": [
+                "type"
+              ]
             }
           }
         },
@@ -148,7 +227,7 @@
             "type": "string"
           },
           "regions": {
-            "description": "Region numbers from the sketch result, or \"all\" (default).",
+            "description": "Region numbers from the sketch result, e.g. [0, 2] or \"0,2\", or \"all\" (default).",
             "anyOf": [
               {
                 "type": "string"
@@ -222,6 +301,7 @@
             "type": "string"
           },
           "regions": {
+            "description": "Region numbers from the sketch result, e.g. [0, 2] or \"0,2\", or \"all\" (default).",
             "anyOf": [
               {
                 "type": "string"
@@ -274,7 +354,7 @@
             "type": "string"
           },
           "edges": {
-            "description": "Which edges: \"all\", a face name (top, bottom, left, right, front, back: the edges around that face), \"vertical\" (straight up-and-down edges), or a list of edge numbers from get_body",
+            "description": "Which edges: \"all\", a face name (top, bottom, left, right, front, back: the edges around that face), \"vertical\" (straight up-and-down edges), or edge numbers from get_body, e.g. [0, 3] or \"0,3\"",
             "anyOf": [
               {
                 "type": "string"
@@ -309,7 +389,7 @@
             "type": "string"
           },
           "edges": {
-            "description": "Which edges: \"all\", a face name (top, bottom, left, right, front, back: the edges around that face), \"vertical\" (straight up-and-down edges), or a list of edge numbers from get_body",
+            "description": "Which edges: \"all\", a face name (top, bottom, left, right, front, back: the edges around that face), \"vertical\" (straight up-and-down edges), or edge numbers from get_body, e.g. [0, 3] or \"0,3\"",
             "anyOf": [
               {
                 "type": "string"

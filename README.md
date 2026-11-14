@@ -104,9 +104,12 @@ The geometry engine is [OpenCascade](https://dev.opencascade.org/) (a real B-rep
 Click **AI** in the top bar and say what to build: *“a 60 × 40 × 6 mm plate with a 4 mm hole in each corner and rounded corners”*. The AI builds it with the same tools you use: shapes, sketches, extrude, revolve, fillet, chamfer, shell, union/subtract, move, patterns, mirror and colours. Every step shows up in History, and **Undo this** takes back everything it did for one request. It can also take a picture of the design to check its work.
 
 - **Claude** (Anthropic): paste your API key from [console.anthropic.com](https://console.anthropic.com/settings/keys) in the AI settings and pick Opus (most capable), Sonnet or Haiku (faster and cheaper). You pay Anthropic per use; a request usually costs a few cents.
-- **Any other AI** with an OpenAI-style API: OpenAI, OpenRouter, or one running on your own computer with [Ollama](https://ollama.com) or [LM Studio](https://lmstudio.ai) (free, no key). Pick a model that supports tools (function calling).
+- **Google Gemini**: get a key at [aistudio.google.com](https://aistudio.google.com/apikey) (Google has a free tier with daily limits), paste it, and click **Find models**.
+- **OpenAI (ChatGPT)** and **OpenRouter** (many AI models with one key) work the same way.
+- **Ollama** or **LM Studio** run an AI on your own computer: free, no key. Install one, download a model in it, keep it running, and click **Find models**.
+- **Other**: any service with an OpenAI-style API; type its address (usually ending in `/v1`). For the services above the app fills in the address itself.
 
-The key is stored encrypted on your computer and only used by the app itself to talk to the AI service.
+Pick a model that can use tools (function calling). Each service keeps its own key, stored encrypted on your computer and only sent to that service.
 
 **Other AI apps (MCP).** Turn on *Let AI apps use ShaperBuild* in the AI settings, and apps that support the Model Context Protocol can build in the open ShaperBuild:
 

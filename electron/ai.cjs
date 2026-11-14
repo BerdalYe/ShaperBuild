@@ -12,30 +12,55 @@ const CLAUDE_MODELS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5
 // Models that can hand a declined request to another model by themselves.
 const FALLBACKS = new Set(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-opus-5', 'claude-fable-5-1', 'claude-fable-5-2']);
 
+// The AI services in the settings. All but Claude are reached through their
+// OpenAI-style API at `url`; "custom" takes any address. `keyUrl` is where
+// to get a key; `local` ones run on this computer and need none.
+const SERVICES = [
+  { id: 'anthropic', name: 'Claude (Anthropic)', keyUrl: 'https://console.anthropic.com/settings/keys' },
+  { id: 'gemini', name: 'Google Gemini (AI Studio)', url: 'https://generativelanguage.googleapis.com/v1beta/openai', keyUrl: 'https://aistudio.google.com/apikey' },
+  { id: 'openai', name: 'OpenAI (ChatGPT)', url: 'https://api.openai.com/v1', keyUrl: 'https://platform.openai.com/api-keys' },
+  { id: 'openrouter', name: 'OpenRouter (many AI models)', url: 'https://openrouter.ai/api/v1', keyUrl: 'https://openrouter.ai/keys' },
+  { id: 'ollama', name: 'Ollama (free, runs on this computer)', url: 'http://localhost:11434/v1', local: true },
+  { id: 'lmstudio', name: 'LM Studio (free, runs on this computer)', url: 'http://localhost:1234/v1', local: true },
+  { id: 'custom', name: 'Other (enter its address)' },
+];
+
 function setup({ userData, version, getWindow }) {
   const file = path.join(userData, 'ai.json');
+  // { provider, models: {id: model}, keys: {id: key}, urls: {id: address} }
   const read = () => {
+    let s = {};
     try {
-      return JSON.parse(fs.readFileSync(file, 'utf8'));
-    } catch {
-      return {};
+      s = JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch {}
+    // Settings from 1.5.0 had one key, model and address for all services.
+    if (!s.keys && (s.key || s.model || s.baseUrl)) {
+      const openai = SERVICES.find((x) => x.id === 'openai').url;
+      if (s.provider === 'openai' && s.baseUrl && s.baseUrl !== openai) s.provider = 'custom';
+      const p = s.provider || 'anthropic';
+      s = { provider: p, keys: s.key ? { [p]: { v: s.key, plain: !!s.keyPlain } } : {}, models: s.model ? { [p]: s.model } : {}, urls: s.baseUrl ? { [p]: s.baseUrl } : {} };
     }
+    return { provider: 'anthropic', keys: {}, models: {}, urls: {}, ...s };
   };
   const write = (s) => {
     fs.mkdirSync(userData, { recursive: true });
     fs.writeFileSync(file, JSON.stringify(s, null, 2), { mode: 0o600 });
   };
-  const keyOf = (s) => {
-    if (!s.key) return '';
+  const keyOf = (s, p = s.provider) => {
+    const k = s.keys[p];
+    if (!k) return '';
     try {
-      return s.keyPlain ? Buffer.from(s.key, 'base64').toString('utf8') : safeStorage.decryptString(Buffer.from(s.key, 'base64'));
+      return k.plain ? Buffer.from(k.v, 'base64').toString('utf8') : safeStorage.decryptString(Buffer.from(k.v, 'base64'));
     } catch {
       return '';
     }
   };
+  const service = (s) => SERVICES.find((x) => x.id === s.provider) || SERVICES[0];
+  // Where the chosen service answers (a test or "Other" can set its own).
+  const urlOf = (s) => s.urls[s.provider] || service(s).url || '';
   const settings = () => {
     const s = read();
-    return { provider: s.provider || 'anthropic', model: s.model || '', baseUrl: s.baseUrl || '', hasKey: !!keyOf(s), claudeModels: CLAUDE_MODELS };
+    return { provider: s.provider, model: s.models[s.provider] || '', baseUrl: s.provider === 'custom' ? urlOf(s) : '', hasKey: !!keyOf(s), claudeModels: CLAUDE_MODELS, services: SERVICES };
   };
 
   // ---- tool calls from AI apps, run in the window -------------------------
@@ -117,23 +142,39 @@ function setup({ userData, version, getWindow }) {
   ipcMain.handle('ai:settings', () => settings());
   ipcMain.handle('ai:save', (_e, patch = {}) => {
     const s = read();
-    for (const k of ['provider', 'model', 'baseUrl']) if (k in patch) s[k] = String(patch[k] || '').trim();
+    if ('provider' in patch && SERVICES.some((x) => x.id === patch.provider)) s.provider = patch.provider;
+    const p = s.provider;
+    if ('model' in patch) s.models[p] = String(patch.model || '').trim();
+    if ('baseUrl' in patch) s.urls[p] = String(patch.baseUrl || '').trim();
     if ('key' in patch) {
       const key = String(patch.key || '').trim();
-      if (!key) {
-        delete s.key;
-        delete s.keyPlain;
-      } else if (safeStorage.isEncryptionAvailable()) {
-        s.key = safeStorage.encryptString(key).toString('base64');
-        delete s.keyPlain;
-      } else {
-        // No system keychain (some Linux desktops): kept in this file only.
-        s.key = Buffer.from(key).toString('base64');
-        s.keyPlain = true;
-      }
+      if (!key) delete s.keys[p];
+      else if (safeStorage.isEncryptionAvailable()) s.keys[p] = { v: safeStorage.encryptString(key).toString('base64') };
+      // No system keychain (some Linux desktops): kept in this file only.
+      else s.keys[p] = { v: Buffer.from(key).toString('base64'), plain: true };
     }
     write(s);
     return settings();
+  });
+
+  // The models the chosen service offers (for the list in the settings).
+  ipcMain.handle('ai:models', async () => {
+    const s = read();
+    if (s.provider === 'anthropic') return { models: CLAUDE_MODELS };
+    const base = urlOf(s);
+    if (!base) return { error: 'Add the address of the AI service in the AI settings first.' };
+    try {
+      const key = keyOf(s);
+      const res = await fetch(`${base.replace(/\/+$/, '')}/models`, { headers: key ? { Authorization: `Bearer ${key}` } : {} });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) return { error: `${res.status}: ${body?.error?.message || res.statusText}` };
+      // Only chat models: leave out embeddings, speech, pictures and video.
+      const skip = /embed|tts|whisper|audio|speech|image|imagen|dall-e|veo|moderation|transcribe|aqa/i;
+      const ids = (body?.data || []).map((m) => String(m.id).replace(/^models\//, '')).filter((id) => !skip.test(id));
+      return { models: [...new Set(ids)].sort() };
+    } catch (err) {
+      return { error: describeError(err) };
+    }
   });
 
   // ---- one turn of the chat --------------------------------------------------
@@ -142,9 +183,10 @@ function setup({ userData, version, getWindow }) {
   ipcMain.handle('ai:chat', async (_e, { system, messages, tools }) => {
     const s = read();
     const key = keyOf(s);
+    const model = s.models[s.provider];
     try {
-      if ((s.provider || 'anthropic') === 'anthropic') return await claudeTurn({ key, model: s.model || CLAUDE_MODELS[0], baseUrl: s.baseUrl, system, messages, tools });
-      return await openaiTurn({ key, model: s.model, baseUrl: s.baseUrl, system, messages, tools });
+      if (s.provider === 'anthropic') return await claudeTurn({ key, model: model || CLAUDE_MODELS[0], baseUrl: s.urls.anthropic, system, messages, tools });
+      return await openaiTurn({ key, model, baseUrl: urlOf(s), system, messages, tools, needsKey: !service(s).local && s.provider !== 'custom' });
     } catch (err) {
       return { error: describeError(err) };
     }
@@ -180,8 +222,9 @@ async function claudeTurn({ key, model, baseUrl, system, messages, tools }) {
 
 // Any service with an OpenAI-style chat API: OpenAI, OpenRouter, Groq,
 // Mistral, or one on this computer (Ollama, LM Studio).
-async function openaiTurn({ key, model, baseUrl, system, messages, tools }) {
+async function openaiTurn({ key, model, baseUrl, system, messages, tools, needsKey }) {
   if (!baseUrl) return { error: 'Add the address of the AI service in the AI settings first.' };
+  if (needsKey && !key) return { error: 'Add your API key in the AI settings first.' };
   if (!model) return { error: 'Add the model name in the AI settings first.' };
   const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
   const res = await fetch(url, {
