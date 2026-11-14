@@ -99,6 +99,23 @@ Finding your way around:
 
 The geometry engine is [OpenCascade](https://dev.opencascade.org/) (a real B-rep CAD kernel, through `replicad-opencascadejs`), with [Manifold](https://github.com/elalish/manifold) for mesh booleans.
 
+## AI assistant
+
+Click **AI** in the top bar and say what to build: *“a 60 × 40 × 6 mm plate with a 4 mm hole in each corner and rounded corners”*. The AI builds it with the same tools you use: shapes, sketches, extrude, revolve, fillet, chamfer, shell, union/subtract, move, patterns, mirror and colours. Every step shows up in History, and **Undo this** takes back everything it did for one request. It can also take a picture of the design to check its work.
+
+- **Claude** (Anthropic): paste your API key from [console.anthropic.com](https://console.anthropic.com/settings/keys) in the AI settings and pick Opus (most capable), Sonnet or Haiku (faster and cheaper). You pay Anthropic per use; a request usually costs a few cents.
+- **Any other AI** with an OpenAI-style API: OpenAI, OpenRouter, or one running on your own computer with [Ollama](https://ollama.com) or [LM Studio](https://lmstudio.ai) (free, no key). Pick a model that supports tools (function calling).
+
+The key is stored encrypted on your computer and only used by the app itself to talk to the AI service.
+
+**Other AI apps (MCP).** Turn on *Let AI apps use ShaperBuild* in the AI settings, and apps that support the Model Context Protocol can build in the open ShaperBuild:
+
+- **Claude Desktop**: *Settings → Developer → Edit Config*, paste the snippet the AI settings show (it runs `ShaperBuild --mcp`), and restart Claude.
+- **Claude Code**: run the `claude mcp add --transport http shaperbuild …` command shown in the settings.
+- **Other apps** (Cursor, VS Code, …): the server is at `http://127.0.0.1:45839/mcp` and needs the `Authorization: Bearer …` header shown in the settings.
+
+The server only answers this computer, needs the secret token, and refuses web pages. *Make a new token* locks out apps that used the old one.
+
 ## Selecting
 
 - Click selects a face, edge, curve or region; double-click selects the whole body. The **filter** in the status bar limits clicks to bodies, faces or edges.
@@ -159,7 +176,7 @@ npm start
 ## Project layout
 
 ```
-electron/        main process: window, native menu, file dialogs, app:// protocol
+electron/        main process: window, native menu, file dialogs, app:// protocol, AI service calls and the MCP server
 src/
   app.js         app controller: document, selection, snapping, previews, shortcuts
   commands.js    document changes (apply kernel results, delete, duplicate, …)
@@ -169,6 +186,7 @@ src/
   kernel/        geometry kernel (OpenCascade + Manifold) running in a Web Worker
   view/          three.js viewport: camera, grid, view cube, GPU picking, bodies, sketches, overlays
   tools/         interactive tools (select, sketch, modelling, transform, measure, section)
+  ai/            tools for AI assistants (tools.json: names, descriptions, inputs)
   ui/            panels: items, tools menu, tool options, context bar, dialogs, home screen
 tests/           unit, kernel and end-to-end tests
 tools/           helper scripts (i18n-extract.mjs lists text that still needs a translation)
@@ -181,4 +199,4 @@ ShaperBuild is free and open-source software under the [GNU General Public Licen
 
 ShaperBuild uses OpenCascade via replicad-opencascadejs (LGPL-2.1, kept as a separate, replaceable library), Manifold (Apache-2.0), three.js (MIT), opentype.js (MIT), the Inter font (OFL-1.1) and Electron (MIT). [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists everything with versions and where the licence texts are; the app shows them under *Help → Open-source licences*.
 
-ShaperBuild collects no personal data; the only network use is the update check ([PRIVACY.md](PRIVACY.md)). [LEGAL.md](LEGAL.md) is a checklist of what else to keep in mind when sharing or selling it (checking the name, tax and consumer rules).
+ShaperBuild collects no personal data; it only goes online for the update check and, if you set it up, the AI assistant ([PRIVACY.md](PRIVACY.md)). [LEGAL.md](LEGAL.md) is a checklist of what else to keep in mind when sharing or selling it (checking the name, tax and consumer rules).

@@ -31,6 +31,14 @@ const MIME = {
   '.otf': 'font/otf',
 };
 
+// `ShaperBuild --mcp` is started by an AI app (such as Claude Desktop) to
+// reach the open ShaperBuild over MCP. It has no window of its own.
+if (process.argv.includes('--mcp')) {
+  app.dock?.hide();
+  require('./mcp.cjs').runBridge({ userData: app.getPath('userData'), version: app.getVersion() });
+  return;
+}
+
 // Let machines without a usable GPU (VMs, remote desktops) fall back to
 // software WebGL. Only local app content is ever loaded.
 app.commandLine.appendSwitch('enable-unsafe-swiftshader');
@@ -556,6 +564,7 @@ app.on('second-instance', (_e, argv) => {
 app.whenReady().then(() => {
   protocol.handle(SCHEME, serve);
   i18n.init(app.getPath('userData'));
+  require('./ai.cjs').setup({ userData: app.getPath('userData'), version: app.getVersion(), getWindow: () => win });
   refreshMenu();
   createWindow();
   openPaths(filesFromArgv(process.argv));

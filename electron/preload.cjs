@@ -42,6 +42,16 @@ contextBridge.exposeInMainWorld('native', {
   openUrl: (url) => ipcRenderer.send('shell:open-url', url),
   onMenu: (cb) => ipcRenderer.on('menu', (_e, command, arg) => cb(command, arg)),
   onOpenPath: (cb) => ipcRenderer.on('open-path', (_e, file) => cb(file)),
+  // AI assistant: chat settings and turns (the key stays in the main
+  // process), the MCP server for AI apps, and tool calls from those apps.
+  aiSettings: () => ipcRenderer.invoke('ai:settings'),
+  aiSave: (patch) => ipcRenderer.invoke('ai:save', patch),
+  aiChat: (req) => ipcRenderer.invoke('ai:chat', req),
+  mcpState: () => ipcRenderer.invoke('mcp:state'),
+  mcpSet: (enabled) => ipcRenderer.invoke('mcp:set', enabled),
+  mcpNewToken: () => ipcRenderer.invoke('mcp:new-token'),
+  onAiCall: (cb) => ipcRenderer.on('ai:call', (_e, id, name, input) => cb(id, name, input)),
+  aiResult: (id, result) => ipcRenderer.send('ai:result', id, result),
   pathSep: process.platform === 'win32' ? '\\' : '/',
   platform: process.platform,
 });

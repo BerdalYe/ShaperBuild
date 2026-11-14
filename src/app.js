@@ -36,6 +36,8 @@ import { UNITS, formatLength, formatArea, formatVolume, formatAngle, niceStep, s
 import { variableValues } from './core/variables.js';
 import { planeFrame, to3D, to2D, samePlane } from './core/plane.js';
 import { keyPoints, closestOnEntity, dist, intersect, sampleEntity } from './core/geom2d.js';
+import { AI_TOOLS, INSTRUCTIONS, runAiTool } from './ai/tools.js';
+import { AiChat } from './ui/aichat.js';
 
 const SETTINGS_KEY = 'shaperbuild.settings.v1';
 // What a click selects (status bar; Tab cycles in the alternative keys).
@@ -104,6 +106,9 @@ export class App {
     this.navHelp = new NavHelp(this);
     this.tutorial = new Tutorial(this);
     this.print = new PrintDialog(this);
+    // Tools for AI assistants (the chat panel and connected AI apps).
+    this.ai = { tools: AI_TOOLS, instructions: INSTRUCTIONS, run: (name, input) => runAiTool(this, name, input) };
+    this.aiChat = new AiChat(this);
     this.updates = new Updates(this);
     this.drawing = new DrawingDialog(this);
     this.materials = new MaterialsPanel(document.getElementById('materials'), this);
@@ -1008,6 +1013,8 @@ export class App {
     $('btn-import').querySelector('.ic').innerHTML = icon('import');
     $('btn-export').querySelector('.ic').innerHTML = icon('export');
     $('btn-print').querySelector('.ic').innerHTML = icon('printer');
+    $('btn-ai').querySelector('.ic').innerHTML = icon('sparkle');
+    $('btn-ai').addEventListener('click', () => this.aiChat.toggle());
     $('btn-print').addEventListener('click', () => this.print.open());
     $('btn-home').addEventListener('click', () => this.home.show());
     $('btn-undo').addEventListener('click', () => this.cmd.undo());

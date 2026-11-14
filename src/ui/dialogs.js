@@ -138,6 +138,7 @@ export class Dialogs {
       h('div', { style: { height: '8px' } }),
       row('Units for this design', select(app.units, Object.entries(UNITS).map(([k, u]) => [k, u.name]), (v) => app.cmd.setUnits(v))),
       folderRow,
+      row('AI assistant', h('button.btn', { text: 'AI settings…', onClick: () => app.aiChat.settings() })),
       h('h4', { text: 'Navigation' }),
       row(
         'Scroll wheel / two-finger swipe',
@@ -386,6 +387,7 @@ export class Dialogs {
       ['Inter typeface', 'SIL Open Font License 1.1', ['src/fonts/OFL.txt'], 'https://github.com/rsms/inter'],
       ['Electron 44.5.0 (with Chromium and Node.js)', 'MIT; Chromium and Node.js have their own licences (LICENSES.chromium.html next to the app)', ['src/licenses/electron.txt'], 'https://github.com/electron/electron'],
       ['electron-updater 6.8.9 and the packages it uses', 'MIT, ISC, BlueOak-1.0.0, 0BSD, Python-2.0', ['src/licenses/update-checker.txt'], 'https://github.com/electron-userland/electron-builder'],
+      ['Anthropic TypeScript SDK 1.3.0 (AI assistant) and the packages it uses', 'Apache-2.0, MIT, Unlicense', ['src/licenses/ai-sdk.txt'], 'https://github.com/anthropics/anthropic-sdk-typescript'],
     ];
     const text = h('pre.lic-text', { str: '' });
     const listEl = h('div.lic-list');
