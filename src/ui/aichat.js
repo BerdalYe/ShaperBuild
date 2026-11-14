@@ -377,8 +377,30 @@ export class AiChat {
             h('div.ai-hint', { html: hint }),
             h('pre', { str: text }),
           );
+        const add = h('button.btn.primary', {
+          text: 'Add to Claude Desktop',
+          onClick: async () => {
+            const res = await native.mcpAddClaudeDesktop();
+            if (res.error) return toast(res.error, { type: 'error', ms: 6000 });
+            added.hidden = false;
+          },
+        });
+        const added = h('div.ai-hint.ok', {
+          hidden: true,
+          text: 'Added. Now quit Claude Desktop completely (on Windows: right-click its icon by the clock and choose Quit) and open it again. Then ask Claude to build something in ShaperBuild, and keep ShaperBuild open.',
+        });
         body.append(
-          snippet('Claude Desktop', 'Settings → Developer → Edit Config: add this to the file, then restart Claude. Keep ShaperBuild open while you chat.', desktop),
+          h(
+            'div.ai-snippet',
+            h('div.ai-snippet-head', h('b', { text: 'Claude Desktop' }), add),
+            h('div.ai-hint', { text: 'One click puts ShaperBuild into Claude Desktop’s settings.' }),
+            added,
+          ),
+          h(
+            'details.ai-manual',
+            h('summary', { text: 'Or add it by hand' }),
+            snippet('claude_desktop_config.json', 'In Claude Desktop: Settings → Developer → Edit Config (on Windows the settings are under the menu at the top left, File → Settings). Add this to the file and restart Claude.', desktop),
+          ),
           snippet('Claude Code', 'Run this in a terminal:', code),
           snippet('Other apps', 'Server address (HTTP) and the header to send:', `${m.url}\nAuthorization: Bearer ${m.token}`),
           h('div.ai-presets', h('button.btn', { text: 'Make a new token', title: 'Apps using the old token stop working until you update them', onClick: async () => ((m = await native.mcpNewToken()), render()) })),

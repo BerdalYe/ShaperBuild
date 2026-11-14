@@ -11,6 +11,10 @@ import { createRequire } from 'node:module';
 import { launch, shot, ROOT, OUT } from './harness.mjs';
 
 const dataDir = fs.mkdtempSync(path.join(OUT, 'profile-'));
+// A stand-in for Claude Desktop's settings folder, with a server of its own.
+const claudeDir = fs.mkdtempSync(path.join(OUT, 'claude-desktop-'));
+fs.writeFileSync(path.join(claudeDir, 'claude_desktop_config.json'), JSON.stringify({ mcpServers: { other: { command: 'other-app' } }, theme: 'dark' }));
+process.env.SHAPER_CLAUDE_CONFIG_DIR = claudeDir;
 const { win, errors, close } = await launch({ userData: dataDir });
 const step = (msg) => console.log(`• ${msg}`);
 const A = (fn, arg) => win.evaluate(fn, arg);
@@ -217,9 +221,15 @@ try {
   await win.waitForSelector('.ai-settings');
   await win.locator('.ai-settings label.toggle input').check();
   await win.waitForSelector('.ai-snippet');
-  const snippets = await win.locator('.ai-snippet pre').allInnerTexts();
+  const snippets = await win.locator('.ai-snippet pre').allTextContents();
   assert.match(snippets[0], /"mcpServers"[\s\S]*"--mcp"/);
   assert.match(snippets[1], /claude mcp add --transport http shaperbuild http:\/\/127\.0\.0\.1:45839\/mcp --header "Authorization: Bearer [\w-]{20,}"/);
+  await win.locator('.ai-settings .btn', { hasText: 'Add to Claude Desktop' }).click();
+  await win.waitForSelector('.ai-hint.ok:not([hidden])');
+  const desktopConfig = JSON.parse(fs.readFileSync(path.join(claudeDir, 'claude_desktop_config.json'), 'utf8'));
+  assert.deepEqual(desktopConfig.mcpServers.other, { command: 'other-app' }, 'other servers are kept');
+  assert.equal(desktopConfig.theme, 'dark');
+  assert.deepEqual(desktopConfig.mcpServers.shaperbuild.args.at(-1), '--mcp');
   await shot(win, '91-ai-settings');
   await win.keyboard.press('Escape');
   const mcp = await A(() => window.native.mcpState());

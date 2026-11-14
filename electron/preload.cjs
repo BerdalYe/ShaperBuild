@@ -51,6 +51,7 @@ contextBridge.exposeInMainWorld('native', {
   mcpState: () => ipcRenderer.invoke('mcp:state'),
   mcpSet: (enabled) => ipcRenderer.invoke('mcp:set', enabled),
   mcpNewToken: () => ipcRenderer.invoke('mcp:new-token'),
+  mcpAddClaudeDesktop: () => ipcRenderer.invoke('mcp:add-claude-desktop'),
   onAiCall: (cb) => ipcRenderer.on('ai:call', (_e, id, name, input) => cb(id, name, input)),
   aiResult: (id, result) => ipcRenderer.send('ai:result', id, result),
   pathSep: process.platform === 'win32' ? '\\' : '/',
