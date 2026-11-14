@@ -4625,3 +4625,13 @@ body.resizing-panel .items-panel {
 .sb-btn .sb-lock {
   margin-left: 4px;
 }
+
+.ai-hint.ok {
+  color: var(--ok);
+}
+
+.ai-manual summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}

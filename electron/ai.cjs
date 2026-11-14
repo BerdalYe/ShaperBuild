@@ -127,6 +127,31 @@ function setup({ userData, version, getWindow }) {
     else await stopServer();
     return mcpState();
   });
+  // Put ShaperBuild into Claude Desktop's settings file, so nobody has to
+  // find its Developer settings. Other servers in the file are kept.
+  ipcMain.handle('mcp:add-claude-desktop', () => {
+    const st = mcpState();
+    const files = claudeDesktopConfigs();
+    const done = [];
+    for (const f of files) {
+      let config = {};
+      try {
+        const text = fs.readFileSync(f, 'utf8');
+        if (text.trim()) config = JSON.parse(text);
+      } catch (err) {
+        if (err.code !== 'ENOENT') return { error: `Could not read ${f}: ${err.message}` };
+      }
+      config.mcpServers = { ...(config.mcpServers || {}), shaperbuild: { command: st.command, args: st.args } };
+      try {
+        fs.mkdirSync(path.dirname(f), { recursive: true });
+        fs.writeFileSync(f, `${JSON.stringify(config, null, 2)}\n`);
+        done.push(f);
+      } catch (err) {
+        return { error: `Could not write ${f}: ${err.message}` };
+      }
+    }
+    return { files: done };
+  });
   ipcMain.handle('mcp:new-token', async () => {
     const c = mcp.readConfig(userData);
     c.token = crypto.randomBytes(24).toString('base64url');
@@ -249,6 +274,22 @@ async function openaiTurn({ key, model, baseUrl, system, messages, tools, needsK
   });
   const message = { role: 'assistant', content: msg.content || '', ...(msg.tool_calls?.length ? { tool_calls: msg.tool_calls } : {}) };
   return { message, text: msg.content || '', calls, stop: body.choices[0].finish_reason };
+}
+
+// Where Claude Desktop keeps its settings. The Microsoft Store version on
+// Windows keeps them in its own package folder.
+function claudeDesktopConfigs() {
+  const name = 'claude_desktop_config.json';
+  if (process.env.SHAPER_CLAUDE_CONFIG_DIR) return [path.join(process.env.SHAPER_CLAUDE_CONFIG_DIR, name)];
+  const home = require('node:os').homedir();
+  if (process.platform === 'darwin') return [path.join(home, 'Library', 'Application Support', 'Claude', name)];
+  if (process.platform !== 'win32') return [path.join(home, '.config', 'Claude', name)];
+  const out = [path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'Claude', name)];
+  const packages = path.join(process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), 'Packages');
+  try {
+    for (const d of fs.readdirSync(packages)) if (/^(Anthropic\.)?Claude_/i.test(d)) out.push(path.join(packages, d, 'LocalCache', 'Roaming', 'Claude', name));
+  } catch {}
+  return out;
 }
 
 function describeError(err) {

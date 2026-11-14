@@ -113,7 +113,7 @@ Pick a model that can use tools (function calling). Each service keeps its own k
 
 **Other AI apps (MCP).** Turn on *Let AI apps use ShaperBuild* in the AI settings, and apps that support the Model Context Protocol can build in the open ShaperBuild:
 
-- **Claude Desktop**: *Settings → Developer → Edit Config*, paste the snippet the AI settings show (it runs `ShaperBuild --mcp`), and restart Claude.
+- **Claude Desktop**: click **Add to Claude Desktop** in the AI settings, then quit Claude Desktop completely (on Windows: right-click its icon by the clock → Quit) and open it again. (By hand: Claude's *Settings → Developer → Edit Config*, and paste the snippet the AI settings show; it runs `ShaperBuild --mcp`.)
 - **Claude Code**: run the `claude mcp add --transport http shaperbuild …` command shown in the settings.
 - **Other apps** (Cursor, VS Code, …): the server is at `http://127.0.0.1:45839/mcp` and needs the `Authorization: Bearer …` header shown in the settings.
 

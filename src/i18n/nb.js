@@ -1850,6 +1850,11 @@ export const NB = {
   'LM Studio (free, runs on this computer)': 'LM Studio (gratis, kjører på denne datamaskinen)',
   'Other (enter its address)': 'Annen (skriv inn adressen)',
   'Add your API key in the AI settings first.': 'Legg inn API-nøkkelen i AI-innstillingene først.',
+  'Add to Claude Desktop': 'Legg til i Claude Desktop',
+  'Added. Now quit Claude Desktop completely (on Windows: right-click its icon by the clock and choose Quit) and open it again. Then ask Claude to build something in ShaperBuild, and keep ShaperBuild open.': 'Lagt til. Avslutt Claude Desktop helt (på Windows: høyreklikk ikonet ved klokken og velg Quit) og åpne den igjen. Be så Claude om å bygge noe i ShaperBuild, og ha ShaperBuild åpen.',
+  'One click puts ShaperBuild into Claude Desktop’s settings.': 'Ett klikk legger ShaperBuild inn i innstillingene til Claude Desktop.',
+  'Or add it by hand': 'Eller legg det til for hånd',
+  'In Claude Desktop: Settings → Developer → Edit Config (on Windows the settings are under the menu at the top left, File → Settings). Add this to the file and restart Claude.': 'I Claude Desktop: Settings → Developer → Edit Config (på Windows ligger innstillingene i menyen øverst til venstre, File → Settings). Legg dette til i filen og start Claude på nytt.',
 };
 
 const upper = (s) => s.charAt(0).toUpperCase() + s.slice(1);
