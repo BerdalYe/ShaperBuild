@@ -71,9 +71,9 @@ export class Updates {
       el.title = t('Downloading ShaperBuild {version}', { version: s.version });
       el.append(h('span.spinner'), h('span', { str: t('Updating to {version}', { version: s.version }) + (s.percent ? ` · ${s.percent}%` : '…') }));
     } else if (s.status === 'ready') {
-      el.classList.add('ready');
+      el.classList.add('ready', 'restart');
       el.title = t('ShaperBuild {version} is downloaded. Restart to start using it.', { version: s.version });
-      el.append(h('span', { html: icon('sparkle') }), h('span', { text: 'Restart to update' }));
+      el.append(h('span', { html: icon('restartUpdate') }), h('span', { text: 'Restart to update' }), h('span.update-version', { str: s.version }));
     } else {
       el.classList.add('ready');
       el.title = t('ShaperBuild {version} is available', { version: s.version });

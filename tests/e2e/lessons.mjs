@@ -31,7 +31,22 @@ const title = () => win.locator('.tut-card .tut-title').innerText();
 async function expectStep(text) {
   await win.waitForFunction((t) => document.querySelector('.tut-card .tut-title')?.textContent === t, text, { timeout: 20000 });
 }
-const next = () => win.locator('.tut-card .tut-buttons .btn.primary').click();
+// Next / Let's go. On a slow machine a click right after the card shows
+// up was once lost (the step stayed put), so check that the step moved on
+// and click once more if it did not.
+async function next() {
+  const before = await title();
+  const button = win.locator('.tut-card .tut-buttons .btn.primary');
+  await button.click();
+  const moved = (t) => document.querySelector('.tut-card .tut-title')?.textContent !== t;
+  try {
+    await win.waitForFunction(moved, before, { timeout: 3000 });
+  } catch {
+    console.log(`  (the click on "${await button.innerText()}" did not move on from "${before}"; clicking again)`);
+    await button.click();
+    await win.waitForFunction(moved, before, { timeout: 5000 });
+  }
+}
 // Type into a tool panel field; Enter applies the tool.
 async function field(key, value, enter = false) {
   const inp = win.locator(`#tool-panel .num-input[data-key="${key}"]`);

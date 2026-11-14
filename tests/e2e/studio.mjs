@@ -247,12 +247,14 @@ try {
     window.__shaper.dialogs.licences();
   });
   await win.waitForSelector('.lic-row');
-  assert.equal(await win.locator('.lic-row').count(), 9);
+  assert.equal(await win.locator('.lic-row').count(), 10);
   await win.waitForFunction(() => document.querySelector('.lic-text')?.textContent.includes('GNU GENERAL PUBLIC LICENSE'));
   await win.locator('.lic-row', { hasText: 'Open CASCADE' }).click();
   await win.waitForFunction(() => document.querySelector('.lic-text')?.textContent.includes('GNU LESSER GENERAL PUBLIC LICENSE'));
   await win.locator('.lic-row', { hasText: 'Manifold' }).click();
   await win.waitForFunction(() => document.querySelector('.lic-text')?.textContent.includes('Apache License'));
+  await win.locator('.lic-row', { hasText: 'Anthropic' }).click();
+  await win.waitForFunction(() => document.querySelector('.lic-text')?.textContent.includes('@anthropic-ai/sdk 1.3.0'));
   await win.locator('.modal .btn.primary', { hasText: 'Close' }).click();
   await A(() => {
     window.__shaper.dialogs.privacy();

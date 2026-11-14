@@ -1,5 +1,6 @@
-// Constraint glyphs and dimension labels drawn over sketches, editing of
+// Constraint icons and dimension labels drawn over sketches, editing of
 // dimension values, and the list of constraints that fit a selection.
+import { icon } from './icons.js';
 import { CONSTRAINT_INFO, pointOf, refsAt } from '../core/solver.js';
 import { planeFrame, to3D } from '../core/plane.js';
 import { formatLength, trimNumber, parseLength, parseAngle, parseProblem } from '../core/units.js';
@@ -83,11 +84,12 @@ export class ConstraintLayer {
           const key = `cons-${sk.id}-${c.id}`;
           seen.add(key);
           const sel = selected.has(`${sk.id}:${c.id}`);
-          const text = info.dimension ? this.dimText(c) : info.glyph;
+          const text = info.dimension ? this.dimText(c) : icon(info.icon);
           this.overlay.label(key, to3D(f, place.at), text, {
             className: `${info.dimension ? 'dim-label' : 'cons-glyph'}${sel ? ' selected' : ''}${active.has(sk.id) ? '' : ' faint'}`,
             offset: [place.offset[0] + (info.dimension ? 0 : n * 17), place.offset[1]],
             interactive: true,
+            html: !info.dimension,
             title: `${t(info.label)} — ${t(info.dimension ? 'click to edit' : 'click to select, Delete to remove')}`,
             onClick: (e) => this.onLabelClick(sk.id, c, e),
           });
@@ -213,7 +215,7 @@ export class ConstraintLayer {
   }
 
   // Constraints that can be added for the current selection:
-  // [{ label, glyph, constraint, sketchId }]
+  // [{ label, icon, constraint, sketchId }]
   // Keyboard shortcut for a constraint ('hv' picks horizontal or vertical,
   // whichever is closer).
   shortcut(type) {
@@ -252,7 +254,7 @@ export class ConstraintLayer {
     const lines = ents.filter((e) => e.type === 'line');
     const rounds = ents.filter((e) => e.type === 'circle' || e.type === 'arc');
     const out = [];
-    const add = (type, extra) => out.push({ label: CONSTRAINT_INFO[type].label, glyph: CONSTRAINT_INFO[type].glyph || '↔', constraint: { type, ...extra }, sketchId });
+    const add = (type, extra) => out.push({ label: CONSTRAINT_INFO[type].label, icon: CONSTRAINT_INFO[type].icon || 'consDistance', constraint: { type, ...extra }, sketchId });
     if (ents.length === 1 && !pts.length) {
       const e = ents[0];
       if (e.type === 'line') {
@@ -293,18 +295,18 @@ export class ConstraintLayer {
     if (axis && ents.length === 3 && !pts.length) {
       const pair = ents.filter((e) => e !== axis);
       const sym = symmetricPairs(pair[0], pair[1], axis);
-      if (sym) out.push({ label: 'Symmetric', glyph: CONSTRAINT_INFO.symmetric.glyph, constraint: sym[0], constraints: sym, sketchId });
+      if (sym) out.push({ label: 'Symmetric', icon: CONSTRAINT_INFO.symmetric.icon, constraint: sym[0], constraints: sym, sketchId });
     }
     const at = pts.length === 1 && !ents.length ? pts[0] : null;
     const sameRef = (a, b) => a && b && a.e === b.e && a.p === b.p;
     if (at) {
       // Unlock a locked point; disconnect the constraints that join curves there.
       const fixed = (sk.constraints || []).find((c) => c.type === 'fix' && sameRef(c.p, at));
-      if (fixed) out.push({ label: 'Unlock', glyph: '🔓', remove: [fixed.id], sketchId });
+      if (fixed) out.push({ label: 'Unlock', icon: 'unlock', remove: [fixed.id], sketchId });
       const where = pointOf(sk.entities, at);
       const here = where ? refsAt(sk.entities, where) : [];
       const joins = (sk.constraints || []).filter((c) => ['coincident', 'midpoint', 'onCurve'].includes(c.type) && here.some((r) => sameRef(r, c.p) || sameRef(r, c.p2)));
-      if (here.length > 1 || joins.length) out.push({ label: 'Disconnect', glyph: '⊸', remove: joins.map((c) => c.id), disconnect: true, sketchId });
+      if (here.length > 1 || joins.length) out.push({ label: 'Disconnect', icon: 'consDisconnect', remove: joins.map((c) => c.id), disconnect: true, sketchId });
     }
     // Do not offer a constraint that already exists.
     const same = (c, d) => c.type === d.type && c.e === d.e && c.e2 === d.e2 && JSON.stringify(c.p) === JSON.stringify(d.p) && JSON.stringify(c.p2) === JSON.stringify(d.p2);

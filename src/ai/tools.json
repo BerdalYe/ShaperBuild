@@ -1,0 +1,641 @@
+{
+  "instructions": "You are building 3D models in ShaperBuild, a CAD app, with the tools given.\n- Lengths are millimetres, angles degrees. Z points up; the ground (XY plane) is at Z = 0.\n- Shapes from add_shape stand on their position: a box or cylinder at [0,0,0] fills X and Y around 0 and goes from Z = 0 up.\n- Bodies have ids like \"b1\", sketches like \"s1\". Use get_design to see what is there and get_body for a body's faces and edges.\n- For a custom outline: sketch it (rectangles, circles, polygons, lines and arcs on a plane or a flat face), then extrude its regions. Extrude with mode \"subtract\" cuts holes and pockets; \"union\" adds to the body it touches.\n- Work in small steps and check the results each tool returns. Use screenshot to look at the design when it helps.\n- Every step can be undone; use undo if a step went wrong.",
+  "tools": [
+    {
+      "name": "get_design",
+      "description": "What is in the design: bodies (id, name, size, volume), sketches (id, plane, closed regions you can extrude) and the units shown to the user.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_body",
+      "description": "Faces and edges of a body, with their numbers, to pick them for fillet, chamfer, shell, extrude or sketching on a face.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "body_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "body_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "add_shape",
+      "description": "Add a basic solid: box (width × depth × height), cylinder (radius, height), sphere (radius), cone (radius, top_radius, height) or torus (major = ring radius, minor = tube radius). It stands on `position` (the middle of its base); a sphere or torus is centred on it.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "shape": {
+            "type": "string",
+            "enum": [
+              "box",
+              "cylinder",
+              "sphere",
+              "cone",
+              "torus"
+            ]
+          },
+          "width": {
+            "type": "number"
+          },
+          "depth": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "radius": {
+            "type": "number"
+          },
+          "top_radius": {
+            "type": "number"
+          },
+          "major": {
+            "type": "number"
+          },
+          "minor": {
+            "type": "number"
+          },
+          "position": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "Default [0,0,0]"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "shape"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "sketch",
+      "description": "Draw 2D shapes on a plane and get back the closed regions, ready to extrude or revolve. The plane is \"XY\" (ground), \"XZ\" (front, sketch y = world Z), \"YZ\" (side), or a flat face of a body. x/y are positions in the plane; on a face they are measured from the face centre. Shapes: {type:\"rect\", x, y, width, height} (x, y = centre), {type:\"circle\", x, y, radius}, {type:\"polygon\", points:[[x,y],…]} (closed), {type:\"regular_polygon\", x, y, radius, sides}, {type:\"line\", from:[x,y], to:[x,y]}, {type:\"arc\", x, y, radius, start_angle, end_angle}. Shapes inside each other make rings (a circle in a rectangle gives a plate region with a hole and the disc).",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "plane": {
+            "type": "string",
+            "enum": [
+              "XY",
+              "XZ",
+              "YZ"
+            ],
+            "description": "Default XY. Ignored when body_id and face are given."
+          },
+          "offset": {
+            "type": "number",
+            "description": "Move the plane along its normal (e.g. sketch at Z = 10 with plane XY, offset 10)."
+          },
+          "body_id": {
+            "type": "string",
+            "description": "Sketch on a flat face of this body."
+          },
+          "face": {
+            "description": "A face: its number from get_body, or top, bottom, left, right, front or back (the flat face furthest that way)",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "top",
+                  "bottom",
+                  "right",
+                  "left",
+                  "back",
+                  "front"
+                ]
+              }
+            ]
+          },
+          "shapes": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "shapes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "extrude",
+      "description": "Pull sketch regions into 3D, or push/pull a flat face of a body. mode: \"new\" (new body), \"union\" (join to the body it touches), \"subtract\" (cut: holes, pockets), \"intersect\", or \"auto\" (default: picks for you). A negative distance goes the other way (into a face).",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sketch_id": {
+            "type": "string"
+          },
+          "regions": {
+            "description": "Region numbers from the sketch result, or \"all\" (default).",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              }
+            ]
+          },
+          "body_id": {
+            "type": "string",
+            "description": "To push/pull a face instead of a sketch."
+          },
+          "face": {
+            "description": "A face: its number from get_body, or top, bottom, left, right, front or back (the flat face furthest that way)",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "top",
+                  "bottom",
+                  "right",
+                  "left",
+                  "back",
+                  "front"
+                ]
+              }
+            ]
+          },
+          "distance": {
+            "type": "number"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "new",
+              "union",
+              "subtract",
+              "intersect"
+            ]
+          },
+          "symmetric": {
+            "type": "boolean",
+            "description": "Half the distance each way."
+          },
+          "through": {
+            "type": "boolean",
+            "description": "Cut through everything."
+          }
+        },
+        "required": [
+          "distance"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "revolve",
+      "description": "Spin sketch regions around a world axis (X, Y or Z through the origin), e.g. to make vases, wheels or bottles. Draw the profile on one side of the axis.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sketch_id": {
+            "type": "string"
+          },
+          "regions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              }
+            ]
+          },
+          "axis": {
+            "type": "string",
+            "enum": [
+              "X",
+              "Y",
+              "Z"
+            ]
+          },
+          "angle": {
+            "type": "number",
+            "description": "Default 360"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "new",
+              "union",
+              "subtract",
+              "intersect"
+            ]
+          }
+        },
+        "required": [
+          "sketch_id",
+          "axis"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fillet",
+      "description": "Round edges of a body.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "body_id": {
+            "type": "string"
+          },
+          "edges": {
+            "description": "Which edges: \"all\", a face name (top, bottom, left, right, front, back: the edges around that face), \"vertical\" (straight up-and-down edges), or a list of edge numbers from get_body",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              }
+            ]
+          },
+          "radius": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "body_id",
+          "edges",
+          "radius"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "chamfer",
+      "description": "Bevel edges of a body.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "body_id": {
+            "type": "string"
+          },
+          "edges": {
+            "description": "Which edges: \"all\", a face name (top, bottom, left, right, front, back: the edges around that face), \"vertical\" (straight up-and-down edges), or a list of edge numbers from get_body",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              }
+            ]
+          },
+          "distance": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "body_id",
+          "edges",
+          "distance"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "shell",
+      "description": "Hollow out a body, removing the open faces (e.g. the top for a cup or box).",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "body_id": {
+            "type": "string"
+          },
+          "open_faces": {
+            "type": "array",
+            "items": {
+              "description": "A face: its number from get_body, or top, bottom, left, right, front or back (the flat face furthest that way)",
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "top",
+                    "bottom",
+                    "right",
+                    "left",
+                    "back",
+                    "front"
+                  ]
+                }
+              ]
+            }
+          },
+          "thickness": {
+            "type": "number"
+          },
+          "outside": {
+            "type": "boolean",
+            "description": "Walls grow outwards instead of inwards."
+          }
+        },
+        "required": [
+          "body_id",
+          "open_faces",
+          "thickness"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "boolean",
+      "description": "union: join bodies into the first one. subtract: cut the other bodies out of the first one. intersect: keep only where they overlap.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": [
+              "union",
+              "subtract",
+              "intersect"
+            ]
+          },
+          "body_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "First the body that is kept, then the others."
+          },
+          "keep_tools": {
+            "type": "boolean",
+            "description": "Keep the cutting bodies (subtract/intersect)."
+          }
+        },
+        "required": [
+          "operation",
+          "body_ids"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "move",
+      "description": "Move and/or rotate bodies or sketches. Rotation is in degrees around X, Y, Z through the middle of what is moved.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "z": {
+            "type": "number"
+          },
+          "rotate_x": {
+            "type": "number"
+          },
+          "rotate_y": {
+            "type": "number"
+          },
+          "rotate_z": {
+            "type": "number"
+          },
+          "copy": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "pattern",
+      "description": "Repeat bodies. linear: `count` copies along X, Y or Z, `spacing` apart. circular: `count` copies around the X, Y or Z axis through the origin, over `angle` degrees (default 360).",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "body_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "linear",
+              "circular"
+            ]
+          },
+          "axis": {
+            "type": "string",
+            "enum": [
+              "X",
+              "Y",
+              "Z"
+            ]
+          },
+          "count": {
+            "type": "integer"
+          },
+          "spacing": {
+            "type": "number"
+          },
+          "angle": {
+            "type": "number"
+          },
+          "join": {
+            "type": "boolean",
+            "description": "Join the copies into one body."
+          }
+        },
+        "required": [
+          "body_ids",
+          "kind",
+          "count"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "mirror",
+      "description": "Mirror bodies across the XY, XZ or YZ plane through the origin.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "body_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "plane": {
+            "type": "string",
+            "enum": [
+              "XY",
+              "XZ",
+              "YZ"
+            ]
+          },
+          "keep_original": {
+            "type": "boolean",
+            "description": "Default true"
+          },
+          "join": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "body_ids",
+          "plane"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "set_color",
+      "description": "Colour bodies, e.g. \"#e53935\".",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "body_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "color": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "body_ids",
+          "color"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "rename",
+      "description": "Rename a body or sketch.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "delete",
+      "description": "Delete bodies or sketches.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "undo",
+      "description": "Undo the last steps (default 1).",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "steps": {
+            "type": "integer"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "screenshot",
+      "description": "A picture of the design, to check how it looks. view: iso (default), top, front, right, left, back, bottom.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "view": {
+            "type": "string",
+            "enum": [
+              "iso",
+              "top",
+              "front",
+              "right",
+              "left",
+              "back",
+              "bottom"
+            ]
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

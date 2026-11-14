@@ -225,7 +225,8 @@ export class Overlay {
 
   // ---- HTML labels -------------------------------------------------------
 
-  label(key, world, text, { className = '', offset = [0, 0], interactive = false, onClick = null, title = '' } = {}) {
+  // `html`: the text is markup (an icon), shown as it is.
+  label(key, world, text, { className = '', offset = [0, 0], interactive = false, onClick = null, title = '', html = false } = {}) {
     const prev = this.labels.get(key);
     let el = prev?.el;
     if (!el) {
@@ -242,8 +243,12 @@ export class Overlay {
     }
     el.className = `vp-label ${className}`;
     if (title) el.title = t(title);
-    text = t(text);
-    if (!el.classList.contains('editing') && el.textContent !== text) el.textContent = text;
+    if (html) {
+      if (el.innerHTML !== text) el.innerHTML = text;
+    } else {
+      text = t(text);
+      if (!el.classList.contains('editing') && el.textContent !== text) el.textContent = text;
+    }
     this.labels.set(key, { el, world, offset, onClick });
     this.positionLabel(this.labels.get(key));
   }
