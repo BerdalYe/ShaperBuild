@@ -324,6 +324,25 @@ export class Kernel {
     return out;
   }
 
+  // The normal of a surface's parameters (dU × dV) in the middle of its
+  // range, before the face's orientation is applied.
+  surfaceNormal(ad, r) {
+    const oc = this.oc;
+    try {
+      const u = (ad.FirstUParameter() + ad.LastUParameter()) / 2;
+      const v = (ad.FirstVParameter() + ad.LastVParameter()) / 2;
+      if (!Number.isFinite(u) || !Number.isFinite(v)) return null;
+      const p = r(new oc.gp_Pnt(0, 0, 0));
+      const du = r(new oc.gp_Vec(0, 0, 0));
+      const dv = r(new oc.gp_Vec(0, 0, 0));
+      ad.D1(u, v, p, du, dv);
+      const c = cross([du.X(), du.Y(), du.Z()], [dv.X(), dv.Y(), dv.Z()]);
+      return Math.hypot(...c) > 1e-12 ? c : null;
+    } catch {
+      return null;
+    }
+  }
+
   faceInfo(face) {
     const oc = this.oc;
     const r = this.scope();
@@ -341,7 +360,12 @@ export class Kernel {
         const ax = r(pl.Position());
         const n = r(ax.Direction());
         const x = r(ax.XDirection());
-        const s = reversed ? -1 : 1;
+        let s = reversed ? -1 : 1;
+        // A plane made by another surface (e.g. the flat bottom of a turned
+        // shape) may run the other way than the plane the adaptor reports:
+        // check against the surface's own normal.
+        const sn = this.surfaceNormal(ad, r);
+        if (sn && sn[0] * n.X() + sn[1] * n.Y() + sn[2] * n.Z() < 0) s = -s;
         info.type = 'plane';
         info.normal = [n.X() * s, n.Y() * s, n.Z() * s];
         info.xDir = [x.X(), x.Y(), x.Z()];
@@ -825,11 +849,16 @@ export class Kernel {
 
   // start: begin this far from the profile (along the extrude direction).
   // taper: side walls lean in (positive) or out by this many degrees.
-  extrude({ profiles, distance, symmetric = false, mode = 'new', targets = [], start = 0, taper = 0 }) {
+  // `twist` (degrees) turns the profile on the way, and `endScale` changes
+  // its size, each shape around its own middle (twisted star fidgets, vases).
+  extrude({ profiles, distance, symmetric = false, mode = 'new', targets = [], start = 0, taper = 0, twist = 0, endScale = 1 }) {
     const oc = this.oc;
     if (!profiles.length) throw new Error('Select a sketch region or a flat face');
     if (Math.abs(distance) < 1e-6) throw new Error('Distance must not be zero');
     if (Math.abs(taper) >= 89) throw new Error('The taper must be less than 89°');
+    if (!(endScale > 0)) throw new Error('The size at the end must be greater than zero');
+    const shaped = Math.abs(twist) > 1e-6 || Math.abs(endScale - 1) > 1e-6;
+    if (shaped && Math.abs(taper) > 1e-9) throw new Error('Use taper or twist and end size, not both');
     const tool = this.guard('Extrude', () => {
       const r = this.scope();
       try {
@@ -853,14 +882,22 @@ export class Kernel {
           if (symmetric && Math.abs(taper) > 1e-9) {
             // Both halves lean in, away from the middle.
             const mid = moved(start * dir);
-            const half = (sign) => this.taperSides(r(new oc.BRepPrimAPI_MakePrism(mid, this.vec(r, scale3(n, sign * Math.abs(distance))), false, true)).Shape(), mid, n, sign * Math.abs(distance), taper, r);
+            const half = (sign) => this.taperedPrism(oc.TopoDS.Face(mid), n, sign * Math.abs(distance), taper, r);
             parts.push(this.boolOp('fuse', half(1), half(-1), 'Extrude'));
             continue;
           }
           const base = moved(shift);
-          let prism = r(new oc.BRepPrimAPI_MakePrism(base, this.vec(r, scale3(n, len)), false, true)).Shape();
-          if (Math.abs(taper) > 1e-9) prism = this.taperSides(prism, base, n, len, taper, r);
-          parts.push(prism);
+          if (shaped) {
+            // Twisted or scaled: a sweep along a straight line from the middle.
+            const bf = oc.TopoDS.Face(base);
+            const c = this.faceInfo(bf).center;
+            const edge = r(new oc.BRepBuilderAPI_MakeEdge(this.pnt(r, c), this.pnt(r, c.map((v, i) => v + n[i] * len)))).Edge();
+            const wire = r(new oc.BRepBuilderAPI_MakeWire(edge)).Wire();
+            parts.push(this.shapedSweep(bf, wire, twist * Math.sign(len), endScale, r));
+            continue;
+          }
+          if (Math.abs(taper) > 1e-9) parts.push(this.taperedPrism(oc.TopoDS.Face(base), n, len, taper, r));
+          else parts.push(r(new oc.BRepPrimAPI_MakePrism(base, this.vec(r, scale3(n, len)), false, true)).Shape());
         }
         return parts;
       } finally {
@@ -868,6 +905,26 @@ export class Kernel {
       }
     });
     return this.applyTool(tool, mode, targets, 'Extrude');
+  }
+
+  // An extruded face whose sides lean in by `taper` degrees. Holes lean the
+  // same way (towards the middle), so walls keep their thickness: each
+  // outline is tapered on its own and the holes are cut out.
+  taperedPrism(face, n, len, taper, r) {
+    const oc = this.oc;
+    const solidOf = (wire) => {
+      let f = r(new oc.BRepBuilderAPI_MakeFace(wire, true)).Face();
+      if (dot(norm(this.faceInfo(f).normal), n) < 0) f = oc.TopoDS.Face(f.Reversed());
+      const prism = r(new oc.BRepPrimAPI_MakePrism(f, this.vec(r, scale3(n, len)), false, true)).Shape();
+      return this.taperSides(prism, f, n, len, taper, r);
+    };
+    const outer = r(oc.BRepTools.OuterWire(face));
+    let solid = solidOf(outer);
+    for (const w of this.explore(face, this.T.TopAbs_WIRE)) {
+      if (w.IsSame(outer)) continue;
+      solid = this.boolOp('cut', solid, solidOf(oc.TopoDS.Wire(w)), 'Extrude');
+    }
+    return solid;
   }
 
   // Lean the side walls of an extruded prism: they stay put at the profile
@@ -1386,21 +1443,13 @@ export class Kernel {
   fillet({ id, edges, radius }) {
     const oc = this.oc;
     if (!(radius > 0)) throw new Error('Radius must be greater than zero');
-    const shape = this.solid(id);
-    const res = this.guard('Fillet', () => {
-      const r = this.scope();
-      try {
-        const b = r(new oc.BRepFilletAPI_MakeFillet(shape, oc.ChFi3d_FilletShape.ChFi3d_Rational));
-        for (const i of edges) b.Add(radius, this.edge(id, i));
-        b.Build(r(new oc.Message_ProgressRange()));
-        if (!b.IsDone()) throw new Error('radius too large for the selected edges');
-        return b.Shape();
-      } finally {
-        r.free();
-      }
+    return this.roundEdges(id, edges, 'Fillet', 'radius too large for the selected edges', 'Rounded all but {n} of {total} edges: those could not be rounded at this size. Try a smaller radius for them.', (shape, list, r) => {
+      const b = r(new oc.BRepFilletAPI_MakeFillet(shape, oc.ChFi3d_FilletShape.ChFi3d_Rational));
+      for (const e of list) b.Add(radius, e);
+      b.Build(r(new oc.Message_ProgressRange()));
+      if (!b.IsDone()) throw new Error('radius too large for the selected edges');
+      return b.Shape();
     });
-    const ids = this.storeSolids(res);
-    return this.result(ids.map((nid, i) => (i === 0 ? { id: nid, replaces: id } : { id: nid, from: id })));
   }
 
   // distance2: a different size on the second face (two-distance chamfer).
@@ -1408,25 +1457,134 @@ export class Kernel {
     const oc = this.oc;
     if (!(distance > 0)) throw new Error('Distance must be greater than zero');
     if (distance2 !== null && !(distance2 > 0)) throw new Error('Distance must be greater than zero');
+    return this.roundEdges(id, edges, 'Chamfer', 'distance too large for the selected edges', 'Chamfered all but {n} of {total} edges: those could not be done at this size. Try a smaller distance for them.', (shape, list, r) => {
+      const b = r(new oc.BRepFilletAPI_MakeChamfer(shape));
+      for (const edge of list) {
+        if (distance2 === null || Math.abs(distance2 - distance) < 1e-9) b.Add(distance, edge);
+        else b.Add(distance, distance2, edge, this.faceOfEdge(shape, edge));
+      }
+      b.Build(r(new oc.Message_ProgressRange()));
+      if (!b.IsDone()) throw new Error('distance too large for the selected edges');
+      return b.Shape();
+    });
+  }
+
+  // Fillet or chamfer edges, trying harder when OpenCascade gives up:
+  // 1. all edges at once; 2. the same on a cleaned-up copy (faces left split
+  // by joins merged back, which often blocks rounding); 3. edge by edge,
+  // keeping those that work. The result says how many could not be done.
+  roundEdges(id, edges, label, tooBig, partly, build) {
     const shape = this.solid(id);
-    const res = this.guard('Chamfer', () => {
+    const picked = edges.map((i) => this.edge(id, i));
+    const attempt = (sh, list) => {
       const r = this.scope();
       try {
-        const b = r(new oc.BRepFilletAPI_MakeChamfer(shape));
-        for (const i of edges) {
-          const edge = this.edge(id, i);
-          if (distance2 === null || Math.abs(distance2 - distance) < 1e-9) b.Add(distance, edge);
-          else b.Add(distance, distance2, edge, this.faceOfEdge(shape, edge));
-        }
-        b.Build(r(new oc.Message_ProgressRange()));
-        if (!b.IsDone()) throw new Error('distance too large for the selected edges');
-        return b.Shape();
+        const out = build(sh, list, r);
+        return this.isValidSolid(out) ? out : null;
+      } catch {
+        return null;
       } finally {
         r.free();
       }
-    });
+    };
+    let res = attempt(shape, picked);
+    let skipped = 0;
+    if (!res) {
+      const mids = picked.map((e) => this.edgeMid(e));
+      const clean = this.unified(shape);
+      const onClean = clean ? this.edgesAt(clean, mids) : [];
+      if (clean && onClean.length) res = attempt(clean, onClean);
+      if (!res && picked.length <= 80) {
+        let cur = clean || shape;
+        let done = 0;
+        for (const p of mids) {
+          const [e] = this.edgesAt(cur, [p]);
+          // Gone: rounded along with a smooth neighbour.
+          if (!e) {
+            done++;
+            continue;
+          }
+          const next = attempt(cur, [e]);
+          if (next) {
+            cur = next;
+            done++;
+          } else skipped++;
+        }
+        if (done) res = cur;
+      }
+    }
+    if (!res) throw new Error(`${label} failed (${tooBig})`);
     const ids = this.storeSolids(res);
-    return this.result(ids.map((nid, i) => (i === 0 ? { id: nid, replaces: id } : { id: nid, from: id })));
+    const out = this.result(ids.map((nid, i) => (i === 0 ? { id: nid, replaces: id } : { id: nid, from: id })));
+    if (skipped) out.warning = { text: partly, n: skipped, total: picked.length };
+    return out;
+  }
+
+  isValidSolid(shape) {
+    try {
+      const r = this.scope();
+      try {
+        return r(new this.oc.BRepCheck_Analyzer(shape, true, false)).IsValid() && this.solidsOf(shape).length > 0;
+      } finally {
+        r.free();
+      }
+    } catch {
+      return false;
+    }
+  }
+
+  // The point halfway along an edge.
+  edgeMid(edge) {
+    const r = this.scope();
+    try {
+      const ad = r(new this.oc.BRepAdaptor_Curve(edge));
+      const p = r(ad.Value((ad.FirstParameter() + ad.LastParameter()) / 2));
+      return [p.X(), p.Y(), p.Z()];
+    } finally {
+      r.free();
+    }
+  }
+
+  // The edges of `shape` passing through each point (one per point, no
+  // repeats; points on no edge are left out).
+  edgesAt(shape, points, tol = 1e-4) {
+    const oc = this.oc;
+    const r = this.scope();
+    try {
+      const all = this.explore(shape, this.T.TopAbs_EDGE).map((e) => oc.TopoDS.Edge(e));
+      const boxes = all.map((e) => this.bbox(e));
+      const out = [];
+      for (const p of points) {
+        const v = r(new oc.BRepBuilderAPI_MakeVertex(this.pnt(r, p))).Vertex();
+        let found = null;
+        for (let i = 0; i < all.length && !found; i++) {
+          const bb = boxes[i];
+          if (bb && (p[0] < bb.min[0] - 1e-3 || p[1] < bb.min[1] - 1e-3 || p[2] < bb.min[2] - 1e-3 || p[0] > bb.max[0] + 1e-3 || p[1] > bb.max[1] + 1e-3 || p[2] > bb.max[2] + 1e-3)) continue;
+          const d = r(new oc.BRepExtrema_DistShapeShape(v, all[i]));
+          if (d.IsDone() && d.Value() < tol) found = all[i];
+        }
+        if (found && !out.some((e) => e.IsSame(found))) out.push(found);
+      }
+      return out;
+    } finally {
+      r.free();
+    }
+  }
+
+  // The shape with faces that lie on the same surface merged (as left by
+  // joins), or null if that does not work.
+  unified(shape) {
+    const r = this.scope();
+    try {
+      const u = r(new this.oc.ShapeUpgrade_UnifySameDomain(shape, true, true, false));
+      u.Build();
+      const out = u.Shape();
+      return this.isValidSolid(out) ? out : null;
+    } catch {
+      return null;
+    } finally {
+      r.free();
+    }
   }
 
   // A face of `shape` that has `edge` on its border.

@@ -232,7 +232,7 @@ async function claudeTurn({ key, model, baseUrl, system, messages, tools }) {
     system,
     tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.input_schema })),
     messages,
-    output_config: { effort: 'medium' },
+    output_config: { effort: 'high' },
     // The instructions and tools are the same on every turn: cache them.
     cache_control: { type: 'ephemeral' },
   };

@@ -5,6 +5,8 @@ import { h } from './ui/dom.js';
 import { t, tn, language } from './core/i18n.js';
 import { emptyState } from './core/doc.js';
 import { parseDXF, writeDXF } from './core/dxf.js';
+import { parseSVG } from './core/svg.js';
+import { EXAMPLES, buildExample } from './examples/examples.js';
 import { GROUND } from './core/plane.js';
 
 export const PROJECT_EXT = 'shaperbuild';
@@ -78,6 +80,29 @@ export class FileOps {
     return true;
   }
 
+  // Open a ready-made example: a new design built step by step, so its
+  // History can be changed.
+  async openExample(id) {
+    const app = this.app;
+    const ex = EXAMPLES.find((e) => e.id === id);
+    if (!ex || !(await this.confirmDiscard())) return false;
+    await this.reset(t(ex.title));
+    app.home.hide();
+    try {
+      await buildExample(ex, (tool, input) => app.ai.run(tool, input), (i, n) => app.busy(true, t('Building {name}… step {i} of {n}', { name: t(ex.title), i: i + 1, n })));
+      app.selection.clear();
+      app.tools.activate('select');
+      setTimeout(() => app.vp.setView('iso', { fit: true }), 60);
+      toast(t('{name} is ready. Change any step in History, or save it as your own design.', { name: t(ex.title) }), { type: 'ok', ms: 6000 });
+      return true;
+    } catch (err) {
+      toast(t('Could not build the example: {error}', { error: err.message }), { type: 'error', ms: 7000 });
+      return false;
+    } finally {
+      app.busy(false);
+    }
+  }
+
   async closeDesign() {
     if (!(await this.confirmDiscard())) return;
     await this.reset();
@@ -87,13 +112,13 @@ export class FileOps {
   // ---- open ----------------------------------------------------------------
 
   async openDialog() {
-    if (!this.native) return this.browserPick('.shaperbuild,.stl,.obj,.3mf,.step,.stp,.dxf,.png,.jpg,.jpeg,.webp,.gif,.bmp');
+    if (!this.native) return this.browserPick('.shaperbuild,.stl,.obj,.3mf,.step,.stp,.dxf,.svg,.png,.jpg,.jpeg,.webp,.gif,.bmp');
     const paths = await this.native.openDialog({ kind: 'open' });
     for (const p of paths) await this.openPath(p);
   }
 
   async importDialog() {
-    if (!this.native) return this.browserPick('.stl,.obj,.3mf,.step,.stp,.dxf,.png,.jpg,.jpeg,.webp,.gif,.bmp', true);
+    if (!this.native) return this.browserPick('.stl,.obj,.3mf,.step,.stp,.dxf,.svg,.png,.jpg,.jpeg,.webp,.gif,.bmp', true);
     const paths = await this.native.openDialog({ kind: 'import', multi: true });
     for (const p of paths) await this.openPath(p, { import: true });
   }
@@ -135,7 +160,7 @@ export class FileOps {
       });
       return;
     }
-    if (!['stl', 'obj', '3mf', 'step', 'stp', 'dxf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'].includes(ext)) {
+    if (!['stl', 'obj', '3mf', 'step', 'stp', 'dxf', 'svg', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'].includes(ext)) {
       toast(t('Unsupported file type: .{ext}', { ext }), { type: 'error' });
       return;
     }
@@ -147,6 +172,7 @@ export class FileOps {
     }
     void opts;
     if (ext === 'dxf') return this.importDXF(name, data);
+    if (ext === 'svg') return this.importSVG(name, data);
     if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'].includes(ext)) return this.importImage(name, data);
     return this.importData(name, data);
   }
@@ -161,6 +187,24 @@ export class FileOps {
       app.selection.set([{ kind: 'sketch', sketchId: id }]);
       const extra = Object.entries(skipped).map(([type, c]) => `${c} ${type.toLowerCase()}`);
       toast(t('Imported {name} · {n} curves{skipped}. Click its closed shapes to extrude them.', { name, n: entities.length, skipped: extra.length ? ` (${t('skipped')}: ${extra.join(', ')})` : '' }), { type: 'ok', ms: 5000 });
+      setTimeout(() => app.vp.fit(app.selectionBox()), 80);
+      return id;
+    } catch (err) {
+      toast(t('Import failed: {error}', { error: t(err.message) }), { type: 'error', ms: 6000 });
+      return null;
+    }
+  }
+
+  // An SVG drawing (silhouettes, logos, cut files) becomes a new sketch on
+  // the grid, centred, at the size the file gives.
+  importSVG(name, data) {
+    const app = this.app;
+    try {
+      const { entities, width, height } = parseSVG(new TextDecoder().decode(data));
+      if (!entities.length) throw new Error('no shapes found');
+      const id = app.cmd.addSketch(GROUND, entities, { name: this.stem(name), label: `Import ${name}` });
+      app.selection.set([{ kind: 'sketch', sketchId: id }]);
+      toast(t('Imported {name} · {w} × {h} mm. Click its closed shapes to extrude them; Scale changes the size.', { name, w: +width.toFixed(1), h: +height.toFixed(1) }), { type: 'ok', ms: 6000 });
       setTimeout(() => app.vp.fit(app.selectionBox()), 80);
       return id;
     } catch (err) {

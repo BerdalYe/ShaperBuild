@@ -19,7 +19,11 @@ export class StarterCard {
         'div.st-actions',
         action('rect', 'Draw a rectangle', 'Then pull it into 3D', 'R', () => app.tools.activate('rect')),
         action('box', 'Add a box', 'A ready-made shape', '', () => app.tools.activate('box')),
-        action('import', 'Import a file', 'STL, OBJ, 3MF, STEP or DXF', '', () => app.files.importDialog()),
+        action('import', 'Import a file', 'STL, OBJ, 3MF, STEP, DXF or SVG', '', () => app.files.importDialog()),
+        action('sparkle', 'Open an example', 'Fidgets, ornaments, a mug and more to change', '', () => {
+          app.home.show();
+          setTimeout(() => document.querySelector('.example-grid')?.scrollIntoView({ block: 'center' }), 80);
+        }),
         action('learn', 'Take the tutorial', 'Learn the basics in 3 minutes', '', () => app.tutorial.start()),
       ),
       h('div.st-nav', {

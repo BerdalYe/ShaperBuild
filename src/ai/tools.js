@@ -3,6 +3,9 @@
 // and can be undone like one made by hand. Used by the chat panel and by
 // AI apps connected over MCP.
 import DEFS from './tools.json' with { type: 'json' };
+import { starPoints, offsetPolygon, signedArea, translateEntity, rotateEntity, sampleEntity } from '../core/geom2d.js';
+import { planeFrame, to2D } from '../core/plane.js';
+import { loadFont, textEntities, insideText } from '../core/text.js';
 
 // Standard sketch planes. In a plane, x and y are the sketch's own axes:
 // XY: x→X, y→Y (on the ground) · XZ: x→X, y→Z (front) · YZ: x→Y, y→Z (side).
@@ -65,15 +68,53 @@ async function regionsOf(app, sketchId) {
   return { key: c?.key, regions: c?.data?.regions || [] };
 }
 
+// "+Z", "-Y"… for a direction along an axis, else the vector.
+function axisName(n) {
+  const i = n.findIndex((v) => Math.abs(v) > 0.999);
+  return i < 0 ? rv(n) : `${n[i] > 0 ? '+' : '-'}${'XYZ'[i]}`;
+}
+
+// What the AI drew in each of its sketches, to tell filled regions from holes.
+const FILL = new WeakMap();
+function fillOf(app, sketchId) {
+  return FILL.get(app)?.get(sketchId);
+}
+
+async function filledRegions(app, sk, regions) {
+  const pieces = fillOf(app, sk.id);
+  if (!pieces) return null;
+  const f = planeFrame(sk.plane);
+  return new Set(regions.filter((r) => regionFilled(pieces, insidePoint(r, f))).map((r) => r.index));
+}
+
 async function sketchSummary(app, sk) {
   const { regions } = await regionsOf(app, sk.id);
+  const filled = await filledRegions(app, sk, regions);
   return {
     id: sk.id,
     name: sk.name,
+    ...(sk.visible === false ? { hidden: true } : {}),
     plane: { origin: rv(sk.plane.origin), normal: rv(sk.plane.normal) },
+    extrude_direction: axisName(sk.plane.normal),
     curves: sk.entities.length,
-    regions: regions.map((r) => ({ index: r.index, area: r3(r.area), center: rv(r.centroid) })),
+    regions: regions.map((r) => ({ index: r.index, area: r3(r.area), center: rv(r.centroid), ...(filled ? { filled: filled.has(r.index) } : {}) })),
   };
+}
+
+// Sketches used up by a step are hidden, as people do by hand, so their
+// outlines don't clutter the model. Part of the same undo step.
+function hideSketches(app, ids) {
+  const hide = [...new Set(ids)].filter((id) => app.doc.sketch(id)?.visible !== false);
+  if (hide.length) app.doc.replaceSilently((d) => hide.forEach((id) => d.updateSketch(id, { visible: false })));
+}
+
+// Bodies whose boxes don't meet any other body: often a part that should
+// sit on or in another one.
+function notTouching(app) {
+  const boxes = app.doc.bodies.map((b) => [b.id, app.bodyMesh(b.id)?.bbox]).filter(([, bb]) => bb);
+  if (boxes.length < 2) return [];
+  const meet = (a, b) => a.min.every((v, i) => v <= b.max[i] + 0.01 && b.min[i] <= a.max[i] + 0.01);
+  return boxes.filter(([id, bb]) => !boxes.some(([id2, bb2]) => id2 !== id && meet(bb, bb2))).map(([id]) => id);
 }
 
 // "0, 3" or [0, 3] → [0, 3]; anything else → null. (Some AI services send
@@ -93,8 +134,17 @@ function faceIndex(app, bodyId, sel) {
     if (!faces[sel]) throw new ToolError(`Body ${bodyId} has no face ${sel} (it has ${faces.length})`);
     return sel;
   }
+  if (/^(round|curved)$/i.test(String(sel))) {
+    // The biggest curved face: the side of a cylinder, a ball, a cup.
+    let best = -1;
+    faces.forEach((f, i) => {
+      if (f.type !== 'plane' && (best < 0 || (f.area || 0) > (faces[best].area || 0))) best = i;
+    });
+    if (best < 0) throw new ToolError(`Body ${bodyId} has no curved face`);
+    return best;
+  }
   const dir = SIDES[String(sel).toLowerCase()];
-  if (!dir) throw new ToolError(`Unknown face "${sel}": use a number or ${Object.keys(SIDES).join(', ')}`);
+  if (!dir) throw new ToolError(`Unknown face "${sel}": use a number, round, or ${Object.keys(SIDES).join(', ')}`);
   const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
   let best = -1;
   faces.forEach((f, i) => {
@@ -153,7 +203,9 @@ async function runTool(app, id, { slots = {}, values = {}, before } = {}) {
     throw new ToolError(why);
   }
   if (app.doc.past.length === steps) throw new ToolError('Nothing changed');
-  return changes(app, was);
+  const out = changes(app, was);
+  if (tool.lastWarning) out.warning = tool.lastWarning;
+  return out;
 }
 
 function changes(app, was) {
@@ -176,18 +228,24 @@ async function profiles(app, { sketch_id, regions, body_id, face }) {
   const sk = sketchOf(app, sketch_id);
   const { key, regions: all } = await regionsOf(app, sk.id);
   if (!all.length) throw new ToolError(`Sketch ${sk.id} has no closed regions`);
-  const picked = regions === undefined || regions === 'all' ? all.map((r) => r.index) : [].concat(numberList(regions) ?? regions);
+  let picked;
+  if (regions === undefined || regions === 'filled') {
+    // The filled ones (not the middle of a ring, not holes), when known.
+    const filled = await filledRegions(app, sk, all);
+    picked = all.map((r) => r.index).filter((i) => !filled || filled.has(i));
+    if (!picked.length) picked = all.map((r) => r.index);
+  } else if (regions === 'all') picked = all.map((r) => r.index);
+  else picked = [].concat(numberList(regions) ?? regions);
   for (const i of picked) if (!all.some((r) => r.index === i)) throw new ToolError(`Sketch ${sk.id} has no region ${i} (it has ${all.map((r) => r.index).join(', ')})`);
   return picked.map((index) => ({ kind: 'region', sketchId: sk.id, index, regionKey: key }));
 }
 
 // ---- sketch shapes ---------------------------------------------------------
 
-function sketchEntities(shapes) {
-  const ents = [];
-  const cons = [];
+// Draw one shape's curves (and its size constraints) into ents / cons.
+function drawShape(s, ents, cons) {
   const at = (s, k = 'x') => Number(s[k] ?? 0);
-  for (const s of shapes) {
+  {
     const base = ents.length;
     switch (s.type) {
       case 'rect': {
@@ -195,6 +253,22 @@ function sketchEntities(shapes) {
         const h = Number(s.height);
         if (!(w > 0 && h > 0)) throw new ToolError('A rect needs a positive width and height');
         const [x, y] = [at(s), at(s, 'y')];
+        const cr = Math.min(Number(s.corner_radius || 0), w / 2, h / 2);
+        if (cr > 1e-9) {
+          // Rounded corners: four sides and four quarter arcs.
+          const [x0, x1, y0, y1] = [x - w / 2, x + w / 2, y - h / 2, y + h / 2];
+          const q = Math.PI / 2;
+          const side = (a, b) => (Math.hypot(b[0] - a[0], b[1] - a[1]) > 1e-9 ? ents.push({ type: 'line', a, b }) : null);
+          side([x0 + cr, y0], [x1 - cr, y0]);
+          ents.push({ type: 'arc', c: [x1 - cr, y0 + cr], r: cr, a0: -q, a1: 0 });
+          side([x1, y0 + cr], [x1, y1 - cr]);
+          ents.push({ type: 'arc', c: [x1 - cr, y1 - cr], r: cr, a0: 0, a1: q });
+          side([x1 - cr, y1], [x0 + cr, y1]);
+          ents.push({ type: 'arc', c: [x0 + cr, y1 - cr], r: cr, a0: q, a1: 2 * q });
+          side([x0, y1 - cr], [x0, y0 + cr]);
+          ents.push({ type: 'arc', c: [x0 + cr, y0 + cr], r: cr, a0: 2 * q, a1: 3 * q });
+          break;
+        }
         const c = [
           [x - w / 2, y - h / 2],
           [x + w / 2, y - h / 2],
@@ -229,18 +303,251 @@ function sketchEntities(shapes) {
         break;
       }
       case 'line':
+        if (!Array.isArray(s.from) || !Array.isArray(s.to)) throw new ToolError('A line needs from: [x, y] and to: [x, y]');
         ents.push({ type: 'line', a: s.from.map(Number), b: s.to.map(Number) });
         break;
+      case 'spline': {
+        const pts = (s.points || []).map((p) => [Number(p[0]), Number(p[1])]);
+        if (pts.length < 2) throw new ToolError('A spline needs at least 2 points');
+        ents.push({ type: 'spline', pts, ...(s.closed ? { closed: true } : {}) });
+        break;
+      }
+      case 'ellipse': {
+        const rx = Number(s.radius_x ?? s.rx);
+        const ry = Number(s.radius_y ?? s.ry);
+        if (!(rx > 0 && ry > 0)) throw new ToolError('An ellipse needs a positive radius_x and radius_y');
+        ents.push({ type: 'ellipse', c: [at(s), at(s, 'y')], rx, ry, rot: (Number(s.angle || 0) * Math.PI) / 180 });
+        break;
+      }
+      case 'slot': {
+        const len = Number(s.length);
+        const r = Number(s.width) / 2;
+        if (!(r > 0 && len >= 2 * r)) throw new ToolError('A slot needs a width and a length at least as long as the width');
+        const t = (Number(s.angle || 0) * Math.PI) / 180;
+        const d = [Math.cos(t), Math.sin(t)];
+        const n = [-d[1], d[0]];
+        const h = len / 2 - r;
+        const c1 = [at(s) - d[0] * h, at(s, 'y') - d[1] * h];
+        const c2 = [at(s) + d[0] * h, at(s, 'y') + d[1] * h];
+        const off = (c, k) => [c[0] + n[0] * r * k, c[1] + n[1] * r * k];
+        if (h < 1e-9) {
+          ents.push({ type: 'circle', c: c1, r });
+          break;
+        }
+        ents.push({ type: 'line', a: off(c1, -1), b: off(c2, -1) });
+        ents.push({ type: 'arc', c: c2, r, a0: t - Math.PI / 2, a1: t + Math.PI / 2 });
+        ents.push({ type: 'line', a: off(c2, 1), b: off(c1, 1) });
+        ents.push({ type: 'arc', c: c1, r, a0: t + Math.PI / 2, a1: t + (3 * Math.PI) / 2 });
+        break;
+      }
       case 'arc': {
         const d = Math.PI / 180;
         ents.push({ type: 'arc', c: [at(s), at(s, 'y')], r: Number(s.radius), a0: Number(s.start_angle ?? 0) * d, a1: Number(s.end_angle ?? 180) * d });
         break;
       }
+      case 'star': {
+        const n = Math.round(Number(s.tips ?? (typeof s.points === 'number' ? s.points : 5)));
+        const r = Number(s.radius);
+        const ri = Number(s.inner_radius ?? r * 0.45);
+        if (!(n >= 3 && r > 0 && ri > 0 && ri < r)) throw new ToolError('A star needs tips ≥ 3, a radius and a smaller inner_radius');
+        const pts = starPoints([at(s), at(s, 'y')], r, ri, n, (Number(s.angle ?? 90) * Math.PI) / 180);
+        for (let i = 0; i < pts.length; i++) ents.push({ type: 'line', a: pts[i], b: pts[(i + 1) % pts.length] });
+        break;
+      }
       default:
-        throw new ToolError(`Unknown shape type "${s.type}": use rect, circle, polygon, regular_polygon, line or arc`);
+        throw new ToolError(`Unknown shape type "${s.type}": use rect, circle, ellipse, slot, star, polygon, regular_polygon, line, arc or spline`);
     }
   }
-  return { ents, cons };
+}
+
+// The same shape made smaller by `t` all round, for walls (rings, frames,
+// thin star shells).
+function insetShape(s, t) {
+  const num = (k, d = 0) => Number(s[k] ?? d);
+  const small = (v, what) => {
+    if (!(v > 1e-6)) throw new ToolError(`The wall is too thick for this ${what}`);
+    return v;
+  };
+  switch (s.type) {
+    case 'rect':
+      return { type: 'rect', x: num('x'), y: num('y'), width: small(num('width') - 2 * t, 'rect'), height: small(num('height') - 2 * t, 'rect'), corner_radius: Math.max(0, num('corner_radius') - t) };
+    case 'circle':
+      return { type: 'circle', x: num('x'), y: num('y'), radius: small(num('radius', num('diameter') / 2) - t, 'circle') };
+    case 'ellipse':
+      return { ...s, wall: undefined, radius_x: small(num('radius_x', num('rx')) - t, 'ellipse'), radius_y: small(num('radius_y', num('ry')) - t, 'ellipse') };
+    case 'slot':
+      return { ...s, wall: undefined, width: small(num('width') - 2 * t, 'slot'), length: small(num('length') - 2 * t, 'slot') };
+    case 'polygon':
+    case 'regular_polygon':
+    case 'star': {
+      const ents = [];
+      drawShape({ ...s, wall: undefined }, ents, []);
+      const verts = ents.map((e) => e.a);
+      const inner = offsetPolygon(verts, -t);
+      if (Math.abs(signedArea(inner)) < 1e-6 || Math.sign(signedArea(inner)) !== Math.sign(signedArea(verts))) throw new ToolError(`The wall is too thick for this ${s.type}`);
+      return { type: 'polygon', points: inner };
+    }
+    default:
+      throw new ToolError(`wall works on rect, circle, ellipse, slot, polygon, regular_polygon and star, not ${s.type}`);
+  }
+}
+
+// A shape's curves flipped: "x" mirrors left↔right (x → -x), "y" up↔down.
+function mirrorEntity(e, axis) {
+  const f = axis === 'y' ? (p) => [p[0], -p[1]] : (p) => [-p[0], p[1]];
+  const ang = axis === 'y' ? (a) => -a : (a) => Math.PI - a;
+  switch (e.type) {
+    case 'line':
+      return { ...e, a: f(e.a), b: f(e.b) };
+    case 'circle':
+      return { ...e, c: f(e.c) };
+    case 'arc':
+      return { ...e, c: f(e.c), a0: ang(e.a1), a1: ang(e.a0) };
+    case 'ellipse':
+      return { ...e, c: f(e.c), rot: ang(e.rot || 0) };
+    case 'spline':
+      return { ...e, pts: e.pts.map(f) };
+    default:
+      return e;
+  }
+}
+
+// Where copies of a shape go: functions from a curve to its copy, from
+// `repeat` (around a point, or along a step) and then `mirror`.
+function copyMoves(s) {
+  let moves = [(e) => e];
+  const r = s.repeat;
+  if (r) {
+    const n = Math.round(Number(r.count));
+    if (!(n >= 2 && n <= 200)) throw new ToolError('repeat.count is 2 to 200');
+    const next = [];
+    if (r.dx !== undefined || r.dy !== undefined) {
+      for (let i = 0; i < n; i++) next.push((e) => (i ? translateEntity(e, [Number(r.dx || 0) * i, Number(r.dy || 0) * i]) : e));
+    } else {
+      const c = (r.around || [0, 0]).map(Number);
+      const total = Number(r.angle ?? 360);
+      const step = ((Math.abs(total - 360) < 1e-9 ? total / n : total / (n - 1)) * Math.PI) / 180;
+      for (let i = 0; i < n; i++) next.push((e) => (i ? rotateEntity(e, c, step * i) : e));
+    }
+    moves = next;
+  }
+  if (s.mirror) {
+    const axis = String(s.mirror).toLowerCase();
+    if (axis !== 'x' && axis !== 'y') throw new ToolError('mirror is "x" (left↔right) or "y" (up↔down)');
+    moves = [...moves, ...moves.map((m) => (e) => mirrorEntity(m(e), axis))];
+  }
+  return moves;
+}
+
+const CLOSED = new Set(['rect', 'circle', 'ellipse', 'slot', 'polygon', 'regular_polygon', 'star']);
+
+// The sketch's curves, their size constraints, and the closed pieces (with
+// their wall's inside, and whether they are holes) to tell filled regions
+// from holes.
+function sketchEntities(shapes, fonts = {}) {
+  const ents = [];
+  const cons = [];
+  const pieces = [];
+  for (const s of shapes) {
+    if (s.type === 'text') {
+      const font = fonts[s.font === 'regular' ? 'regular' : 'bold'];
+      const size = Number(s.size ?? 10);
+      if (!String(s.text || '').trim()) throw new ToolError('A text needs some text');
+      if (!(size > 0)) throw new ToolError('A text needs a positive size');
+      const at = [Number(s.x ?? 0), Number(s.y ?? 0)];
+      const turn = (Number(s.angle || 0) * Math.PI) / 180;
+      const placed = textEntities(font, String(s.text), { size, at, align: ['left', 'right'].includes(s.align) ? s.align : 'center' });
+      const spin = (e) => (turn ? rotateEntity(e, at, turn) : e);
+      const letters = placed.entities.map(spin);
+      const polys = placed.polygons.map((poly) => spin({ type: 'spline', pts: poly }).pts);
+      copyMoves(s).forEach((move) => {
+        ents.push(...letters.map(move));
+        const ps = polys.map((poly) => move({ type: 'spline', pts: poly }).pts);
+        pieces.push({ inside: (p) => insideText(ps, p), within: (p) => ps.some((poly) => insideText([poly], p)) });
+      });
+      continue;
+    }
+    const start = ents.length;
+    if (s.offset) {
+      const o = Number(s.offset);
+      drawShape(o > 0 ? growShape(s, o) : insetShape(s, -o), ents, cons);
+    } else drawShape(s, ents, cons);
+    const mid = ents.length;
+    if (s.wall) {
+      const t = Number(s.wall);
+      if (!(t > 0)) throw new ToolError('wall is a positive thickness');
+      const base = s.offset ? { ...(Number(s.offset) > 0 ? growShape(s, Number(s.offset)) : insetShape(s, -Number(s.offset))), wall: undefined } : s;
+      drawShape(insetShape(base, t), ents, cons);
+    }
+    const outer = ents.slice(start, mid);
+    const inner = ents.slice(mid);
+    const closed = CLOSED.has(s.type) || (s.type === 'spline' && s.closed);
+    copyMoves(s).forEach((move, i) => {
+      const o = i ? outer.map(move) : outer;
+      const w = i ? inner.map(move) : inner;
+      if (i) ents.push(...o, ...w);
+      if (closed) pieces.push({ hole: !!s.hole, within: (p) => insideCurves(o, p), inside: (p) => insideCurves(o, p) && !(w.length && insideCurves(w, p)) });
+    });
+  }
+  return { ents, cons, pieces };
+}
+
+// The same shape made bigger by `t` all round.
+function growShape(s, t) {
+  if (['polygon', 'regular_polygon', 'star'].includes(s.type)) {
+    const ents = [];
+    drawShape({ ...s, offset: undefined, wall: undefined }, ents, []);
+    return { type: 'polygon', points: offsetPolygon(ents.map((e) => e.a), t) };
+  }
+  return { ...insetShape({ ...s, offset: undefined, wall: undefined }, -t), wall: undefined };
+}
+
+// Is the point inside these curves (counting crossings)?
+function insideCurves(curves, p) {
+  let inside = false;
+  for (const e of curves) {
+    const pts = sampleEntity(e, 96);
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const [a, b] = [pts[i], pts[i + 1]];
+      if (a[1] > p[1] !== b[1] > p[1] && p[0] < a[0] + ((p[1] - a[1]) * (b[0] - a[0])) / (b[1] - a[1])) inside = !inside;
+    }
+    if (e.type === 'circle' || e.type === 'ellipse' || e.closed) {
+      const [a, b] = [pts[pts.length - 1], pts[0]];
+      if (a[1] > p[1] !== b[1] > p[1] && p[0] < a[0] + ((p[1] - a[1]) * (b[0] - a[0])) / (b[1] - a[1])) inside = !inside;
+    }
+  }
+  return inside;
+}
+
+// A point well inside a region: the middle of its biggest triangle.
+function insidePoint(region, frame) {
+  const P = region.positions;
+  const I = region.indices;
+  if (!P || !I || !I.length) return null;
+  const v = (i) => [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]];
+  let best = null;
+  let area = -1;
+  for (let k = 0; k + 2 < I.length; k += 3) {
+    const [a, b, c] = [v(I[k]), v(I[k + 1]), v(I[k + 2])];
+    const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const w = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    const ar = Math.hypot(u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]);
+    if (ar > area) {
+      area = ar;
+      best = [0, 1, 2].map((j) => (a[j] + b[j] + c[j]) / 3);
+    }
+  }
+  return best && to2D(frame, best);
+}
+
+// Filled or hole: inside a shape (and not in its wall's middle) is filled;
+// inside a shape marked hole is not; areas closed only by lines, arcs and
+// open splines are filled.
+function regionFilled(pieces, p) {
+  if (!p || !pieces.length) return true;
+  if (pieces.some((pc) => pc.hole && pc.within(p))) return false;
+  if (pieces.some((pc) => !pc.hole && pc.inside(p))) return true;
+  return !pieces.some((pc) => pc.within(p));
 }
 
 function sketchPlane(app, { plane = 'XY', offset = 0, body_id, face }) {
@@ -262,12 +569,15 @@ function sketchPlane(app, { plane = 'XY', offset = 0, body_id, face }) {
 
 const DO = {
   async get_design(app) {
-    return {
+    const out = {
       units_shown: app.units,
-      bodies: app.doc.bodies.map((b) => bodySummary(app, b)),
+      bodies: app.doc.bodies.map((b) => ({ ...bodySummary(app, b), ...(b.visible === false ? { hidden: true } : {}) })),
       sketches: await Promise.all(app.doc.sketches.map((s) => sketchSummary(app, s))),
       steps: app.history.features.length,
     };
+    const apart = notTouching(app);
+    if (apart.length) out.not_touching_other_bodies = apart;
+    return out;
   },
 
   async get_body(app, { body_id }) {
@@ -288,8 +598,16 @@ const DO = {
       torus: { major: a.major ?? 15, minor: a.minor ?? 4 },
     }[shape];
     if (!params) throw new ToolError(`Unknown shape "${shape}"`);
-    const [x, y, z] = a.position || [0, 0, 0];
-    const matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, z, 1];
+    const [x, y, z] = (a.position || [0, 0, 0]).map(Number);
+    // Turned around X, then Y, then Z (degrees), about `position`.
+    const [ax, ay, az] = (a.rotation || [0, 0, 0]).map((v) => (Number(v || 0) * Math.PI) / 180);
+    const [cx, sx, cy, sy, cz, sz] = [Math.cos(ax), Math.sin(ax), Math.cos(ay), Math.sin(ay), Math.cos(az), Math.sin(az)];
+    const R = [
+      [cz * cy, cz * sy * sx - sz * cx, cz * sy * cx + sz * sx],
+      [sz * cy, sz * sy * sx + cz * cx, sz * sy * cx - cz * sx],
+      [-sy, cy * sx, cy * cx],
+    ];
+    const matrix = [R[0][0], R[1][0], R[2][0], 0, R[0][1], R[1][1], R[2][1], 0, R[0][2], R[1][2], R[2][2], 0, x, y, z, 1];
     const was = new Map(app.doc.bodies.map((b) => [b.id, b.shapeId]));
     const res = await app.kernel.call('primitive', { type: shape, params, matrix });
     app.cmd.applyResult(shape[0].toUpperCase() + shape.slice(1), res);
@@ -304,19 +622,67 @@ const DO = {
   async sketch(app, a) {
     if (!Array.isArray(a.shapes) || !a.shapes.length) throw new ToolError('Give at least one shape');
     const plane = sketchPlane(app, a);
-    const { ents, cons } = sketchEntities(a.shapes);
-    const id = app.cmd.addSketchEntities(plane, null, ents, 'Sketch', cons);
+    const fonts = {};
+    for (const sh of a.shapes) if (sh?.type === 'text') fonts[sh.font === 'regular' ? 'regular' : 'bold'] ??= await loadFont(sh.font === 'regular' ? 'regular' : 'bold');
+    const { ents, cons, pieces } = sketchEntities(a.shapes, fonts);
+    const id = app.cmd.addSketchEntities(plane, null, ents, 'Sketch', cons, { fresh: true });
+    if (!FILL.has(app)) FILL.set(app, new Map());
+    FILL.get(app).set(id, pieces);
     return sketchSummary(app, app.doc.sketch(id));
   },
 
   async extrude(app, a) {
     const items = await profiles(app, a);
-    return runTool(app, 'extrude', { slots: { profiles: items }, values: { distance: a.distance, mode: a.mode || 'auto', symmetric: !!a.symmetric, through: !!a.through } });
+    const out = await runTool(app, 'extrude', {
+      slots: { profiles: items },
+      values: { distance: a.distance, mode: a.mode || 'auto', symmetric: !!a.symmetric, through: !!a.through, taper: Number(a.taper || 0), twist: Number(a.twist || 0), endScale: Number(a.end_scale ?? 1) },
+    });
+    hideSketches(app, items.map((it) => it.sketchId).filter(Boolean));
+    if ((out.created?.length || 0) > 1) out.note = `This made ${out.created.length} separate bodies. Parts that do not touch become separate pieces; if they belong together, make them overlap and extrude again (undo first).`;
+    return out;
   },
 
   async revolve(app, a) {
     const items = await profiles(app, a);
-    return runTool(app, 'revolve', { slots: { profiles: items }, values: { worldAxis: String(a.axis).toLowerCase(), angle: a.angle ?? 360, mode: a.mode || 'auto' } });
+    const out = await runTool(app, 'revolve', { slots: { profiles: items }, values: { worldAxis: String(a.axis).toLowerCase(), angle: a.angle ?? 360, mode: a.mode || 'auto' } });
+    hideSketches(app, items.map((it) => it.sketchId));
+    return out;
+  },
+
+  async loft(app, a) {
+    const list = Array.isArray(a.profiles) ? a.profiles : [];
+    if (list.length < 2) throw new ToolError('Give at least 2 profiles: [{sketch_id, region}, …] in order');
+    const items = [];
+    for (const p of list) {
+      const got = await profiles(app, { sketch_id: p.sketch_id, regions: [Number(p.region ?? 0)] });
+      items.push(...got);
+    }
+    const out = await runTool(app, 'loft', { slots: { profiles: items }, values: { mode: a.mode && a.mode !== 'auto' ? a.mode : 'new' } });
+    hideSketches(app, items.map((it) => it.sketchId));
+    return out;
+  },
+
+  async sweep(app, a) {
+    const items = await profiles(app, { sketch_id: a.sketch_id, regions: [Number(a.region ?? 0)] });
+    const path = sketchOf(app, a.path_sketch_id);
+    if (!path.entities.length) throw new ToolError(`Sketch ${path.id} has no curves`);
+    const out = await runTool(app, 'sweep', {
+      slots: { profiles: items, path: path.entities.map((e) => ({ kind: 'curve', sketchId: path.id, entityId: e.id })) },
+      values: { mode: a.mode && a.mode !== 'auto' ? a.mode : 'new', twist: Number(a.twist || 0), endScale: Number(a.end_scale ?? 1) },
+    });
+    hideSketches(app, [items[0].sketchId, path.id]);
+    return out;
+  },
+
+  async wrap(app, a) {
+    const items = await profiles(app, { sketch_id: a.sketch_id, regions: a.regions });
+    const b = bodyOf(app, a.body_id);
+    const face = { kind: 'face', bodyId: b.id, index: faceIndex(app, b.id, a.face ?? 'round') };
+    const height = Number(a.height);
+    if (!height) throw new ToolError('height is how far the shapes stand out (negative engraves)');
+    const out = await runTool(app, 'emboss', { slots: { profiles: items, face: [face] }, values: { height, mode: a.mode === 'new' ? 'new' : 'auto' } });
+    hideSketches(app, items.map((it) => it.sketchId));
+    return out;
   },
 
   async fillet(app, a) {
@@ -401,20 +767,40 @@ const DO = {
   },
 
   async screenshot(app, a) {
-    app.vp.setView(a.view || 'iso', { fit: true });
-    app.vp.rig.tick(performance.now() + 60000); // finish the camera move at once
-    // A JPEG is a tenth of the size of the PNG the view gives.
-    const img = new Image();
-    img.src = app.vp.capture({ width: 800, height: 600 });
-    await img.decode();
+    const view = a.view || 'all';
+    // "all": four views in one picture, to check shape and placement.
+    const views = view === 'all' ? ['iso', 'front', 'top', 'right'] : [view];
+    const [w, h] = views.length > 1 ? [480, 360] : [800, 600];
     const canvas = document.createElement('canvas');
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
+    canvas.width = views.length > 1 ? w * 2 : w;
+    canvas.height = views.length > 1 ? h * 2 : h;
     const g = canvas.getContext('2d');
     g.fillStyle = '#ffffff';
     g.fillRect(0, 0, canvas.width, canvas.height);
-    g.drawImage(img, 0, 0);
-    return { image: canvas.toDataURL('image/jpeg', 0.85).split(',')[1], mime: 'image/jpeg', text: `View: ${a.view || 'iso'}` };
+    for (let i = 0; i < views.length; i++) {
+      app.vp.setView(views[i], { fit: true });
+      app.vp.rig.tick(performance.now() + 60000); // finish the camera move at once
+      const img = new Image();
+      img.src = app.vp.capture({ width: w, height: h });
+      await img.decode();
+      const [x, y] = [(i % 2) * w, Math.floor(i / 2) * h];
+      g.drawImage(img, x, y, w, h);
+      if (views.length > 1) {
+        g.font = 'bold 18px sans-serif';
+        g.fillStyle = 'rgba(0,0,0,0.6)';
+        g.fillRect(x + 8, y + 8, g.measureText(views[i]).width + 16, 28);
+        g.fillStyle = '#ffffff';
+        g.fillText(views[i], x + 16, y + 29);
+      }
+    }
+    if (views.length > 1) {
+      g.fillStyle = '#888888';
+      g.fillRect(w - 1, 0, 2, canvas.height);
+      g.fillRect(0, h - 1, canvas.width, 2);
+    }
+    // A JPEG is a tenth of the size of the PNG the view gives.
+    const text = views.length > 1 ? 'Four views: iso (top left), front = looking along +Y (top right), top = looking down (bottom left), right = looking along -X (bottom right)' : `View: ${view}`;
+    return { image: canvas.toDataURL('image/jpeg', 0.85).split(',')[1], mime: 'image/jpeg', text };
   },
 };
 

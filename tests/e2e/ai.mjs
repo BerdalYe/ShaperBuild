@@ -98,6 +98,95 @@ try {
   await json('undo', { steps: 1 });
   assert.equal(await A((cid) => window.__shaper.doc.body(cid).color ?? null, cupId), null, 'the colour was undone');
 
+  step('richer shapes: rounded rect, slot, ellipse, spline; sketches stay apart and hide when used');
+  const sA = await json('sketch', { plane: 'XY', shapes: [{ type: 'rect', x: 300, y: 0, width: 40, height: 30, corner_radius: 5 }] });
+  const sB = await json('sketch', { plane: 'XY', shapes: [{ type: 'slot', x: 300, y: 60, length: 40, width: 10, angle: 30 }, { type: 'ellipse', x: 300, y: 100, radius_x: 10, radius_y: 5 }] });
+  assert.notEqual(sA.id, sB.id, 'a second sketch on the same plane is a new sketch');
+  assert.equal(sA.extrude_direction, '+Z');
+  near(sA.regions[0].area, 40 * 30 - (4 - Math.PI) * 25, 0.05);
+  const areas = sB.regions.map((r) => r.area).sort((a, b) => a - b);
+  near(areas[0], Math.PI * 50, 0.05);
+  near(areas[1], 30 * 10 + Math.PI * 25, 0.05);
+  const tray = await json('extrude', { sketch_id: sA.id, distance: 8 });
+  assert.deepEqual(tray.created[0].size, [40, 30, 8]);
+  assert.equal(await A((sid) => window.__shaper.doc.sketch(sid).visible, sA.id), false, 'the used sketch is hidden');
+  await json('undo', {});
+  assert.notEqual(await A((sid) => window.__shaper.doc.sketch(sid).visible, sA.id), false, 'undo shows it again');
+  const knob = await json('sketch', { plane: 'XZ', shapes: [{ type: 'line', from: [0, 0], to: [8, 0] }, { type: 'spline', points: [[8, 0], [10, 6], [6, 12], [0, 14]] }, { type: 'line', from: [0, 14], to: [0, 0] }] });
+  assert.equal(knob.regions.length, 1, 'lines and a spline close a region');
+  assert.equal(knob.extrude_direction, '-Y');
+
+  step('loft, sweep, a turned shape, four views, and parts that touch nothing');
+  const l0 = await json('sketch', { plane: 'XY', shapes: [{ type: 'rect', x: 400, y: 0, width: 30, height: 30 }] });
+  const l1 = await json('sketch', { plane: 'XY', offset: 40, shapes: [{ type: 'circle', x: 400, y: 0, radius: 8 }] });
+  const loft = await json('loft', { profiles: [{ sketch_id: l0.id }, { sketch_id: l1.id }] });
+  assert.equal(loft.created.length, 1);
+  near(loft.created[0].size[2], 40, 0.01);
+  const route = await json('sketch', { plane: 'XZ', shapes: [{ type: 'line', from: [500, 0], to: [500, 30] }, { type: 'arc', x: 520, y: 30, radius: 20, start_angle: 90, end_angle: 180 }] });
+  const ring = await json('sketch', { plane: 'XY', shapes: [{ type: 'circle', x: 500, y: 0, radius: 3 }] });
+  const pipe = await json('sweep', { sketch_id: ring.id, path_sketch_id: route.id });
+  assert.equal(pipe.created.length, 1);
+  near(pipe.created[0].max[0], 520, 2);
+  near(pipe.created[0].max[2], 53, 2);
+  const axle = await json('add_shape', { shape: 'cylinder', radius: 5, height: 50, position: [600, 0, 20], rotation: [0, 90, 0] });
+  assert.deepEqual(axle.created[0].size, [50, 10, 10], 'turned to lie along X');
+  const design = await json('get_design', {});
+  assert.ok(design.not_touching_other_bodies.includes(axle.created[0].id));
+  assert.ok(design.sketches.find((s) => s.id === l0.id).hidden);
+  const four = await run('screenshot', {});
+  assert.match(four.text, /Four views/);
+  const dims = await A(async (b64) => {
+    const img = new Image();
+    img.src = `data:image/jpeg;base64,${b64}`;
+    await img.decode();
+    return [img.naturalWidth, img.naturalHeight];
+  }, four.image);
+  assert.deepEqual(dims, [960, 720]);
+  await shot(win, 'ai-four-views');
+
+  step('decorations and fidgets: stars, walls, holes, copies; only filled regions are extruded');
+  const orn = await json('sketch', {
+    plane: 'XY',
+    shapes: [
+      { type: 'circle', x: 800, y: 0, radius: 30, wall: 3 },
+      { type: 'rect', x: 800, y: -20, width: 50, height: 14 },
+      { type: 'rect', x: 800, y: -20, width: 4, height: 4, hole: true },
+      { type: 'star', x: 800, y: 10, tips: 5, radius: 8, inner_radius: 4 },
+      { type: 'rect', x: 800, y: 22, width: 1.5, height: 12 },
+    ],
+  });
+  const filledAreas = orn.regions.filter((r) => r.filled);
+  assert.ok(filledAreas.length >= 3 && filledAreas.length < orn.regions.length, 'the inside of the ring and the window are not filled');
+  const ornBody = await json('extrude', { sketch_id: orn.id, distance: 3 });
+  assert.equal(ornBody.created.length, 1, `one piece: ${JSON.stringify(ornBody)}`);
+  assert.equal(ornBody.note, undefined);
+  const want = Math.PI * (900 - 27 * 27) + (50 * 14 - 16 - 0) + 5 * 8 * 4 * Math.sin(Math.PI / 5);
+  // Ring + snow block (minus the window, minus what is outside the circle) + star + stem: just check it is a ring, not a disc.
+  assert.ok((await vol(ornBody.created[0].id)) < Math.PI * 900 * 3 * 0.6, 'the middle of the ring stays open');
+  assert.ok((await vol(ornBody.created[0].id)) > Math.PI * (900 - 27 * 27) * 3, `at least the ring (${want})`);
+  const apart = await json('sketch', { plane: 'XY', shapes: [{ type: 'circle', x: 900, y: 0, radius: 3, repeat: { count: 3, dx: 10 } }, { type: 'slot', x: 900, y: 20, length: 12, width: 4, angle: 30, mirror: 'x' }] });
+  assert.equal(apart.regions.length, 5, 'three repeated circles and a slot mirrored around x = 0');
+  assert.ok(apart.regions.some((r) => Math.abs(r.center[0] + 900) < 0.01), 'the mirrored copy is at x = -900');
+  const spread = await json('extrude', { sketch_id: apart.id, distance: 2 });
+  assert.equal(spread.created.length, 5);
+  assert.match(spread.note, /5 separate bodies/);
+
+  step('twisted and nested stars');
+  const tw = await json('sketch', { plane: 'XY', shapes: [{ type: 'star', x: 1000, y: 0, tips: 6, radius: 20, inner_radius: 12, wall: 1.5 }] });
+  assert.deepEqual(tw.regions.map((r) => r.filled).sort(), [false, true]);
+  const twisted = await json('extrude', { sketch_id: tw.id, distance: 40, twist: 90, end_scale: 0.7 });
+  near(twisted.created[0].size[2], 40, 0.01);
+  near((twisted.created[0].min[0] + twisted.created[0].max[0]) / 2, 1000, 0.5);
+  const shells = await json('sketch', { plane: 'XY', shapes: [0, 1].map((i) => ({ type: 'star', x: 1100, y: 0, tips: 5, radius: 30, inner_radius: 15, offset: -i * 1.6, wall: 1.2 })) });
+  assert.equal(shells.regions.filter((r) => r.filled).length, 2, 'two thin shells');
+  const nested = await json('extrude', { sketch_id: shells.id, distance: 8, taper: 8, mode: 'new' });
+  assert.equal(nested.created.length, 2, 'the shells stay apart');
+  const [big, small] = nested.created.sort((a, b) => b.size[0] - a.size[0]);
+  assert.ok(big.max[1] <= 30 + 1e-3, 'the shells lean in, not out');
+  assert.ok(small.max[1] < big.max[1] - 1.5);
+  const thick = await run('sketch', { plane: 'XY', shapes: [{ type: 'circle', x: 0, y: 0, radius: 2, wall: 3 }] });
+  assert.match(thick.text, /wall is too thick/);
+
   step('the chat panel without a service set up asks to set one up');
   await win.locator('#btn-ai').click();
   await win.waitForSelector('.ai-panel:not([hidden]) .ai-empty');
@@ -241,7 +330,7 @@ try {
   const init = await (await rpc({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } } })).json();
   assert.equal(init.result.serverInfo.name, 'shaperbuild');
   assert.equal(init.result.protocolVersion, '2025-06-18');
-  assert.match(init.result.instructions, /millimetres/);
+  assert.match(init.result.instructions, /Millimetres/);
   assert.equal((await rpc({ jsonrpc: '2.0', method: 'notifications/initialized' })).status, 202);
   const list = await (await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/list' })).json();
   assert.ok(list.result.tools.some((tl) => tl.name === 'sketch' && tl.inputSchema.type === 'object'));

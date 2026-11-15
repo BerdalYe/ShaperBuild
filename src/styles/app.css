@@ -2801,6 +2801,19 @@ body.resizing-panel .items-panel {
 }
 
 /* All tutorials. */
+.recent-card .meta span.ex-desc {
+  white-space: normal;
+  color: var(--text-2);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.example-grid {
+  margin-bottom: 8px;
+}
+
 .home-lessons {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));

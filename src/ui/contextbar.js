@@ -45,6 +45,7 @@ export class ContextBar {
     }
     if (only('image') && list.length === 1) {
       const im = app.doc.image(list[0].imageId);
+      out.push({ label: 'Trace outline', icon: 'trace', title: 'Turn the dark (or opaque) shapes of the picture into a sketch, ready to extrude', action: () => app.cmd.traceImage(list[0].imageId) });
       out.push(tool('line', 'Trace with lines', 'line'), tool('spline', 'Spline'), tool('move', 'Move'));
       if (im) out.push({ label: 'Look at', icon: 'lookAt', action: () => app.vp.lookAtPlane(im.plane) });
     }

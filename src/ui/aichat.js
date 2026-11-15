@@ -7,7 +7,7 @@ import { icon } from './icons.js';
 import { modal, toast } from './overlays.js';
 import { t, tn } from '../core/i18n.js';
 
-const MAX_TURNS = 40;
+const MAX_TURNS = 80;
 
 // What each tool is called in the chat.
 const STEP_NAMES = {

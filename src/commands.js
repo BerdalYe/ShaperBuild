@@ -4,6 +4,7 @@ import { toast, confirmDialog } from './ui/overlays.js';
 import { t, tn } from './core/i18n.js';
 import { samePlane, GROUND, planeFrame, to2D, to3D } from './core/plane.js';
 import { translateEntity, rotateEntity } from './core/geom2d.js';
+import { traceImage } from './core/trace.js';
 import { solveSketch, measure, pruneConstraints, dropConstraintsFor, pointOf, CONSTRAINT_INFO } from './core/solver.js';
 import { nameProblem } from './core/expr.js';
 import { relink, renameEverywhere, usesOf, withUnit } from './core/variables.js';
@@ -135,11 +136,39 @@ export class Commands {
     return id;
   }
 
-  addSketchEntities(plane, sketchId, entities, label = 'Sketch', constraints = []) {
+  // Trace a picture's shapes into a new sketch on the picture's plane, at
+  // the picture's size (dark or opaque parts become closed outlines).
+  async traceImage(imageId) {
+    const im = this.doc.image(imageId);
+    if (!im) return null;
+    const img = new Image();
+    img.src = im.src;
+    await img.decode();
+    const k = Math.min(1, 800 / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * k));
+    const h = Math.max(1, Math.round(img.naturalHeight * k));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const g = canvas.getContext('2d', { willReadFrequently: true });
+    g.drawImage(img, 0, 0, w, h);
+    const { entities, loops } = traceImage(g.getImageData(0, 0, w, h).data, w, h, { width: im.width, height: im.height });
+    if (!entities.length) {
+      toast('No clear shapes found. Pictures with dark shapes on a light background (or the other way round) work best.', { type: 'error', ms: 6000 });
+      return null;
+    }
+    const id = this.addSketch(im.plane, entities, { name: t('{name} outline', { name: im.name }), label: 'Trace image' });
+    this.app.selection.set([{ kind: 'sketch', sketchId: id }]);
+    toast(tn(loops, 'Traced 1 outline. Click the shapes to extrude them; hide the picture to see them better.', 'Traced {n} outlines. Click the shapes to extrude them; hide the picture to see them better.'), { type: 'ok', ms: 6000 });
+    return id;
+  }
+
+  // `fresh`: always start a new sketch (the AI tools keep each sketch apart).
+  addSketchEntities(plane, sketchId, entities, label = 'Sketch', constraints = [], { fresh = false } = {}) {
     const app = this.app;
     return this.doc.apply(label, (d) => {
       let sk = sketchId ? d.sketch(sketchId) : null;
-      if (!sk) {
+      if (!sk && !fresh) {
         const existing = d.sketches.find((s) => s.visible !== false && samePlane(s.plane, plane));
         if (existing) sk = existing;
       }
