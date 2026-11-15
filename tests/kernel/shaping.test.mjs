@@ -74,6 +74,42 @@ test('twisted sweeps keep holes', () => {
   assert.ok(Math.abs(v - want) / want < 0.02, `ring volume ${v} vs ${want}`);
 });
 
+test('extrude can twist and change size, around each shape\'s middle', () => {
+  // A square away from the origin: it turns around its own middle.
+  const off = { id: 'ex', plane: XY, entities: square('x', 5).entities.map((e) => ({ ...e, a: [e.a[0] + 30, e.a[1]], b: [e.b[0] + 30, e.b[1]] })) };
+  k.sketchRegions(off);
+  const ref = [{ type: 'region', sketchId: 'ex', index: 0, normal: [0, 0, 1] }];
+  const tw = k.extrude({ profiles: ref, distance: 40, twist: 90 });
+  const id = tw.bodies[0].id;
+  assert.ok(valid(id), 'a valid solid');
+  const v = volume(id);
+  assert.ok(Math.abs(v - 4000) / 4000 < 0.02, `twisted volume ${v}`);
+  const bb = tw.bodies[0].mesh.bbox;
+  assert.ok(Math.abs((bb.min[0] + bb.max[0]) / 2 - 30) < 0.05, 'turned around its middle');
+  assert.ok(Math.abs(bb.max[2] - 40) < 1e-3 && Math.abs(bb.min[2]) < 1e-3);
+  const down = k.extrude({ profiles: ref, distance: -20, endScale: 0.5 });
+  const want = (20 * (100 + 25 + 50)) / 3;
+  const vd = volume(down.bodies[0].id);
+  assert.ok(Math.abs(vd - want) / want < 0.02, `shrinking volume ${vd} vs ${want}`);
+  assert.ok(Math.abs(down.bodies[0].mesh.bbox.min[2] + 20) < 1e-3, 'negative distance goes down');
+  assert.throws(() => k.extrude({ profiles: ref, distance: 10, twist: 30, taper: 5 }), /not both/);
+});
+
+test('a tapered ring leans in on both sides, keeping its wall', () => {
+  // A 20 × 20 square with a 16 × 16 square hole: a 2 mm wall.
+  const inner = [[-8, -8], [8, -8], [8, 8], [-8, 8]];
+  const hole = inner.map((a, i) => ({ id: `h${i}`, type: 'line', a, b: inner[(i + 1) % 4] }));
+  const regions = k.sketchRegions(square('tr', 10, hole)).regions;
+  const ring = regions.find((r) => Math.abs(r.area - 144) < 1);
+  const res = k.extrude({ profiles: [{ type: 'region', sketchId: 'tr', index: ring.index, normal: [0, 0, 1] }], distance: 10, taper: 10 });
+  const P = res.bodies[0].mesh.positions;
+  const top = [];
+  for (let i = 0; i < P.length; i += 3) if (Math.abs(P[i + 2] - 10) < 1e-6) top.push(Math.abs(P[i]));
+  const lean = 10 * Math.tan((10 * Math.PI) / 180);
+  assert.ok(Math.abs(Math.max(...top) - (10 - lean)) < 1e-3, `outside at the top ${Math.max(...top)}`);
+  assert.ok(Math.abs(Math.min(...top) - (8 - lean)) < 1e-3, `inside at the top ${Math.min(...top)}`);
+});
+
 // A 4 × 4 square (optionally with a round hole) on the plane x = 10 that
 // touches a cylinder of radius 10, centred 20 up.
 const label = (id, hole) => ({
@@ -314,4 +350,28 @@ test('extrude with a taper and a start offset; helical revolve; two-distance cha
   const kept = k.boolean({ op: 'union', targets: [box.id], tools: [other.id], keepTargets: true });
   assert.equal(kept.removed.length, 0);
   assert.ok(kept.bodies.every((b) => !b.replaces));
+});
+
+test('flat faces of a turned shape point outwards', () => {
+  const XZ = { origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, -1, 0] };
+  const P = [[10, 0], [14, 0], [14, 6], [10, 6]];
+  k.sketchRegions({ id: 'rv', plane: XZ, entities: P.map((a, i) => ({ id: `e${i}`, type: 'line', a, b: P[(i + 1) % 4] })) });
+  const res = k.revolve({ profiles: [{ type: 'region', sketchId: 'rv', index: 0, normal: [0, -1, 0] }], axis: { origin: [0, 0, 0], dir: [0, 0, 1] }, angle: 360 });
+  const flats = res.bodies[0].mesh.faceInfo.filter((f) => f.type === 'plane');
+  assert.equal(flats.length, 2);
+  for (const f of flats) assert.equal(Math.sign(f.normal[2]), f.center[2] > 3 ? 1 : -1, `face at z ${f.center[2]} points ${f.normal}`);
+});
+
+test('fillets that cannot all be done still round the edges they can, and say how many were left', () => {
+  const box = (x) => k.primitive({ type: 'box', params: { width: 20, depth: 20, height: 10 }, matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, 0, 0, 1] }).bodies[0].id;
+  const joined = k.boolean({ op: 'union', targets: [box(0)], tools: [box(15)] }).bodies[0].id;
+  const all = k.edges(joined).map((_, i) => i);
+  const ok = k.fillet({ id: joined, edges: all, radius: 2 });
+  assert.equal(ok.warning, undefined, 'a size that fits rounds everything');
+  // 6 mm cannot round all around a 10 mm tall block at once, nor every edge.
+  const part = k.fillet({ id: joined, edges: all, radius: 6 });
+  assert.ok(valid(part.bodies[0].id));
+  assert.ok(part.warning && part.warning.n > 0 && part.warning.n < all.length, JSON.stringify(part.warning));
+  assert.equal(part.warning.total, all.length);
+  assert.throws(() => k.fillet({ id: joined, edges: [0], radius: 50 }), /Fillet failed/);
 });

@@ -103,6 +103,8 @@ export class ExtrudeTool extends OpTool {
       { type: 'select', key: 'mode', label: 'Result', value: v.mode ?? 'auto', options: MODE_OPTIONS },
       { type: 'toggle', key: 'symmetric', label: 'Symmetric (both directions)', value: v.symmetric ?? false },
       { type: 'angle', key: 'taper', label: 'Taper (lean the sides in)', value: v.taper ?? 0 },
+      { type: 'angle', key: 'twist', label: 'Twist', value: v.twist ?? 0, hint: 'Turn the shape on the way up, around its middle (e.g. 90 for a twisted star)' },
+      { type: 'number', key: 'endScale', label: 'Size at the end', value: v.endScale ?? 1, min: 0.01, hint: '1 keeps the size; 0.5 ends at half size' },
       { type: 'length', key: 'start', label: 'Start offset', value: v.start ?? 0 },
     ];
   }
@@ -252,6 +254,8 @@ export class ExtrudeTool extends OpTool {
       mode,
       targets: targets.map((id) => app.doc.body(id).shapeId),
       ...(v.taper ? { taper: v.taper } : {}),
+      ...(v.twist ? { twist: v.twist } : {}),
+      ...(v.endScale && v.endScale !== 1 ? { endScale: v.endScale } : {}),
       ...(v.start ? { start: v.start } : {}),
     });
   }

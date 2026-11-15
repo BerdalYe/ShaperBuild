@@ -82,6 +82,14 @@ export function regularPolygon(c, r, sides, startAngle) {
   return pts;
 }
 
+// A star: `points` tips at radius r, inner corners at radius inner, the first
+// tip at startAngle.
+export function starPoints(c, r, inner, points, startAngle) {
+  const pts = [];
+  for (let i = 0; i < points * 2; i++) pts.push(polar(c, i % 2 ? inner : r, startAngle + (i * Math.PI) / points));
+  return pts;
+}
+
 // Centripetal Catmull-Rom through points (display approximation).
 // A spline shaped by control points (cubic B-spline; the ends of an open
 // one sit on its first and last control points). Matches the kernel's curve.

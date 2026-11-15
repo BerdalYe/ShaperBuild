@@ -1,5 +1,5 @@
 {
-  "instructions": "You are an expert CAD designer building 3D models in ShaperBuild with the tools given. Aim for models that look finished and well made, not rough blocks.\n\nCoordinates\n- Millimetres and degrees. Z points up; the ground (XY plane) is at Z = 0. Put the model on the ground, centred near X = 0, Y = 0.\n- add_shape: a box, cylinder or cone stands on `position` (the middle of its base) and goes up from there; a sphere or torus is centred on it. `rotation` [x, y, z] turns it about `position` (e.g. [90, 0, 0] lays a cylinder along Y).\n- Sketch planes and their 2D axes: XY (ground): x→X, y→Y, extrudes toward +Z. XZ (front): x→X, y→Z, extrudes toward -Y. YZ (side): x→Y, y→Z, extrudes toward +X. `offset` moves the plane along that direction. Use `symmetric: true` to extrude evenly to both sides of the plane: that is the easy way to centre a side profile on the model.\n- Every sketch result says its extrude_direction. A negative distance goes the other way.\n\nHow to work\n1. Plan first: list the parts with sizes and where each sits (which part touches which). Use real-world proportions.\n2. Build the main body, then add or cut the details. Prefer one good profile over many boxes: sketch an outline (polygon, spline, arcs, rounded rect, slot, ellipse) and extrude it, revolve a half-profile for round things (vases, bottles, knobs, mushrooms, wheels), loft between sections, sweep along a path for pipes, handles and rails.\n3. Join parts that belong together into one body (extrude mode \"union\", or boolean union) so there are no loose pieces; cut holes with mode \"subtract\".\n4. Finish: fillet or chamfer the sharp edges (do it near the end, on the joined body; start small, e.g. 1–3 mm, if it fails try smaller), give parts colours and names.\n5. Check: after the main steps, call screenshot (four views) and get_design. Fix anything off: floating or misplaced parts (get_design lists bodies that touch nothing), wrong sizes, wrong direction. Undo a bad step rather than piling fixes on it.\n\nTips\n- Revolve: draw a closed half-profile on plane XZ with x ≥ 0 (x = radius, y = height) and revolve around axis Z. Smooth curves: a spline through points, closed with lines along the axis and the base.\n- Spline and line ends must meet exactly to make a closed region; check that the sketch result has the regions you expect before extruding.\n- Each sketch call makes a new sketch; used sketches are hidden automatically.\n- Sketching on a body face (body_id + face) puts x, y relative to the face centre.",
+  "instructions": "You are an expert CAD designer building 3D models in ShaperBuild with the tools given. Aim for models that look finished and well made, not rough blocks.\n\nCoordinates\n- Millimetres and degrees. Z points up; the ground (XY plane) is at Z = 0. Put the model on the ground, centred near X = 0, Y = 0.\n- add_shape: a box, cylinder or cone stands on `position` (the middle of its base) and goes up from there; a sphere or torus is centred on it. `rotation` [x, y, z] turns it about `position` (e.g. [90, 0, 0] lays a cylinder along Y).\n- Sketch planes and their 2D axes: XY (ground): x→X, y→Y, extrudes toward +Z. XZ (front): x→X, y→Z, extrudes toward -Y. YZ (side): x→Y, y→Z, extrudes toward +X. `offset` moves the plane along that direction. Use `symmetric: true` to extrude evenly to both sides of the plane: that is the easy way to centre a side profile on the model.\n- Every sketch result says its extrude_direction. A negative distance goes the other way.\n\nHow to work\n1. Plan first: list the parts with sizes and where each sits (which part touches which). Use real-world proportions.\n2. Build the main body, then add or cut the details. Prefer one good profile over many boxes: sketch an outline (polygon, spline, arcs, rounded rect, slot, ellipse) and extrude it, revolve a half-profile for round things (vases, bottles, knobs, mushrooms, wheels), loft between sections, sweep along a path for pipes, handles and rails.\n3. Join parts that belong together into one body (extrude mode \"union\", or boolean union) so there are no loose pieces; cut holes with mode \"subtract\".\n4. Finish: fillet or chamfer the sharp edges (do it near the end, on the joined body; start small, e.g. 1–3 mm, if it fails try smaller), give parts colours and names.\n5. Check: after the main steps, call screenshot (four views) and get_design. Fix anything off: floating or misplaced parts (get_design lists bodies that touch nothing), wrong sizes, wrong direction. Undo a bad step rather than piling fixes on it.\n\nRecipes\n- Flat decorations (ornaments, keychains, signs, cookie cutters): one XY sketch, extruded 2–4 mm. A frame: circle with wall 2.5; a hanging loop: a small circle with wall at the top, overlapping the frame. Build pictures inside from overlapping simple shapes: a fir tree = 3–4 stacked triangles (polygons) plus a rect trunk; a star on top; a house = rect + triangle roof with a small rect hole: true for the window; snowy ground = an ellipse or arc-closed shape across the bottom; a snowflake = a thin rect arm with small angled rects, repeat {count: 6, around: centre}. Every part must touch the frame or another part so it prints as one piece. Extrude with the default (filled) regions.\n- Twisted fidget / vase: a star (or polygon) on XY, extruded with twist (e.g. 90–180) and end_scale (e.g. 0.6). Add wall to make it hollow.\n- Nested, expanding (telescoping) fidgets: shells of the same star, each smaller: shell i uses offset -i × (wall + gap) with wall 1.2 and gap 0.4, all extruded the same height with taper (e.g. 8°) so each shell catches on the next when pulled up. Print in place: keep the gap.\n- Text: a text shape in a sketch. On a flat face: sketch on the face (body_id + face) and extrude (negative distance engraves). Around a round face (mug, can, ring, ball): sketch the text on a plane that touches the face from the front and use wrap. Letters 1 mm deep (raised or engraved) read well; capital height ≥ 5 mm for printing.\n- Snap and print-in-place parts need clearance: 0.3–0.5 mm between parts that move.\n\nTips\n- Revolve: draw a closed half-profile on plane XZ with x ≥ 0 (x = radius, y = height) and revolve around axis Z. Smooth curves: a spline through points, closed with lines along the axis and the base.\n- Spline and line ends must meet exactly to make a closed region; check that the sketch result has the regions you expect before extruding.\n- Each sketch call makes a new sketch; used sketches are hidden automatically.\n- Sketching on a body face (body_id + face) puts x, y relative to the face centre.",
   "tools": [
     {
       "name": "get_design",
@@ -94,7 +94,7 @@
     },
     {
       "name": "sketch",
-      "description": "Draw 2D shapes on a plane in a new sketch, and get back its closed regions, ready to extrude, revolve, loft or sweep. Planes: XY (ground; x→X, y→Y, extrudes toward +Z), XZ (front; x→X, y→Z, extrudes toward -Y), YZ (side; x→Y, y→Z, extrudes toward +X), or a flat face of a body (x, y from the face centre). Shapes: rect {x, y, width, height, corner_radius?} (x, y = centre); circle {x, y, radius}; ellipse {x, y, radius_x, radius_y, angle?}; slot {x, y, length, width, angle?} (rounded ends, overall length); polygon {points:[[x,y],…]} (closed); regular_polygon {x, y, radius, sides}; line {from:[x,y], to:[x,y]}; arc {x, y, radius, start_angle, end_angle} (counter-clockwise, degrees); spline {points:[[x,y],…], closed?} (a smooth curve through the points). Lines, arcs and open splines whose ends meet make closed regions. Shapes inside each other make rings (a circle in a rect gives a plate with a hole, and the disc).",
+      "description": "Draw 2D shapes on a plane in a new sketch, and get back its closed regions (each marked filled or not), ready to extrude, revolve, loft or sweep. Planes: XY (ground; x→X, y→Y, extrudes toward +Z), XZ (front; x→X, y→Z, extrudes toward -Y), YZ (side; x→Y, y→Z, extrudes toward +X), or a flat face of a body (x, y from the face centre). Shapes: rect {x, y, width, height, corner_radius?} (x, y = centre); circle {x, y, radius}; ellipse {x, y, radius_x, radius_y, angle?}; slot {x, y, length, width, angle?} (rounded ends, overall length); star {x, y, tips, radius, inner_radius, angle?} (angle = where the first tip points, default 90 = up); polygon {points:[[x,y],…]} (closed); regular_polygon {x, y, radius, sides}; line {from:[x,y], to:[x,y]}; arc {x, y, radius, start_angle, end_angle} (counter-clockwise, degrees); spline {points:[[x,y],…], closed?} (a smooth curve through the points); text {text, x, y, size, font?, align?, angle?} (letters size mm tall, centred on x, y; font bold or regular; \\n for more lines). Lines, arcs and open splines whose ends meet make closed regions. Any closed shape can also take: wall (a ring of that thickness: the shape minus the same shape made smaller), offset (grow, or shrink if negative, before drawing: for nested copies with a gap), hole: true (its inside is a hole in what it overlaps), repeat {count, around?:[x,y], angle?} (copies turned around a point, over 360° by default) or {count, dx, dy} (copies in a row), mirror \"x\" (adds a copy flipped left↔right, x → -x) or \"y\" (up↔down). Overlapping shapes join into one filled area when extruded.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -116,7 +116,7 @@
             "description": "Sketch on a flat face of this body."
           },
           "face": {
-            "description": "A face: its number from get_body, or top, bottom, left, right, front or back (the flat face furthest that way)",
+            "description": "A face: its number from get_body, top, bottom, left, right, front or back (the flat face furthest that way), or round (the biggest curved face)",
             "anyOf": [
               {
                 "type": "integer"
@@ -129,7 +129,8 @@
                   "right",
                   "left",
                   "back",
-                  "front"
+                  "front",
+                  "round"
                 ]
               }
             ]
@@ -147,16 +148,18 @@
                     "circle",
                     "ellipse",
                     "slot",
+                    "star",
                     "polygon",
                     "regular_polygon",
                     "line",
                     "arc",
-                    "spline"
+                    "spline",
+                    "text"
                   ]
                 },
                 "x": {
                   "type": "number",
-                  "description": "Centre x (rect, circle, ellipse, slot, regular_polygon, arc)"
+                  "description": "Centre x (rect, circle, ellipse, slot, star, regular_polygon, arc)"
                 },
                 "y": {
                   "type": "number",
@@ -172,7 +175,7 @@
                 },
                 "radius": {
                   "type": "number",
-                  "description": "circle, regular_polygon, arc"
+                  "description": "circle, regular_polygon, arc; star: tip radius"
                 },
                 "sides": {
                   "type": "integer",
@@ -234,11 +237,94 @@
                 },
                 "angle": {
                   "type": "number",
-                  "description": "ellipse, slot: turn in degrees"
+                  "description": "ellipse, slot, text: turn in degrees; star: where the first tip points (default 90 = up)"
                 },
                 "closed": {
                   "type": "boolean",
                   "description": "spline: a closed loop"
+                },
+                "inner_radius": {
+                  "type": "number",
+                  "description": "star: radius of the inner corners"
+                },
+                "wall": {
+                  "type": "number",
+                  "description": "Closed shapes: make a ring of this thickness"
+                },
+                "offset": {
+                  "type": "number",
+                  "description": "Closed shapes: grow (or shrink if negative) by this much"
+                },
+                "hole": {
+                  "type": "boolean",
+                  "description": "Closed shapes: a hole, not filled"
+                },
+                "repeat": {
+                  "type": "object",
+                  "description": "Copies: {count, around:[x,y], angle} turns them around a point (angle = total, default 360); {count, dx, dy} puts them in a row",
+                  "properties": {
+                    "count": {
+                      "type": "integer"
+                    },
+                    "around": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      },
+                      "minItems": 2,
+                      "maxItems": 2
+                    },
+                    "angle": {
+                      "type": "number"
+                    },
+                    "dx": {
+                      "type": "number"
+                    },
+                    "dy": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "count"
+                  ],
+                  "additionalProperties": false
+                },
+                "mirror": {
+                  "type": "string",
+                  "enum": [
+                    "x",
+                    "y"
+                  ],
+                  "description": "Add a flipped copy: x = left↔right (x → -x), y = up↔down"
+                },
+                "tips": {
+                  "type": "integer",
+                  "description": "star: how many tips"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "text: the words"
+                },
+                "size": {
+                  "type": "number",
+                  "description": "text: height of capital letters"
+                },
+                "font": {
+                  "type": "string",
+                  "enum": [
+                    "bold",
+                    "regular"
+                  ],
+                  "description": "text"
+                },
+                "align": {
+                  "type": "string",
+                  "enum": [
+                    "center",
+                    "left",
+                    "right"
+                  ],
+                  "description": "text: where x is (default center)"
                 }
               },
               "required": [
@@ -255,7 +341,7 @@
     },
     {
       "name": "extrude",
-      "description": "Pull sketch regions into 3D, or push/pull a flat face of a body. A sketch goes along its extrude_direction (XY: +Z, XZ: -Y, YZ: +X); a negative distance goes the other way; symmetric goes half each way. mode: \"new\" (new body), \"union\" (join to the body it touches), \"subtract\" (cut holes and pockets), \"intersect\", or \"auto\" (default: joins or cuts the body the sketch is on). The used sketch is hidden.",
+      "description": "Pull sketch regions into 3D, or push/pull a flat face of a body. A sketch goes along its extrude_direction (XY: +Z, XZ: -Y, YZ: +X); a negative distance goes the other way; symmetric goes half each way. By default the filled regions are used (not the middle of a ring or a hole). twist turns the shape on the way (degrees, around each region's middle) and end_scale changes its size (both make twisted and tapered shapes like star fidgets and vases); taper leans the sides in by an angle (not with twist). mode: \"new\" (new body), \"union\" (join to the body it touches), \"subtract\" (cut holes and pockets), \"intersect\", or \"auto\" (default: joins or cuts the body the sketch is on). The used sketch is hidden.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -263,7 +349,7 @@
             "type": "string"
           },
           "regions": {
-            "description": "Region numbers from the sketch result, e.g. [0, 2] or \"0,2\", or \"all\" (default).",
+            "description": "\"filled\" (default), \"all\", or region numbers from the sketch result, e.g. [0, 2]",
             "anyOf": [
               {
                 "type": "string"
@@ -281,7 +367,7 @@
             "description": "To push/pull a face instead of a sketch."
           },
           "face": {
-            "description": "A face: its number from get_body, or top, bottom, left, right, front or back (the flat face furthest that way)",
+            "description": "A face: its number from get_body, top, bottom, left, right, front or back (the flat face furthest that way), or round (the biggest curved face)",
             "anyOf": [
               {
                 "type": "integer"
@@ -294,7 +380,8 @@
                   "right",
                   "left",
                   "back",
-                  "front"
+                  "front",
+                  "round"
                 ]
               }
             ]
@@ -319,6 +406,18 @@
           "through": {
             "type": "boolean",
             "description": "Cut through everything."
+          },
+          "twist": {
+            "type": "number",
+            "description": "Degrees to turn by the end"
+          },
+          "end_scale": {
+            "type": "number",
+            "description": "Size at the end: 1 keeps it, 0.5 halves it"
+          },
+          "taper": {
+            "type": "number",
+            "description": "Lean the sides in by this angle (degrees)"
           }
         },
         "required": [
@@ -337,7 +436,7 @@
             "type": "string"
           },
           "regions": {
-            "description": "Region numbers from the sketch result, e.g. [0, 2] or \"0,2\", or \"all\" (default).",
+            "description": "\"filled\" (default), \"all\", or region numbers",
             "anyOf": [
               {
                 "type": "string"
@@ -466,6 +565,73 @@
       }
     },
     {
+      "name": "wrap",
+      "description": "Put sketch shapes (text, logos, patterns) onto a face of a body, raised (positive height) or engraved (negative): onto a flat face, or wrapped around a round one (a mug, a cylinder, a ball, a cone, a ring) keeping their size. Draw the shapes on a plane facing the face that touches it, e.g. for a cylinder of radius R standing at the origin: plane XZ with offset R (the front, facing -Y), y = height on the side.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sketch_id": {
+            "type": "string"
+          },
+          "regions": {
+            "description": "\"filled\" (default), \"all\", or region numbers",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              }
+            ]
+          },
+          "body_id": {
+            "type": "string"
+          },
+          "face": {
+            "description": "A face: its number from get_body, top, bottom, left, right, front or back (the flat face furthest that way), or round (the biggest curved face)",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "round",
+                  "top",
+                  "bottom",
+                  "right",
+                  "left",
+                  "back",
+                  "front"
+                ]
+              }
+            ]
+          },
+          "height": {
+            "type": "number",
+            "description": "How far they stand out; negative engraves"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "new"
+            ],
+            "description": "auto (default) joins or cuts; new makes them a separate body"
+          }
+        },
+        "required": [
+          "sketch_id",
+          "body_id",
+          "height"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "fillet",
       "description": "Round edges of a body.",
       "input_schema": {
@@ -547,7 +713,7 @@
           "open_faces": {
             "type": "array",
             "items": {
-              "description": "A face: its number from get_body, or top, bottom, left, right, front or back (the flat face furthest that way)",
+              "description": "A face: its number from get_body, top, bottom, left, right, front or back (the flat face furthest that way), or round (the biggest curved face)",
               "anyOf": [
                 {
                   "type": "integer"
@@ -560,7 +726,8 @@
                     "right",
                     "left",
                     "back",
-                    "front"
+                    "front",
+                    "round"
                   ]
                 }
               ]

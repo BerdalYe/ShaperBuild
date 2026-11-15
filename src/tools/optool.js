@@ -4,6 +4,7 @@ import { Tool } from './base.js';
 import { LatestRunner } from '../kernel/client.js';
 import { itemKey } from '../core/selection.js';
 import { toast } from '../ui/overlays.js';
+import { t } from '../core/i18n.js';
 
 export class OpTool extends Tool {
   // Subclasses define:
@@ -275,6 +276,9 @@ export class OpTool extends Tool {
     this.result = result;
     this.app.clearResultPreview();
     this.app.cmd.applyResult(this.label || this.def.label, result, this.applyOptions ? this.applyOptions() : {});
+    // Done, but not all of it (e.g. edges too short to round at this size).
+    this.lastWarning = result.warning ? t(result.warning.text, result.warning) : null;
+    if (this.lastWarning) toast(this.lastWarning, { type: 'error', ms: 7000 });
     this.result = null;
     this.afterApply ? this.afterApply() : this.done();
   }

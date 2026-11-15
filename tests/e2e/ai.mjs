@@ -144,6 +144,49 @@ try {
   assert.deepEqual(dims, [960, 720]);
   await shot(win, 'ai-four-views');
 
+  step('decorations and fidgets: stars, walls, holes, copies; only filled regions are extruded');
+  const orn = await json('sketch', {
+    plane: 'XY',
+    shapes: [
+      { type: 'circle', x: 800, y: 0, radius: 30, wall: 3 },
+      { type: 'rect', x: 800, y: -20, width: 50, height: 14 },
+      { type: 'rect', x: 800, y: -20, width: 4, height: 4, hole: true },
+      { type: 'star', x: 800, y: 10, tips: 5, radius: 8, inner_radius: 4 },
+      { type: 'rect', x: 800, y: 22, width: 1.5, height: 12 },
+    ],
+  });
+  const filledAreas = orn.regions.filter((r) => r.filled);
+  assert.ok(filledAreas.length >= 3 && filledAreas.length < orn.regions.length, 'the inside of the ring and the window are not filled');
+  const ornBody = await json('extrude', { sketch_id: orn.id, distance: 3 });
+  assert.equal(ornBody.created.length, 1, `one piece: ${JSON.stringify(ornBody)}`);
+  assert.equal(ornBody.note, undefined);
+  const want = Math.PI * (900 - 27 * 27) + (50 * 14 - 16 - 0) + 5 * 8 * 4 * Math.sin(Math.PI / 5);
+  // Ring + snow block (minus the window, minus what is outside the circle) + star + stem: just check it is a ring, not a disc.
+  assert.ok((await vol(ornBody.created[0].id)) < Math.PI * 900 * 3 * 0.6, 'the middle of the ring stays open');
+  assert.ok((await vol(ornBody.created[0].id)) > Math.PI * (900 - 27 * 27) * 3, `at least the ring (${want})`);
+  const apart = await json('sketch', { plane: 'XY', shapes: [{ type: 'circle', x: 900, y: 0, radius: 3, repeat: { count: 3, dx: 10 } }, { type: 'slot', x: 900, y: 20, length: 12, width: 4, angle: 30, mirror: 'x' }] });
+  assert.equal(apart.regions.length, 5, 'three repeated circles and a slot mirrored around x = 0');
+  assert.ok(apart.regions.some((r) => Math.abs(r.center[0] + 900) < 0.01), 'the mirrored copy is at x = -900');
+  const spread = await json('extrude', { sketch_id: apart.id, distance: 2 });
+  assert.equal(spread.created.length, 5);
+  assert.match(spread.note, /5 separate bodies/);
+
+  step('twisted and nested stars');
+  const tw = await json('sketch', { plane: 'XY', shapes: [{ type: 'star', x: 1000, y: 0, tips: 6, radius: 20, inner_radius: 12, wall: 1.5 }] });
+  assert.deepEqual(tw.regions.map((r) => r.filled).sort(), [false, true]);
+  const twisted = await json('extrude', { sketch_id: tw.id, distance: 40, twist: 90, end_scale: 0.7 });
+  near(twisted.created[0].size[2], 40, 0.01);
+  near((twisted.created[0].min[0] + twisted.created[0].max[0]) / 2, 1000, 0.5);
+  const shells = await json('sketch', { plane: 'XY', shapes: [0, 1].map((i) => ({ type: 'star', x: 1100, y: 0, tips: 5, radius: 30, inner_radius: 15, offset: -i * 1.6, wall: 1.2 })) });
+  assert.equal(shells.regions.filter((r) => r.filled).length, 2, 'two thin shells');
+  const nested = await json('extrude', { sketch_id: shells.id, distance: 8, taper: 8, mode: 'new' });
+  assert.equal(nested.created.length, 2, 'the shells stay apart');
+  const [big, small] = nested.created.sort((a, b) => b.size[0] - a.size[0]);
+  assert.ok(big.max[1] <= 30 + 1e-3, 'the shells lean in, not out');
+  assert.ok(small.max[1] < big.max[1] - 1.5);
+  const thick = await run('sketch', { plane: 'XY', shapes: [{ type: 'circle', x: 0, y: 0, radius: 2, wall: 3 }] });
+  assert.match(thick.text, /wall is too thick/);
+
   step('the chat panel without a service set up asks to set one up');
   await win.locator('#btn-ai').click();
   await win.waitForSelector('.ai-panel:not([hidden]) .ai-empty');

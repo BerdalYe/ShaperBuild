@@ -85,6 +85,8 @@ const NB = {
   'DXF drawing': 'DXF-tegning',
   'Image to trace': 'Bilde å tegne over',
   'DXF drawing (becomes a sketch)': 'DXF-tegning (blir en skisse)',
+  'SVG drawing (becomes a sketch)': 'SVG-tegning (blir en skisse)',
+  'SVG drawing': 'SVG-tegning',
   'Image to trace (PNG, JPG)': 'Bilde å tegne over (PNG, JPG)',
   'PDF document': 'PDF-dokument',
   'SVG image': 'SVG-bilde',

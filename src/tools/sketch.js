@@ -2,7 +2,7 @@
 // sketch to draw on that plane. Points snap to existing geometry, the grid
 // and horizontal/vertical alignments. Start typing to enter exact sizes.
 import { Tool } from './base.js';
-import { add, sub, mul, len, dist, angleOf, polar, normAngle, arcFrom3Points, samePoint, sampleSpline, controlSplinePoints, regularPolygon, TAU, sweep } from '../core/geom2d.js';
+import { add, sub, mul, len, dist, angleOf, polar, normAngle, arcFrom3Points, samePoint, sampleSpline, controlSplinePoints, regularPolygon, starPoints, TAU, sweep } from '../core/geom2d.js';
 import { planeFrame, to2D, to3D, rayPlane, GROUND, makePlane, samePlane } from '../core/plane.js';
 import { formatLength } from '../core/units.js';
 
@@ -591,21 +591,43 @@ export class ArcTool extends SketchTool {
 
 export class PolygonTool extends SketchTool {
   get options() {
-    return [{ type: 'count', key: 'sides', label: 'Sides', value: this.app.settings.polygonSides || 6, min: 3, max: 64 }];
+    const st = this.app.settings;
+    const star = st.polygonStar;
+    return [
+      {
+        type: 'choice',
+        key: 'star',
+        label: 'Shape',
+        value: star ? 'star' : 'polygon',
+        options: [
+          { value: 'polygon', label: 'Polygon' },
+          { value: 'star', label: 'Star' },
+        ],
+      },
+      { type: 'count', key: 'sides', label: star ? 'Points' : 'Sides', value: st.polygonSides || (star ? 5 : 6), min: 3, max: 64 },
+      ...(star ? [{ type: 'count', key: 'inner', label: 'Inner size %', value: st.starInner || 45, min: 5, max: 95, hint: 'How deep the points are: the inner corners as a share of the outer size' }] : []),
+    ];
   }
 
   onOption(key, value) {
-    if (key === 'sides') {
-      this.app.settings.polygonSides = Math.round(value);
-      this.app.saveSettings();
-    } else super.onOption(key, value);
+    const st = this.app.settings;
+    if (key === 'sides') st.polygonSides = Math.round(value);
+    else if (key === 'inner') st.starInner = Math.round(value);
+    else if (key === 'star') {
+      st.polygonStar = value === 'star';
+      this.showPanel();
+    } else return super.onOption(key, value);
+    this.app.saveSettings();
   }
 
   verts(p) {
     const c = this.pts[0];
-    const n = this.app.settings.polygonSides || 6;
+    const st = this.app.settings;
+    const n = st.polygonSides || 6;
     const r = 'radius' in this.locked ? this.locked.radius : dist(c, p);
-    return regularPolygon(c, r, n, angleOf(sub(p, c)));
+    const a = angleOf(sub(p, c));
+    if (!st.polygonStar) return regularPolygon(c, r, n, a);
+    return starPoints(c, r, (r * (st.starInner || 45)) / 100, n, a);
   }
 
   preview(p, e) {
@@ -630,7 +652,7 @@ export class PolygonTool extends SketchTool {
     const cons = v.slice(1).map((_, i) => ({ type: 'equal', e: '#0', e2: `#${i + 1}` }));
     this.commit(
       v.map((a, i) => ({ type: 'line', a, b: v[(i + 1) % v.length] })),
-      'Polygon',
+      this.app.settings.polygonStar ? 'Star' : 'Polygon',
       cons,
     );
     this.reset();

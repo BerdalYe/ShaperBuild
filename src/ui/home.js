@@ -5,6 +5,7 @@ import { loadThumbs, moveThumb } from '../fileops.js';
 import { showMenu, modal, toast } from './overlays.js';
 import { t, language } from '../core/i18n.js';
 import { LESSONS, LEVELS } from './lessons.js';
+import { EXAMPLES } from '../examples/examples.js';
 
 // "2 days ago", in the app's language.
 function ago(ms) {
@@ -124,6 +125,19 @@ export class Home {
       create.addEventListener('click', () => app.files.newDesign());
       main.append(h('div.home-empty', h('div.he-icon', { html: icon('box') }), h('div', { text: 'Designs you save will show up here.' }), create));
     }
+
+    // Ready-made examples to open and change.
+    main.append(h('div.home-sec', h('h2', { text: 'Examples' }), h('span.count', { str: String(EXAMPLES.length) })));
+    const examples = h('div.recent-grid.example-grid');
+    for (const ex of EXAMPLES) {
+      const thumb = h('div.thumb');
+      thumb.style.backgroundImage = `url(examples/thumbs/${ex.id}.jpg)`;
+      const card = h('button.recent-card.example-card', thumb, h('div.meta', h('b', { text: ex.title }), h('span.ex-desc', { text: ex.desc })));
+      card.dataset.example = ex.id;
+      card.addEventListener('click', () => app.files.openExample(ex.id));
+      examples.append(card);
+    }
+    main.append(examples);
 
     // Every tutorial, easy to hard.
     main.append(h('div.home-sec', h('h2', { text: 'Tutorials' }), h('span.count', { str: t('{done} of {n} done', { done: doneCount, n: LESSONS.length }) })));

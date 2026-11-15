@@ -123,6 +123,7 @@ const P = {
   planeRef: '<path d="M2.5 17l5-8.5h14l-5 8.5z"/><path d="M12 13V3.5M9.6 5.9L12 3.5l2.4 2.4"/>',
   image: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="M4 17l5-5 4 4 2.5-2.5L20 18"/>',
   save: '<path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/>',
+  trace: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M7.5 16.5 12 7l4.5 9.5c-1.5-1-3-1.4-4.5-1.4s-3 .4-4.5 1.4z" stroke-linejoin="round"/>',
 };
 
 export function icon(name, cls = '') {
