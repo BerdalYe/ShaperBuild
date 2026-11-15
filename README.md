@@ -101,7 +101,7 @@ The geometry engine is [OpenCascade](https://dev.opencascade.org/) (a real B-rep
 
 ## AI assistant
 
-Click **AI** in the top bar and say what to build: *“a 60 × 40 × 6 mm plate with a 4 mm hole in each corner and rounded corners”*. The AI builds it with the same tools you use: shapes, sketches, extrude, revolve, fillet, chamfer, shell, union/subtract, move, patterns, mirror and colours. Every step shows up in History, and **Undo this** takes back everything it did for one request. It can also take a picture of the design to check its work.
+Click **AI** in the top bar and say what to build: *“a 60 × 40 × 6 mm plate with a 4 mm hole in each corner and rounded corners”*. The AI builds it with the same tools you use: shapes, sketches (with splines, slots, ellipses and rounded rectangles), extrude, revolve, loft, sweep, fillet, chamfer, shell, union/subtract, move, patterns, mirror and colours. Every step shows up in History, and **Undo this** takes back everything it did for one request. It checks its work with a picture of four views (iso, front, top, right) and hides sketches it has used.
 
 - **Claude** (Anthropic): paste your API key from [console.anthropic.com](https://console.anthropic.com/settings/keys) in the AI settings and pick Opus (most capable), Sonnet or Haiku (faster and cheaper). You pay Anthropic per use; a request usually costs a few cents.
 - **Google Gemini**: get a key at [aistudio.google.com](https://aistudio.google.com/apikey) (Google has a free tier with daily limits), paste it, and click **Find models**.

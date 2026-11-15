@@ -135,11 +135,12 @@ export class Commands {
     return id;
   }
 
-  addSketchEntities(plane, sketchId, entities, label = 'Sketch', constraints = []) {
+  // `fresh`: always start a new sketch (the AI tools keep each sketch apart).
+  addSketchEntities(plane, sketchId, entities, label = 'Sketch', constraints = [], { fresh = false } = {}) {
     const app = this.app;
     return this.doc.apply(label, (d) => {
       let sk = sketchId ? d.sketch(sketchId) : null;
-      if (!sk) {
+      if (!sk && !fresh) {
         const existing = d.sketches.find((s) => s.visible !== false && samePlane(s.plane, plane));
         if (existing) sk = existing;
       }

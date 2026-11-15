@@ -1,9 +1,9 @@
 {
-  "instructions": "You are building 3D models in ShaperBuild, a CAD app, with the tools given.\n- Lengths are millimetres, angles degrees. Z points up; the ground (XY plane) is at Z = 0.\n- Shapes from add_shape stand on their position: a box or cylinder at [0,0,0] fills X and Y around 0 and goes from Z = 0 up.\n- Bodies have ids like \"b1\", sketches like \"s1\". Use get_design to see what is there and get_body for a body's faces and edges.\n- For a custom outline: sketch it (rectangles, circles, polygons, lines and arcs on a plane or a flat face), then extrude its regions. Extrude with mode \"subtract\" cuts holes and pockets; \"union\" adds to the body it touches.\n- Work in small steps and check the results each tool returns. Use screenshot to look at the design when it helps.\n- Every step can be undone; use undo if a step went wrong.",
+  "instructions": "You are an expert CAD designer building 3D models in ShaperBuild with the tools given. Aim for models that look finished and well made, not rough blocks.\n\nCoordinates\n- Millimetres and degrees. Z points up; the ground (XY plane) is at Z = 0. Put the model on the ground, centred near X = 0, Y = 0.\n- add_shape: a box, cylinder or cone stands on `position` (the middle of its base) and goes up from there; a sphere or torus is centred on it. `rotation` [x, y, z] turns it about `position` (e.g. [90, 0, 0] lays a cylinder along Y).\n- Sketch planes and their 2D axes: XY (ground): x→X, y→Y, extrudes toward +Z. XZ (front): x→X, y→Z, extrudes toward -Y. YZ (side): x→Y, y→Z, extrudes toward +X. `offset` moves the plane along that direction. Use `symmetric: true` to extrude evenly to both sides of the plane: that is the easy way to centre a side profile on the model.\n- Every sketch result says its extrude_direction. A negative distance goes the other way.\n\nHow to work\n1. Plan first: list the parts with sizes and where each sits (which part touches which). Use real-world proportions.\n2. Build the main body, then add or cut the details. Prefer one good profile over many boxes: sketch an outline (polygon, spline, arcs, rounded rect, slot, ellipse) and extrude it, revolve a half-profile for round things (vases, bottles, knobs, mushrooms, wheels), loft between sections, sweep along a path for pipes, handles and rails.\n3. Join parts that belong together into one body (extrude mode \"union\", or boolean union) so there are no loose pieces; cut holes with mode \"subtract\".\n4. Finish: fillet or chamfer the sharp edges (do it near the end, on the joined body; start small, e.g. 1–3 mm, if it fails try smaller), give parts colours and names.\n5. Check: after the main steps, call screenshot (four views) and get_design. Fix anything off: floating or misplaced parts (get_design lists bodies that touch nothing), wrong sizes, wrong direction. Undo a bad step rather than piling fixes on it.\n\nTips\n- Revolve: draw a closed half-profile on plane XZ with x ≥ 0 (x = radius, y = height) and revolve around axis Z. Smooth curves: a spline through points, closed with lines along the axis and the base.\n- Spline and line ends must meet exactly to make a closed region; check that the sketch result has the regions you expect before extruding.\n- Each sketch call makes a new sketch; used sketches are hidden automatically.\n- Sketching on a body face (body_id + face) puts x, y relative to the face centre.",
   "tools": [
     {
       "name": "get_design",
-      "description": "What is in the design: bodies (id, name, size, volume), sketches (id, plane, closed regions you can extrude) and the units shown to the user.",
+      "description": "What is in the design: bodies (id, name, min/max corners, size), sketches (id, plane, extrude_direction, closed regions you can extrude) and bodies that touch no other body.",
       "input_schema": {
         "type": "object",
         "properties": {},
@@ -29,7 +29,7 @@
     },
     {
       "name": "add_shape",
-      "description": "Add a basic solid: box (width × depth × height), cylinder (radius, height), sphere (radius), cone (radius, top_radius, height) or torus (major = ring radius, minor = tube radius). It stands on `position` (the middle of its base); a sphere or torus is centred on it.",
+      "description": "Add a basic solid: box (width × depth × height, along X × Y × Z), cylinder (radius, height), sphere (radius), cone (radius, top_radius, height) or torus (major = ring radius, minor = tube radius). A box, cylinder or cone stands on `position` (the middle of its base) and goes up; a sphere or torus is centred on it. `rotation` turns it about `position`.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -75,6 +75,15 @@
           },
           "name": {
             "type": "string"
+          },
+          "rotation": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "Degrees around X, Y, Z, e.g. [90, 0, 0] lays a cylinder along Y, [0, 90, 0] along X"
           }
         },
         "required": [
@@ -85,7 +94,7 @@
     },
     {
       "name": "sketch",
-      "description": "Draw 2D shapes on a plane and get back the closed regions, ready to extrude or revolve. The plane is \"XY\" (ground), \"XZ\" (front, sketch y = world Z), \"YZ\" (side), or a flat face of a body. x/y are positions in the plane; on a face they are measured from the face centre. Shapes: {type:\"rect\", x, y, width, height} (x, y = centre), {type:\"circle\", x, y, radius}, {type:\"polygon\", points:[[x,y],…]} (closed), {type:\"regular_polygon\", x, y, radius, sides}, {type:\"line\", from:[x,y], to:[x,y]}, {type:\"arc\", x, y, radius, start_angle, end_angle}. Shapes inside each other make rings (a circle in a rectangle gives a plate region with a hole and the disc).",
+      "description": "Draw 2D shapes on a plane in a new sketch, and get back its closed regions, ready to extrude, revolve, loft or sweep. Planes: XY (ground; x→X, y→Y, extrudes toward +Z), XZ (front; x→X, y→Z, extrudes toward -Y), YZ (side; x→Y, y→Z, extrudes toward +X), or a flat face of a body (x, y from the face centre). Shapes: rect {x, y, width, height, corner_radius?} (x, y = centre); circle {x, y, radius}; ellipse {x, y, radius_x, radius_y, angle?}; slot {x, y, length, width, angle?} (rounded ends, overall length); polygon {points:[[x,y],…]} (closed); regular_polygon {x, y, radius, sides}; line {from:[x,y], to:[x,y]}; arc {x, y, radius, start_angle, end_angle} (counter-clockwise, degrees); spline {points:[[x,y],…], closed?} (a smooth curve through the points). Lines, arcs and open splines whose ends meet make closed regions. Shapes inside each other make rings (a circle in a rect gives a plate with a hole, and the disc).",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -136,15 +145,18 @@
                   "enum": [
                     "rect",
                     "circle",
+                    "ellipse",
+                    "slot",
                     "polygon",
                     "regular_polygon",
                     "line",
-                    "arc"
+                    "arc",
+                    "spline"
                   ]
                 },
                 "x": {
                   "type": "number",
-                  "description": "Centre x (rect, circle, regular_polygon, arc)"
+                  "description": "Centre x (rect, circle, ellipse, slot, regular_polygon, arc)"
                 },
                 "y": {
                   "type": "number",
@@ -152,7 +164,7 @@
                 },
                 "width": {
                   "type": "number",
-                  "description": "rect"
+                  "description": "rect, slot"
                 },
                 "height": {
                   "type": "number",
@@ -176,7 +188,7 @@
                     "minItems": 2,
                     "maxItems": 2
                   },
-                  "description": "polygon corners [[x,y],…]"
+                  "description": "polygon, spline: [[x, y], …]"
                 },
                 "from": {
                   "type": "array",
@@ -203,6 +215,30 @@
                 "end_angle": {
                   "type": "number",
                   "description": "arc, degrees"
+                },
+                "corner_radius": {
+                  "type": "number",
+                  "description": "rect: round its corners"
+                },
+                "radius_x": {
+                  "type": "number",
+                  "description": "ellipse"
+                },
+                "radius_y": {
+                  "type": "number",
+                  "description": "ellipse"
+                },
+                "length": {
+                  "type": "number",
+                  "description": "slot: overall length"
+                },
+                "angle": {
+                  "type": "number",
+                  "description": "ellipse, slot: turn in degrees"
+                },
+                "closed": {
+                  "type": "boolean",
+                  "description": "spline: a closed loop"
                 }
               },
               "required": [
@@ -219,7 +255,7 @@
     },
     {
       "name": "extrude",
-      "description": "Pull sketch regions into 3D, or push/pull a flat face of a body. mode: \"new\" (new body), \"union\" (join to the body it touches), \"subtract\" (cut: holes, pockets), \"intersect\", or \"auto\" (default: picks for you). A negative distance goes the other way (into a face).",
+      "description": "Pull sketch regions into 3D, or push/pull a flat face of a body. A sketch goes along its extrude_direction (XY: +Z, XZ: -Y, YZ: +X); a negative distance goes the other way; symmetric goes half each way. mode: \"new\" (new body), \"union\" (join to the body it touches), \"subtract\" (cut holes and pockets), \"intersect\", or \"auto\" (default: joins or cuts the body the sketch is on). The used sketch is hidden.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -293,7 +329,7 @@
     },
     {
       "name": "revolve",
-      "description": "Spin sketch regions around a world axis (X, Y or Z through the origin), e.g. to make vases, wheels or bottles. Draw the profile on one side of the axis.",
+      "description": "Spin sketch regions around a world axis (X, Y or Z through the origin) to make round things: vases, bottles, knobs, wheels, mushroom caps. Draw a closed half-profile on one side of the axis, e.g. on plane XZ with x ≥ 0 (x = radius, y = height) and axis Z.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -340,6 +376,91 @@
         "required": [
           "sketch_id",
           "axis"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "loft",
+      "description": "Blend smoothly between 2 or more profiles, in order (e.g. a circle at the bottom, a square higher up): sketch each one on its own plane (e.g. XY with offset 0, 30, 60) first. Good for bottles, handles, tapered and organic shapes.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "profiles": {
+            "type": "array",
+            "description": "In order: [{sketch_id, region}] (region defaults to 0)",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sketch_id": {
+                  "type": "string"
+                },
+                "region": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "sketch_id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "new",
+              "union",
+              "subtract",
+              "intersect"
+            ],
+            "description": "Default new"
+          }
+        },
+        "required": [
+          "profiles"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "sweep",
+      "description": "Move a profile along a path: pipes, rails, handles, springs, cables. Sketch the profile (e.g. a circle) where the path starts, at right angles to it, and the path (lines, arcs or a spline, ends joined) in another sketch. Twist turns the profile along the way; end_scale changes its size.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "sketch_id": {
+            "type": "string",
+            "description": "The profile's sketch"
+          },
+          "region": {
+            "type": "integer",
+            "description": "Default 0"
+          },
+          "path_sketch_id": {
+            "type": "string",
+            "description": "A sketch holding only the path curves"
+          },
+          "twist": {
+            "type": "number"
+          },
+          "end_scale": {
+            "type": "number",
+            "description": "Default 1"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "new",
+              "union",
+              "subtract",
+              "intersect"
+            ],
+            "description": "Default new"
+          }
+        },
+        "required": [
+          "sketch_id",
+          "path_sketch_id"
         ],
         "additionalProperties": false
       }
@@ -696,13 +817,14 @@
     },
     {
       "name": "screenshot",
-      "description": "A picture of the design, to check how it looks. view: iso (default), top, front, right, left, back, bottom.",
+      "description": "A picture of the design, to check shape and placement. Default \"all\": iso, front, top and right views in one picture. Or one view: iso, top, front, right, left, back, bottom.",
       "input_schema": {
         "type": "object",
         "properties": {
           "view": {
             "type": "string",
             "enum": [
+              "all",
               "iso",
               "top",
               "front",

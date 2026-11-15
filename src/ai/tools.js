@@ -65,15 +65,39 @@ async function regionsOf(app, sketchId) {
   return { key: c?.key, regions: c?.data?.regions || [] };
 }
 
+// "+Z", "-Y"… for a direction along an axis, else the vector.
+function axisName(n) {
+  const i = n.findIndex((v) => Math.abs(v) > 0.999);
+  return i < 0 ? rv(n) : `${n[i] > 0 ? '+' : '-'}${'XYZ'[i]}`;
+}
+
 async function sketchSummary(app, sk) {
   const { regions } = await regionsOf(app, sk.id);
   return {
     id: sk.id,
     name: sk.name,
+    ...(sk.visible === false ? { hidden: true } : {}),
     plane: { origin: rv(sk.plane.origin), normal: rv(sk.plane.normal) },
+    extrude_direction: axisName(sk.plane.normal),
     curves: sk.entities.length,
     regions: regions.map((r) => ({ index: r.index, area: r3(r.area), center: rv(r.centroid) })),
   };
+}
+
+// Sketches used up by a step are hidden, as people do by hand, so their
+// outlines don't clutter the model. Part of the same undo step.
+function hideSketches(app, ids) {
+  const hide = [...new Set(ids)].filter((id) => app.doc.sketch(id)?.visible !== false);
+  if (hide.length) app.doc.replaceSilently((d) => hide.forEach((id) => d.updateSketch(id, { visible: false })));
+}
+
+// Bodies whose boxes don't meet any other body: often a part that should
+// sit on or in another one.
+function notTouching(app) {
+  const boxes = app.doc.bodies.map((b) => [b.id, app.bodyMesh(b.id)?.bbox]).filter(([, bb]) => bb);
+  if (boxes.length < 2) return [];
+  const meet = (a, b) => a.min.every((v, i) => v <= b.max[i] + 0.01 && b.min[i] <= a.max[i] + 0.01);
+  return boxes.filter(([id, bb]) => !boxes.some(([id2, bb2]) => id2 !== id && meet(bb, bb2))).map(([id]) => id);
 }
 
 // "0, 3" or [0, 3] → [0, 3]; anything else → null. (Some AI services send
@@ -195,6 +219,22 @@ function sketchEntities(shapes) {
         const h = Number(s.height);
         if (!(w > 0 && h > 0)) throw new ToolError('A rect needs a positive width and height');
         const [x, y] = [at(s), at(s, 'y')];
+        const cr = Math.min(Number(s.corner_radius || 0), w / 2, h / 2);
+        if (cr > 1e-9) {
+          // Rounded corners: four sides and four quarter arcs.
+          const [x0, x1, y0, y1] = [x - w / 2, x + w / 2, y - h / 2, y + h / 2];
+          const q = Math.PI / 2;
+          const side = (a, b) => (Math.hypot(b[0] - a[0], b[1] - a[1]) > 1e-9 ? ents.push({ type: 'line', a, b }) : null);
+          side([x0 + cr, y0], [x1 - cr, y0]);
+          ents.push({ type: 'arc', c: [x1 - cr, y0 + cr], r: cr, a0: -q, a1: 0 });
+          side([x1, y0 + cr], [x1, y1 - cr]);
+          ents.push({ type: 'arc', c: [x1 - cr, y1 - cr], r: cr, a0: 0, a1: q });
+          side([x1 - cr, y1], [x0 + cr, y1]);
+          ents.push({ type: 'arc', c: [x0 + cr, y1 - cr], r: cr, a0: q, a1: 2 * q });
+          side([x0, y1 - cr], [x0, y0 + cr]);
+          ents.push({ type: 'arc', c: [x0 + cr, y0 + cr], r: cr, a0: 2 * q, a1: 3 * q });
+          break;
+        }
         const c = [
           [x - w / 2, y - h / 2],
           [x + w / 2, y - h / 2],
@@ -229,15 +269,50 @@ function sketchEntities(shapes) {
         break;
       }
       case 'line':
+        if (!Array.isArray(s.from) || !Array.isArray(s.to)) throw new ToolError('A line needs from: [x, y] and to: [x, y]');
         ents.push({ type: 'line', a: s.from.map(Number), b: s.to.map(Number) });
         break;
+      case 'spline': {
+        const pts = (s.points || []).map((p) => [Number(p[0]), Number(p[1])]);
+        if (pts.length < 2) throw new ToolError('A spline needs at least 2 points');
+        ents.push({ type: 'spline', pts, ...(s.closed ? { closed: true } : {}) });
+        break;
+      }
+      case 'ellipse': {
+        const rx = Number(s.radius_x ?? s.rx);
+        const ry = Number(s.radius_y ?? s.ry);
+        if (!(rx > 0 && ry > 0)) throw new ToolError('An ellipse needs a positive radius_x and radius_y');
+        ents.push({ type: 'ellipse', c: [at(s), at(s, 'y')], rx, ry, rot: (Number(s.angle || 0) * Math.PI) / 180 });
+        break;
+      }
+      case 'slot': {
+        const len = Number(s.length);
+        const r = Number(s.width) / 2;
+        if (!(r > 0 && len >= 2 * r)) throw new ToolError('A slot needs a width and a length at least as long as the width');
+        const t = (Number(s.angle || 0) * Math.PI) / 180;
+        const d = [Math.cos(t), Math.sin(t)];
+        const n = [-d[1], d[0]];
+        const h = len / 2 - r;
+        const c1 = [at(s) - d[0] * h, at(s, 'y') - d[1] * h];
+        const c2 = [at(s) + d[0] * h, at(s, 'y') + d[1] * h];
+        const off = (c, k) => [c[0] + n[0] * r * k, c[1] + n[1] * r * k];
+        if (h < 1e-9) {
+          ents.push({ type: 'circle', c: c1, r });
+          break;
+        }
+        ents.push({ type: 'line', a: off(c1, -1), b: off(c2, -1) });
+        ents.push({ type: 'arc', c: c2, r, a0: t - Math.PI / 2, a1: t + Math.PI / 2 });
+        ents.push({ type: 'line', a: off(c2, 1), b: off(c1, 1) });
+        ents.push({ type: 'arc', c: c1, r, a0: t + Math.PI / 2, a1: t + (3 * Math.PI) / 2 });
+        break;
+      }
       case 'arc': {
         const d = Math.PI / 180;
         ents.push({ type: 'arc', c: [at(s), at(s, 'y')], r: Number(s.radius), a0: Number(s.start_angle ?? 0) * d, a1: Number(s.end_angle ?? 180) * d });
         break;
       }
       default:
-        throw new ToolError(`Unknown shape type "${s.type}": use rect, circle, polygon, regular_polygon, line or arc`);
+        throw new ToolError(`Unknown shape type "${s.type}": use rect, circle, ellipse, slot, polygon, regular_polygon, line, arc or spline`);
     }
   }
   return { ents, cons };
@@ -262,12 +337,15 @@ function sketchPlane(app, { plane = 'XY', offset = 0, body_id, face }) {
 
 const DO = {
   async get_design(app) {
-    return {
+    const out = {
       units_shown: app.units,
-      bodies: app.doc.bodies.map((b) => bodySummary(app, b)),
+      bodies: app.doc.bodies.map((b) => ({ ...bodySummary(app, b), ...(b.visible === false ? { hidden: true } : {}) })),
       sketches: await Promise.all(app.doc.sketches.map((s) => sketchSummary(app, s))),
       steps: app.history.features.length,
     };
+    const apart = notTouching(app);
+    if (apart.length) out.not_touching_other_bodies = apart;
+    return out;
   },
 
   async get_body(app, { body_id }) {
@@ -288,8 +366,16 @@ const DO = {
       torus: { major: a.major ?? 15, minor: a.minor ?? 4 },
     }[shape];
     if (!params) throw new ToolError(`Unknown shape "${shape}"`);
-    const [x, y, z] = a.position || [0, 0, 0];
-    const matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, z, 1];
+    const [x, y, z] = (a.position || [0, 0, 0]).map(Number);
+    // Turned around X, then Y, then Z (degrees), about `position`.
+    const [ax, ay, az] = (a.rotation || [0, 0, 0]).map((v) => (Number(v || 0) * Math.PI) / 180);
+    const [cx, sx, cy, sy, cz, sz] = [Math.cos(ax), Math.sin(ax), Math.cos(ay), Math.sin(ay), Math.cos(az), Math.sin(az)];
+    const R = [
+      [cz * cy, cz * sy * sx - sz * cx, cz * sy * cx + sz * sx],
+      [sz * cy, sz * sy * sx + cz * cx, sz * sy * cx - cz * sx],
+      [-sy, cy * sx, cy * cx],
+    ];
+    const matrix = [R[0][0], R[1][0], R[2][0], 0, R[0][1], R[1][1], R[2][1], 0, R[0][2], R[1][2], R[2][2], 0, x, y, z, 1];
     const was = new Map(app.doc.bodies.map((b) => [b.id, b.shapeId]));
     const res = await app.kernel.call('primitive', { type: shape, params, matrix });
     app.cmd.applyResult(shape[0].toUpperCase() + shape.slice(1), res);
@@ -305,18 +391,47 @@ const DO = {
     if (!Array.isArray(a.shapes) || !a.shapes.length) throw new ToolError('Give at least one shape');
     const plane = sketchPlane(app, a);
     const { ents, cons } = sketchEntities(a.shapes);
-    const id = app.cmd.addSketchEntities(plane, null, ents, 'Sketch', cons);
+    const id = app.cmd.addSketchEntities(plane, null, ents, 'Sketch', cons, { fresh: true });
     return sketchSummary(app, app.doc.sketch(id));
   },
 
   async extrude(app, a) {
     const items = await profiles(app, a);
-    return runTool(app, 'extrude', { slots: { profiles: items }, values: { distance: a.distance, mode: a.mode || 'auto', symmetric: !!a.symmetric, through: !!a.through } });
+    const out = await runTool(app, 'extrude', { slots: { profiles: items }, values: { distance: a.distance, mode: a.mode || 'auto', symmetric: !!a.symmetric, through: !!a.through } });
+    hideSketches(app, items.map((it) => it.sketchId).filter(Boolean));
+    return out;
   },
 
   async revolve(app, a) {
     const items = await profiles(app, a);
-    return runTool(app, 'revolve', { slots: { profiles: items }, values: { worldAxis: String(a.axis).toLowerCase(), angle: a.angle ?? 360, mode: a.mode || 'auto' } });
+    const out = await runTool(app, 'revolve', { slots: { profiles: items }, values: { worldAxis: String(a.axis).toLowerCase(), angle: a.angle ?? 360, mode: a.mode || 'auto' } });
+    hideSketches(app, items.map((it) => it.sketchId));
+    return out;
+  },
+
+  async loft(app, a) {
+    const list = Array.isArray(a.profiles) ? a.profiles : [];
+    if (list.length < 2) throw new ToolError('Give at least 2 profiles: [{sketch_id, region}, …] in order');
+    const items = [];
+    for (const p of list) {
+      const got = await profiles(app, { sketch_id: p.sketch_id, regions: [Number(p.region ?? 0)] });
+      items.push(...got);
+    }
+    const out = await runTool(app, 'loft', { slots: { profiles: items }, values: { mode: a.mode && a.mode !== 'auto' ? a.mode : 'new' } });
+    hideSketches(app, items.map((it) => it.sketchId));
+    return out;
+  },
+
+  async sweep(app, a) {
+    const items = await profiles(app, { sketch_id: a.sketch_id, regions: [Number(a.region ?? 0)] });
+    const path = sketchOf(app, a.path_sketch_id);
+    if (!path.entities.length) throw new ToolError(`Sketch ${path.id} has no curves`);
+    const out = await runTool(app, 'sweep', {
+      slots: { profiles: items, path: path.entities.map((e) => ({ kind: 'curve', sketchId: path.id, entityId: e.id })) },
+      values: { mode: a.mode && a.mode !== 'auto' ? a.mode : 'new', twist: Number(a.twist || 0), endScale: Number(a.end_scale ?? 1) },
+    });
+    hideSketches(app, [items[0].sketchId, path.id]);
+    return out;
   },
 
   async fillet(app, a) {
@@ -401,20 +516,40 @@ const DO = {
   },
 
   async screenshot(app, a) {
-    app.vp.setView(a.view || 'iso', { fit: true });
-    app.vp.rig.tick(performance.now() + 60000); // finish the camera move at once
-    // A JPEG is a tenth of the size of the PNG the view gives.
-    const img = new Image();
-    img.src = app.vp.capture({ width: 800, height: 600 });
-    await img.decode();
+    const view = a.view || 'all';
+    // "all": four views in one picture, to check shape and placement.
+    const views = view === 'all' ? ['iso', 'front', 'top', 'right'] : [view];
+    const [w, h] = views.length > 1 ? [480, 360] : [800, 600];
     const canvas = document.createElement('canvas');
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
+    canvas.width = views.length > 1 ? w * 2 : w;
+    canvas.height = views.length > 1 ? h * 2 : h;
     const g = canvas.getContext('2d');
     g.fillStyle = '#ffffff';
     g.fillRect(0, 0, canvas.width, canvas.height);
-    g.drawImage(img, 0, 0);
-    return { image: canvas.toDataURL('image/jpeg', 0.85).split(',')[1], mime: 'image/jpeg', text: `View: ${a.view || 'iso'}` };
+    for (let i = 0; i < views.length; i++) {
+      app.vp.setView(views[i], { fit: true });
+      app.vp.rig.tick(performance.now() + 60000); // finish the camera move at once
+      const img = new Image();
+      img.src = app.vp.capture({ width: w, height: h });
+      await img.decode();
+      const [x, y] = [(i % 2) * w, Math.floor(i / 2) * h];
+      g.drawImage(img, x, y, w, h);
+      if (views.length > 1) {
+        g.font = 'bold 18px sans-serif';
+        g.fillStyle = 'rgba(0,0,0,0.6)';
+        g.fillRect(x + 8, y + 8, g.measureText(views[i]).width + 16, 28);
+        g.fillStyle = '#ffffff';
+        g.fillText(views[i], x + 16, y + 29);
+      }
+    }
+    if (views.length > 1) {
+      g.fillStyle = '#888888';
+      g.fillRect(w - 1, 0, 2, canvas.height);
+      g.fillRect(0, h - 1, canvas.width, 2);
+    }
+    // A JPEG is a tenth of the size of the PNG the view gives.
+    const text = views.length > 1 ? 'Four views: iso (top left), front = looking along +Y (top right), top = looking down (bottom left), right = looking along -X (bottom right)' : `View: ${view}`;
+    return { image: canvas.toDataURL('image/jpeg', 0.85).split(',')[1], mime: 'image/jpeg', text };
   },
 };
 
