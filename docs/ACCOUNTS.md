@@ -20,6 +20,18 @@ the account button explains that accounts are not set up.
 provider* on. *Confirm email* on means new users click a link in an email
 before they can sign in (recommended); ShaperBuild tells them so.
 
+**Site URL:** under **Authentication → URL Configuration**, set the *Site
+URL* to a page people can land on after clicking the link in the
+confirmation email (for example the project's GitHub page). Otherwise the
+link ends on `localhost:3000`, which looks broken even though the email was
+confirmed.
+
+**Email sending:** Supabase's built-in email sender only sends a few emails
+an hour and is meant for testing. Before real people sign up, connect your
+own sender under **Authentication → Emails → SMTP Settings** (for example
+Resend, Brevo or your email provider), and change the email templates to say
+ShaperBuild.
+
 **Google (optional):**
 
 1. In Google Cloud Console make an OAuth client (type *Web application*)
@@ -32,22 +44,30 @@ before they can sign in (recommended); ShaperBuild tells them so.
 
 ## 3. Connect the app
 
-Open **Project Settings → API** and copy the **Project URL** and the
-**anon public** key into [`electron/cloud-config.json`](../electron/cloud-config.json):
+The app's builds get the project from two **repository variables** (not
+secrets: these values are meant to be public), so no key is kept in the code.
 
-```json
-{
-  "url": "https://YOUR-PROJECT.supabase.co",
-  "anonKey": "eyJ...",
-  "google": true
-}
-```
+1. In Supabase open **Project Settings → API Keys** and copy the **Project
+   URL** and the **publishable** key (`sb_publishable_…`) or the legacy
+   **anon public** key. Never use the **secret** / **service_role** key.
+2. On GitHub open the repository's **Settings → Secrets and variables →
+   Actions → Variables** and add:
+   - `SUPABASE_URL`: the Project URL, e.g. `https://YOUR-PROJECT.supabase.co`
+   - `SUPABASE_ANON_KEY`: the publishable (or anon) key
+   - `SUPABASE_GOOGLE`: `true` if you turned on Google (optional)
+3. Build or release as usual: the build writes them into
+   `electron/cloud-config.json` before packaging, and every copy then has
+   accounts. Without the variables the app is built without accounts.
 
-Set `"google": false` if you skipped Google. The anon key is meant to be
-public: the database rules from step 1 are what protect the data. Never put
-the **service_role** key in the app.
+The anon and publishable keys are meant to be public: the database rules
+from step 1 are what protect the data. Supabase is retiring the old *anon*
+key in 2027; ShaperBuild works with either, so switch `SUPABASE_ANON_KEY` to
+the publishable key whenever you like.
 
-Build or release the app as usual; every copy then has accounts.
+**Running from the source code:** set `SHAPER_SUPABASE_URL` and
+`SHAPER_SUPABASE_KEY` (and `SHAPER_SUPABASE_GOOGLE=1`) in the environment
+before `npm start`, or fill in `electron/cloud-config.json` locally (don't
+commit it).
 
 ## Good to know
 
@@ -59,6 +79,4 @@ Build or release the app as usual; every copy then has accounts.
   your name and contact details, and Supabase's data processing agreement
   (in the dashboard under *Legal*) covers Supabase's side.
 - **Testing without Supabase:** `tests/e2e/cloud.mjs` runs everything
-  against a stand-in server; the environment variables
-  `SHAPER_SUPABASE_URL`, `SHAPER_SUPABASE_KEY` and `SHAPER_SUPABASE_GOOGLE`
-  override the config file.
+  against a stand-in server, using the environment variables above.

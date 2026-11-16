@@ -47,6 +47,16 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
+      - name: Connect accounts (Supabase project from the repository variables)
+        if: vars.SUPABASE_URL != '' && vars.SUPABASE_ANON_KEY != ''
+        shell: bash
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          SUPABASE_GOOGLE: ${{ vars.SUPABASE_GOOGLE }}
+        run: |
+          node -e "require('fs').writeFileSync('electron/cloud-config.json', JSON.stringify({ url: process.env.SUPABASE_URL, anonKey: process.env.SUPABASE_ANON_KEY, google: process.env.SUPABASE_GOOGLE === 'true' }, null, 2) + '\n')"
+          echo "Accounts connected to $SUPABASE_URL"
       - name: Build installer
         run: npm run dist
         env:

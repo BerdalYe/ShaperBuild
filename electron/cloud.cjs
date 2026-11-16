@@ -70,6 +70,16 @@ function fromAuth(body) {
 
 // ---- HTTP ------------------------------------------------------------------------
 
+// Electron's network stack (follows the computer's proxy settings), or
+// plain fetch outside Electron.
+function doFetch(url, opts) {
+  try {
+    const { net } = require('electron');
+    if (net?.fetch) return net.fetch(url, opts);
+  } catch {}
+  return fetch(url, opts);
+}
+
 class CloudError extends Error {
   constructor(message, status, code) {
     super(message);
@@ -105,7 +115,7 @@ async function call(method, route, { body, headers = {}, auth = true, raw = fals
   }
   let res;
   try {
-    res = await fetch(`${c.url}${route}`, { method, headers: h, body: payload });
+    res = await doFetch(`${c.url}${route}`, { method, headers: h, body: payload });
   } catch {
     throw new CloudError('Could not reach the ShaperBuild cloud. Check your internet connection', 0, 'offline');
   }
