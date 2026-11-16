@@ -104,8 +104,3 @@ export function lineMeetsPlane(line, plane) {
   const t = dot(sub(plane.origin, line.origin), plane.normal) / den;
   return add(line.origin, mul(line.dir, t));
 }
-
-// Nearest point to p on a line.
-export function closestOnLine(line, p) {
-  return add(line.origin, mul(line.dir, dot(sub(p, line.origin), line.dir)));
-}

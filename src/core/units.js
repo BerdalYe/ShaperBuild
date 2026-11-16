@@ -15,9 +15,6 @@ let scope = new Map();
 export function setVariables(values) {
   scope = values || new Map();
 }
-export function variableScope() {
-  return scope;
-}
 
 // "25", "1in + 2mm", "(10+5)/2", "3 cm", "width / 2" -> millimetres (NaN if invalid).
 export function parseLength(text, unit = 'mm') {
@@ -59,10 +56,6 @@ export function trimNumber(v, decimals) {
   if (!Number.isFinite(v)) return '–';
   const s = v.toFixed(decimals);
   return s.includes('.') ? s.replace(/\.?0+$/, '') : s;
-}
-
-export function toUnit(mm, unit = 'mm') {
-  return mm / (UNITS[unit]?.factor ?? 1);
 }
 
 export function formatLength(mm, unit = 'mm', { suffix = true, decimals } = {}) {

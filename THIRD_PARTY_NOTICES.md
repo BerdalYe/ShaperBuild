@@ -17,7 +17,7 @@ in the installed app's `resources/licenses` folder, and in the app under
 | [Inter](https://rsms.me/inter/) typeface (Text tool default font) | — | SIL Open Font License 1.1 | `src/fonts/OFL.txt` |
 | [Electron](https://www.electronjs.org/) (app shell, includes Chromium and Node.js) | 44.5.0 | MIT; Chromium and Node.js under their own licences | `src/licenses/electron.txt`; `LICENSE.electron.txt` and `LICENSES.chromium.html` next to the installed app |
 | [electron-updater](https://www.electron.build/auto-update) and its dependencies (builder-util-runtime, debug, fs-extra, graceful-fs, js-yaml, jsonfile, lazy-val, lodash.escaperegexp, lodash.isequal, ms, sax, semver, tiny-typed-emitter, tslib, universalify, argparse) | 6.8.9 | MIT, ISC, BlueOak-1.0.0, 0BSD, Python-2.0 | `src/licenses/update-checker.txt` |
-| [Anthropic TypeScript SDK](https://github.com/anthropics/anthropic-sdk-typescript) (talks to Claude for the AI assistant) and its dependencies (@opentelemetry/api, standardwebhooks, @stablelib/base64, fast-sha256, json-schema-to-ts, @babel/runtime, ts-algebra) | 1.3.0 | Apache-2.0, MIT, Unlicense | `src/licenses/ai-sdk.txt` |
+| [Anthropic TypeScript SDK](https://github.com/anthropics/anthropic-sdk-typescript) (talks to Claude for the AI assistant) and its dependencies (@opentelemetry/api, standardwebhooks, @stablelib/base64, fast-sha256) | 1.3.0 | Apache-2.0, MIT, Unlicense | `src/licenses/ai-sdk.txt` |
 
 ## The geometry engine (LGPL)
 

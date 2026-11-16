@@ -2807,33 +2807,6 @@ export function meshArea(p, idx) {
   return s;
 }
 
-// Per-vertex normals with sharp edges: vertices are split per triangle so
-// faceted CAD-style meshes shade correctly.
-export function flatNormals(p, idx) {
-  const n = new Float32Array(p.length);
-  const acc = new Float32Array(p.length);
-  for (let i = 0; i < idx.length; i += 3) {
-    const a = idx[i] * 3;
-    const b = idx[i + 1] * 3;
-    const c = idx[i + 2] * 3;
-    const u = [p[b] - p[a], p[b + 1] - p[a + 1], p[b + 2] - p[a + 2]];
-    const w = [p[c] - p[a], p[c + 1] - p[a + 1], p[c + 2] - p[a + 2]];
-    const cr = cross(u, w);
-    for (const v of [a, b, c]) {
-      acc[v] += cr[0];
-      acc[v + 1] += cr[1];
-      acc[v + 2] += cr[2];
-    }
-  }
-  for (let i = 0; i < p.length; i += 3) {
-    const l = Math.hypot(acc[i], acc[i + 1], acc[i + 2]) || 1;
-    n[i] = acc[i] / l;
-    n[i + 1] = acc[i + 1] / l;
-    n[i + 2] = acc[i + 2] / l;
-  }
-  return n;
-}
-
 // Edges where adjacent triangles meet at more than `angle` degrees, plus
 // open boundary edges.
 export function featureEdges(p, idx, angle = 35) {
