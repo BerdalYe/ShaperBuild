@@ -15,7 +15,15 @@ async function screen(p) {
     return [r.left + s[0], r.top + s[1]];
   }, p);
 }
+// Lessons start by building their starting shape in the background: click
+// only once the app is idle and has drawn a frame since, or a slow machine
+// clicks into a view that does not show the shape yet.
+async function settled() {
+  await win.waitForFunction(() => window.__shaper.kernel.busy === 0, null, { timeout: 60000 });
+  await A(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
 async function clickAt(p, opts = {}) {
+  await settled();
   const [x, y] = await screen(p);
   await win.mouse.move(x, y, { steps: 3 });
   await win.waitForTimeout(60);
