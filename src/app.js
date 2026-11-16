@@ -995,8 +995,17 @@ export class App {
       items.push({ label: this.isolated ? 'Show all (end isolate)' : 'Isolate', icon: 'isolate', kbd: this.keyFor('toggle-isolate'), action: () => this.toggleIsolate() });
       items.push({ label: 'Delete', icon: 'trash', kbd: 'Del', danger: true, action: () => this.cmd.deleteSelection() });
     } else {
+      // Empty space: the view, and quick ways to start drawing here.
+      const draw = (id, label) => ({ label, icon: id, kbd: this.keyFor(`tool:${id}`), action: () => this.tools.activate(id, { force: true }) });
       items.push({ label: 'Zoom to fit', icon: 'fit', kbd: 'Z', action: () => this.vp.fit() });
+      items.push({ label: 'Home view', icon: 'home', kbd: '0', action: () => this.vp.setView('iso', { fit: true }) });
+      if (this.doc.bodies.length) items.push({ label: 'Select all bodies', icon: 'select', kbd: 'Ctrl+A', action: () => this.selection.set(this.doc.bodies.filter((b) => b.visible !== false).map((b) => ({ kind: 'body', bodyId: b.id }))) });
       items.push({ label: 'Show all', icon: 'eye', action: () => (this.isolated ? this.toggleIsolate() : this.cmd.showAll()) });
+      items.push('-');
+      items.push(draw('rect', 'Rectangle'), draw('circle', 'Circle'), draw('line', 'Line'), draw('text', 'Text'));
+      items.push('-');
+      items.push({ label: 'Grid', icon: 'grid', kbd: 'G', action: () => this.toggleGrid() });
+      items.push({ label: 'X-ray (see-through bodies)', icon: 'xray', kbd: 'Shift+X', action: () => this.toggleXray() });
     }
     showMenu(ne.clientX, ne.clientY, items);
   }
@@ -1640,6 +1649,8 @@ export class App {
         return this.files.save({ as: true });
       case 'save-cloud':
         return this.files.saveToCloud();
+      case 'examples':
+        return this.home.show().then(() => setTimeout(() => document.querySelector('.example-grid')?.scrollIntoView({ block: 'center' }), 80));
       case 'open-cloud':
         return this.home.show().then(() => this.home.revealCloud());
       case 'account':

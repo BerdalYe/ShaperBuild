@@ -88,6 +88,7 @@ const NB = {
   'SVG drawing (becomes a sketch)': 'SVG-tegning (blir en skisse)',
   'Save to Cloud': 'Lagre i skyen',
   'Open from Cloud…': 'Åpne fra skyen…',
+  'Examples…': 'Eksempler…',
   'SVG drawing': 'SVG-tegning',
   'Image to trace (PNG, JPG)': 'Bilde å tegne over (PNG, JPG)',
   'PDF document': 'PDF-dokument',

@@ -721,6 +721,17 @@ body.resizing-panel .items-panel {
   margin-top: 4px;
 }
 
+.tools-title.static {
+  cursor: default;
+  padding-left: 6px;
+}
+
+.tools-recent {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+}
+
 .tools-title {
   display: flex;
   align-items: baseline;

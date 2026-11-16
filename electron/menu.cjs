@@ -59,6 +59,7 @@ function buildMenu({ send, recent = [], isDev = false }) {
         { type: 'separator' },
         cmd('Save to Cloud', 'save-cloud'),
         cmd('Open from Cloud…', 'open-cloud'),
+        cmd('Examples…', 'examples'),
         { type: 'separator' },
         cmd('Import…', 'import', 'CmdOrCtrl+I'),
         cmd('3D Print…', 'print', 'CmdOrCtrl+P'),
