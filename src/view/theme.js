@@ -1,8 +1,9 @@
 // Colours used by the 3D view for each interface theme.
 export const THEMES = {
   dark: {
-    bgTop: '#3a3e47',
-    bgBottom: '#1c1e23',
+    // One flat colour (top and bottom are the same: no gradient).
+    bgTop: '#24272d',
+    bgBottom: '#24272d',
     body: '#c4ccd6',
     edge: '#16181c',
     hover: '#8cc0ff',
@@ -22,8 +23,8 @@ export const THEMES = {
     inference: '#ffb02e',
   },
   light: {
-    bgTop: '#f5f6f8',
-    bgBottom: '#d5d9df',
+    bgTop: '#e8eaee',
+    bgBottom: '#e8eaee',
     body: '#bcc5d0',
     edge: '#2a2d33',
     hover: '#5ea4ff',
