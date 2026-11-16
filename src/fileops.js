@@ -66,6 +66,7 @@ export class FileOps {
     await app.kernel.call('retainOnly', []).catch(() => {});
     this.path = null;
     this.name = name;
+    this.cloud = null;
     this.clearRecovery();
     app.vp.rig.fromJSON({ az: 35 * (Math.PI / 180), el: 28 * (Math.PI / 180), dist: 220, target: [0, 0, 0], ortho: app.vp.rig.useOrtho });
     app.vp.requestRender();
@@ -363,6 +364,8 @@ export class FileOps {
 
   async save({ as = false, path = null } = {}) {
     const app = this.app;
+    // A design opened from the cloud saves back to the cloud.
+    if (this.cloud && !as && !path) return this.saveToCloud();
     let target = path || (!as && this.path);
     if (!target) {
       if (!this.native) {
@@ -391,6 +394,78 @@ export class FileOps {
       return true;
     } catch (err) {
       toast(t('Save failed: {error}', { error: t(err.message) }), { type: 'error', ms: 6000 });
+      return false;
+    } finally {
+      app.busy(false);
+    }
+  }
+
+  // ---- cloud designs (accounts) -----------------------------------------------
+
+  // Save the design to the signed-in account's cloud (signing in first if
+  // needed). The same cloud design is replaced unless it was changed
+  // elsewhere since it was opened: then you choose.
+  async saveToCloud({ asNew = false, force = false } = {}) {
+    const app = this.app;
+    const acct = app.account;
+    if (!acct.signedIn && !(await acct.signInDialog({ reason: t('Sign in to save {name} to your cloud.', { name: this.name }) }))) return false;
+    try {
+      app.busy(true, 'Saving to the cloud…');
+      const json = await this.serialize();
+      const bytes = await gzip(new TextEncoder().encode(JSON.stringify(json)));
+      const thumb = await smallThumb(json.thumbnail);
+      const cur = asNew ? null : this.cloud;
+      const res = await acct.api.save({ id: cur?.id || null, name: this.name, bytes, thumb, expected: cur?.updatedAt || null, force });
+      if (res.error) throw new Error(res.error);
+      if (res.conflict) {
+        app.busy(false);
+        const pick = await modal({
+          title: 'Changed somewhere else',
+          body: h('div', { text: t('{name} was changed in your cloud (on another computer?) after you opened it here.', { name: this.name }) }),
+          buttons: [
+            { label: 'Cancel', value: null },
+            { label: 'Save as a copy', value: 'copy' },
+            { label: 'Replace it', value: 'replace', primary: true, danger: true },
+          ],
+        });
+        if (pick === 'copy') {
+          this.name = t('{name} copy', { name: this.name });
+          return this.saveToCloud({ asNew: true });
+        }
+        if (pick === 'replace') return this.saveToCloud({ force: true });
+        return false;
+      }
+      this.cloud = { id: res.id, updatedAt: res.updated_at };
+      this.path = null;
+      app.doc.markSaved();
+      app.updateTitle();
+      this.clearRecovery();
+      toast(t('Saved {name} to your cloud', { name: this.name }), { type: 'ok', ms: 1800 });
+      app.home.refreshCloud?.();
+      return true;
+    } catch (err) {
+      toast(t('Could not save to the cloud: {error}', { error: t(err.message) }), { type: 'error', ms: 6000 });
+      return false;
+    } finally {
+      app.busy(false);
+    }
+  }
+
+  async openFromCloud(id) {
+    const app = this.app;
+    if (!(await this.confirmDiscard())) return false;
+    try {
+      app.busy(true, 'Opening…');
+      const res = await app.account.api.open(id);
+      if (res.error) throw new Error(res.error);
+      await this.loadProject(res.bytes, null, res.name);
+      this.cloud = { id: res.id, updatedAt: res.updated_at };
+      this.name = res.name;
+      app.doc.markSaved();
+      app.updateTitle();
+      return true;
+    } catch (err) {
+      toast(t('Could not open it from the cloud: {error}', { error: t(err.message) }), { type: 'error', ms: 6000 });
       return false;
     } finally {
       app.busy(false);
@@ -682,6 +757,23 @@ export function moveThumb(from, to) {
   try {
     localStorage.setItem(THUMBS_KEY, JSON.stringify(now));
   } catch {}
+}
+
+// A small JPEG of a design's picture for the cloud list.
+async function smallThumb(dataUrl) {
+  if (!dataUrl) return null;
+  try {
+    const img = new Image();
+    img.src = dataUrl;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = 240;
+    c.height = 160;
+    c.getContext('2d').drawImage(img, 0, 0, 240, 160);
+    return c.toDataURL('image/jpeg', 0.8);
+  } catch {
+    return null;
+  }
 }
 
 export function loadThumbs() {

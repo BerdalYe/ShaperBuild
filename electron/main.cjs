@@ -575,6 +575,7 @@ app.whenReady().then(() => {
   protocol.handle(SCHEME, serve);
   i18n.init(app.getPath('userData'));
   require('./ai.cjs').setup({ userData: app.getPath('userData'), version: app.getVersion(), getWindow: () => win });
+  require('./cloud.cjs').setup({ userData: app.getPath('userData'), ipcMain, safeStorage: require('electron').safeStorage, shell });
   refreshMenu();
   createWindow();
   openPaths(filesFromArgv(process.argv));
