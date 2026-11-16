@@ -44,8 +44,13 @@ ShaperBuild.
 
 ## 3. Connect the app
 
-The app's builds get the project from two **repository variables** (not
-secrets: these values are meant to be public), so no key is kept in the code.
+[`electron/cloud-config.json`](../electron/cloud-config.json) holds the
+Project URL and the **publishable** key (`sb_publishable_…`). Both are
+public by design (the database rules from step 1 protect the data), so they
+live in the code. ShaperBuild's own project is filled in already.
+
+To use another project, change that file, or set repository variables so
+the build fills it in:
 
 1. In Supabase open **Project Settings → API Keys** and copy the **Project
    URL** and the **publishable** key (`sb_publishable_…`) or the legacy
@@ -57,17 +62,15 @@ secrets: these values are meant to be public), so no key is kept in the code.
    - `SUPABASE_GOOGLE`: `true` if you turned on Google (optional)
 3. Build or release as usual: the build writes them into
    `electron/cloud-config.json` before packaging, and every copy then has
-   accounts. Without the variables the app is built without accounts.
+   accounts. Without the variables, the file as it is in the code is used.
 
 The anon and publishable keys are meant to be public: the database rules
 from step 1 are what protect the data. Supabase is retiring the old *anon*
-key in 2027; ShaperBuild works with either, so switch `SUPABASE_ANON_KEY` to
-the publishable key whenever you like.
+key in 2027; ShaperBuild works with either, but use the publishable key.
 
 **Running from the source code:** set `SHAPER_SUPABASE_URL` and
 `SHAPER_SUPABASE_KEY` (and `SHAPER_SUPABASE_GOOGLE=1`) in the environment
-before `npm start`, or fill in `electron/cloud-config.json` locally (don't
-commit it).
+before `npm start` to point a copy at another project.
 
 ## Good to know
 
