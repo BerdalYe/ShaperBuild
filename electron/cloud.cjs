@@ -181,6 +181,23 @@ async function resetPassword({ email }) {
   return { sent: true };
 }
 
+// The code from the "choose a new password" email, and the new password:
+// the code signs in, then the password is changed.
+async function confirmReset({ email, code, password }) {
+  checkEmail(email, password);
+  if (!/^\d{6,10}$/.test(String(code || '').trim())) throw new CloudError('Type the code from the email');
+  let body;
+  try {
+    body = await call('POST', '/auth/v1/verify', { auth: false, body: { type: 'recovery', email: email.trim(), token: String(code).trim() } });
+  } catch (err) {
+    if (err.status === 403 || /expired|invalid/i.test(err.message)) throw new CloudError('That code is wrong or has run out. Ask for a new one');
+    throw err;
+  }
+  saveSession(fromAuth(body));
+  await call('PUT', '/auth/v1/user', { body: { password } });
+  return state();
+}
+
 async function signOut() {
   if (session) await call('POST', '/auth/v1/logout', {}).catch(() => {});
   saveSession(null);
@@ -312,6 +329,7 @@ function setup({ userData: dir, ipcMain, safeStorage, shell }) {
   handle('cloud:sign-in', signIn);
   handle('cloud:google', () => signInGoogle({ openUrl: (u) => shell.openExternal(u) }));
   handle('cloud:reset', resetPassword);
+  handle('cloud:confirm-reset', confirmReset);
   handle('cloud:sign-out', signOut);
   handle('cloud:list', list);
   handle('cloud:save', save);
@@ -321,4 +339,4 @@ function setup({ userData: dir, ipcMain, safeStorage, shell }) {
   handle('cloud:delete-account', deleteAccount);
 }
 
-module.exports = { setup, config, state, signUp, signIn, signOut, resetPassword, list, save, open, rename, remove, deleteAccount, CALLBACK_PORT };
+module.exports = { setup, config, state, signUp, signIn, signOut, resetPassword, confirmReset, list, save, open, rename, remove, deleteAccount, CALLBACK_PORT };

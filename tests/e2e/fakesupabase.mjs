@@ -12,6 +12,7 @@ export async function fakeSupabase({ key = 'anon-key', confirmEmails = false } =
   const rows = new Map(); // id → row
   const files = new Map(); // path → Buffer
   const log = [];
+  const codes = new Map(); // email → recovery code (what the email would carry)
   const id = () => crypto.randomUUID();
   const session = (u) => {
     const access = `at-${id()}`;
@@ -67,7 +68,25 @@ export async function fakeSupabase({ key = 'anon-key', confirmEmails = false } =
         }
         return send(400, { error_description: 'unsupported grant' });
       }
-      if (p === '/auth/v1/recover') return send(200, {});
+      if (p === '/auth/v1/recover') {
+        const { email } = json();
+        if ([...users.values()].some((u) => u.email === email)) codes.set(email, String(10000000 + Math.floor(Math.random() * 89999999)));
+        return send(200, {});
+      }
+      if (p === '/auth/v1/verify' && req.method === 'POST') {
+        const { type, email, token } = json();
+        const u = [...users.values()].find((x) => x.email === email);
+        if (type !== 'recovery' || !u || codes.get(email) !== token) return send(403, { code: 403, error_code: 'otp_expired', msg: 'Token has expired or is invalid' });
+        codes.delete(email);
+        return send(200, session(u));
+      }
+      if (p === '/auth/v1/user' && req.method === 'PUT') {
+        const u = users.get(tokens.get(String(req.headers.authorization || '').replace(/^Bearer /, '')));
+        if (!u) return send(401, { msg: 'JWT expired' });
+        const { password } = json();
+        if (password) u.password = password;
+        return send(200, { id: u.id, email: u.email });
+      }
       if (p === '/auth/v1/logout') {
         tokens.delete(String(req.headers.authorization).replace(/^Bearer /, ''));
         return send(204);
@@ -121,5 +140,5 @@ export async function fakeSupabase({ key = 'anon-key', confirmEmails = false } =
     });
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  return { url: `http://127.0.0.1:${server.address().port}`, key, users, rows, files, log, close: () => server.close() };
+  return { url: `http://127.0.0.1:${server.address().port}`, key, users, rows, files, codes, log, close: () => server.close() };
 }

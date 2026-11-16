@@ -56,6 +56,7 @@ export class Account {
     let signedIn = false;
     const email = h('input.text-input', { type: 'email', autocomplete: 'email', placeholder: t('Email'), 'aria-label': t('Email') });
     const password = h('input.text-input', { type: 'password', autocomplete: 'current-password', placeholder: t('Password'), 'aria-label': t('Password') });
+    const code = h('input.text-input.acct-code', { type: 'text', inputmode: 'numeric', autocomplete: 'one-time-code', placeholder: t('Code from the email'), 'aria-label': t('Code from the email'), maxlength: 10 });
     const message = h('div.acct-msg', { role: 'status' });
     const submit = h('button.btn.primary.acct-submit', { type: 'submit' });
     const swap = h('button.link-btn', { type: 'button' });
@@ -65,11 +66,15 @@ export class Account {
       message.textContent = t(text);
       message.className = `acct-msg ${kind}`;
     };
+    // mode: 'in' (sign in), 'up' (create an account), 'reset' (code from
+    // the email and a new password).
     const render = () => {
-      title.textContent = t(mode === 'in' ? 'Sign in to ShaperBuild' : 'Create your ShaperBuild account');
-      submit.textContent = t(mode === 'in' ? 'Sign in' : 'Create account');
+      title.textContent = t({ in: 'Sign in to ShaperBuild', up: 'Create your ShaperBuild account', reset: 'Choose a new password' }[mode]);
+      submit.textContent = t({ in: 'Sign in', up: 'Create account', reset: 'Set new password' }[mode]);
       swap.textContent = t(mode === 'in' ? 'New here? Create an account' : 'Have an account? Sign in');
       password.autocomplete = mode === 'in' ? 'current-password' : 'new-password';
+      password.placeholder = t(mode === 'in' ? 'Password' : 'New password');
+      code.hidden = mode !== 'reset';
       forgot.hidden = mode !== 'in';
       message.textContent = '';
     };
@@ -88,8 +93,12 @@ export class Account {
     forgot.addEventListener('click', () =>
       busy(async () => {
         const res = await this.api.resetPassword(email.value);
-        if (res.error) show(res.error);
-        else show('If there is an account for this email, a link to choose a new password is on its way.', 'ok');
+        if (res.error) return show(res.error);
+        mode = 'reset';
+        render();
+        password.value = '';
+        show('If there is an account for this email, a code is on its way. Type it here with your new password.', 'ok');
+        code.focus();
       }),
     );
     const form = h(
@@ -97,6 +106,7 @@ export class Account {
       title,
       reason ? h('p.acct-reason', { text: reason }) : null,
       email,
+      code,
       password,
       message,
       submit,
@@ -108,7 +118,8 @@ export class Account {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       busy(async () => {
-        const res = mode === 'in' ? await this.api.signIn(email.value, password.value) : await this.api.signUp(email.value, password.value);
+        const res =
+          mode === 'in' ? await this.api.signIn(email.value, password.value) : mode === 'up' ? await this.api.signUp(email.value, password.value) : await this.api.confirmReset(email.value, code.value, password.value);
         if (res.error) return show(res.error);
         this.set(res);
         if (res.confirm) return show('Almost done: open the link in the email we sent you, then sign in here.', 'ok');

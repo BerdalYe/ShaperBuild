@@ -7,6 +7,10 @@ import { launch, shot, OUT } from './harness.mjs';
 import { fakeSupabase } from './fakesupabase.mjs';
 
 const step = (msg) => console.log(`• ${msg}`);
+// Passwords for the stand-in server only, made up as the test runs.
+const PASS = `pw-${Date.now().toString(36)}`;
+const NEW_PASS = `${PASS}-new`;
+const WRONG = `${PASS}-wrong`;
 const supa = await fakeSupabase();
 process.env.SHAPER_SUPABASE_URL = supa.url;
 process.env.SHAPER_SUPABASE_KEY = supa.key;
@@ -32,7 +36,7 @@ try {
   await win.locator('.acct-submit').click();
   await win.waitForSelector('.acct-msg.error');
   assert.match(await win.locator('.acct-msg').innerText(), /6 characters/);
-  await win.locator('.acct-form input[type=password]').fill('secret-123');
+  await win.locator('.acct-form input[type=password]').fill(PASS);
   await win.locator('.acct-submit').click();
   await win.waitForSelector('.acct-form', { state: 'detached' });
   await win.waitForFunction(() => /maker@example\.com/.test(document.querySelector('.acct-btn')?.textContent || ''));
@@ -107,7 +111,7 @@ try {
   await win.waitForFunction(() => /maker@example\.com/.test(document.querySelector('.acct-btn')?.textContent || ''));
   await win.waitForFunction(() => document.querySelectorAll('.cloud-card').length === 1);
   const stored = fs.readFileSync(path.join(dataDir, 'cloud.json'), 'utf8');
-  assert.ok(!stored.includes('secret-123'), 'the password is never stored');
+  assert.ok(!stored.includes(PASS), 'the password is never stored');
 
   step('sign out, a wrong password says so, sign in again');
   await win.locator('.acct-btn').click();
@@ -116,12 +120,32 @@ try {
   assert.equal(await cards(), 0);
   await win.locator('.acct-btn').click();
   await win.locator('.acct-form input[type=email]').fill('maker@example.com');
-  await win.locator('.acct-form input[type=password]').fill('wrong-pass');
+  await win.locator('.acct-form input[type=password]').fill(WRONG);
   await win.locator('.acct-submit').click();
   await win.waitForFunction(() => /Wrong email or password/.test(document.querySelector('.acct-msg')?.textContent || ''));
-  await win.locator('.acct-form input[type=password]').fill('secret-123');
+  await win.locator('.acct-form input[type=password]').fill(PASS);
   await win.locator('.acct-submit').click();
   await win.waitForFunction(() => document.querySelectorAll('.cloud-card').length === 1);
+
+  step('forgot the password: the emailed code and a new password sign in');
+  await win.locator('.acct-btn').click();
+  await win.locator('.menu button', { hasText: 'Sign out' }).click();
+  await win.waitForFunction(() => /Sign in/.test(document.querySelector('.acct-btn')?.textContent || ''));
+  await win.locator('.acct-btn').click();
+  await win.locator('.acct-form input[type=email]').fill('maker@example.com');
+  assert.equal(await win.locator('.acct-code').isVisible(), false, 'no code box until a code was sent');
+  await win.locator('.acct-links .link-btn', { hasText: 'Forgot your password' }).click();
+  await win.waitForSelector('.acct-code:visible');
+  assert.match(await win.locator('.acct-title').innerText(), /new password/);
+  await win.locator('.acct-code').fill('00000000');
+  await win.locator('.acct-form input[type=password]').fill(NEW_PASS);
+  await win.locator('.acct-submit').click();
+  await win.waitForFunction(() => /wrong or has run out/.test(document.querySelector('.acct-msg')?.textContent || ''));
+  await win.locator('.acct-code').fill(supa.codes.get('maker@example.com'));
+  await win.locator('.acct-submit').click();
+  await win.waitForSelector('.acct-form', { state: 'detached' });
+  await win.waitForFunction(() => document.querySelectorAll('.cloud-card').length === 1);
+  assert.equal([...supa.users.values()][0].password, NEW_PASS);
 
   step('delete the account: its designs and files go with it');
   await win.locator('.acct-btn').click();

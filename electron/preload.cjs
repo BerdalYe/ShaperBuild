@@ -61,6 +61,7 @@ contextBridge.exposeInMainWorld('native', {
     signIn: (email, password) => ipcRenderer.invoke('cloud:sign-in', { email, password }),
     google: () => ipcRenderer.invoke('cloud:google'),
     resetPassword: (email) => ipcRenderer.invoke('cloud:reset', { email }),
+    confirmReset: (email, code, password) => ipcRenderer.invoke('cloud:confirm-reset', { email, code, password }),
     signOut: () => ipcRenderer.invoke('cloud:sign-out'),
     list: () => ipcRenderer.invoke('cloud:list'),
     save: (opts) => ipcRenderer.invoke('cloud:save', opts),
