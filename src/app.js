@@ -1089,10 +1089,15 @@ export class App {
   helpMenu(e) {
     const r = e.currentTarget.getBoundingClientRect();
     const m = modKey();
+    // These show in the workspace: leave the home screen first.
+    const inWorkspace = (fn) => () => {
+      if (!this.home.el.hidden) this.home.hide();
+      fn();
+    };
     showMenu(r.left, r.bottom + 6, [
       { label: 'Tutorials…', icon: 'learn', action: () => this.tutorial.library() },
-      { label: 'How to move around', icon: 'mouse', action: () => this.navHelp.toggle(true) },
-      { label: 'Find a tool', icon: 'search', kbd: `${m}K`, action: () => this.toolsMenu.focusSearch() },
+      { label: 'How to move around', icon: 'mouse', action: inWorkspace(() => this.navHelp.toggle(true)) },
+      { label: 'Find a tool', icon: 'search', kbd: `${m}K`, action: inWorkspace(() => this.toolsMenu.focusSearch()) },
       { label: 'Keyboard shortcuts', icon: 'keyboard', kbd: `${m}/`, action: () => this.dialogs.shortcuts() },
       { label: 'Getting started', icon: 'help', action: () => this.dialogs.gettingStarted() },
       '-',

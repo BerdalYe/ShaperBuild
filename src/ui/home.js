@@ -150,12 +150,19 @@ export class Home {
     // Continue learning: the next tutorial not finished yet.
     const next = app.tutorial.nextLesson;
     const doneCount = app.tutorial.done.size;
-    if (next) {
+    if (next && !app.settings.hideNextTutorial) {
       const level = LEVELS.find((l) => l.id === next.level);
       const start = h('button.btn.primary.hn-start', { html: `${icon('play')}<span>${escapeHtml(doneCount ? t('Start') : t('Start the tutorial'))}</span>` });
       start.addEventListener('click', () => app.tutorial.start(next.id));
       const all = h('button.btn.hn-all', { text: 'All tutorials' });
       all.addEventListener('click', () => app.tutorial.library());
+      // Hide this card for good; the tutorials stay in the sidebar.
+      const hide = h('button.hn-close', { html: icon('close'), title: t('Hide this (Tutorials stays in the sidebar)'), 'aria-label': t('Hide') });
+      hide.addEventListener('click', () => {
+        app.settings.hideNextTutorial = true;
+        app.saveSettings();
+        hide.closest('.home-next')?.remove();
+      });
       main.append(
         h(
           'section.home-next',
@@ -169,6 +176,7 @@ export class Home {
             h('small', { str: t('{done} of {n} tutorials done', { done: doneCount, n: LESSONS.length }) }),
           ),
           h('div.hn-buttons', start, all),
+          hide,
         ),
       );
     }

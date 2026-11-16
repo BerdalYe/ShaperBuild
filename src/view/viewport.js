@@ -154,7 +154,7 @@ export class Viewport extends Emitter {
     this.themeName = name;
     this.theme = THEMES[name];
     this.ctx.theme = this.theme;
-    this.container.style.background = `linear-gradient(180deg, ${this.theme.bgTop} 0%, ${this.theme.bgBottom} 100%)`;
+    this.container.style.background = this.theme.bgTop;
     this.grid.setTheme(this.theme);
     for (const v of this.bodyViews.values()) v.applyColors();
     for (const v of this.sketchViews.values()) v.applyColors();

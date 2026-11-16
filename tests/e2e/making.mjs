@@ -182,7 +182,7 @@ try {
   assert.ok(built.steps.includes('Extrude'), JSON.stringify(built.steps));
   await shot(win, 'making-example');
   // Every example builds without a hitch, as the pieces it should be.
-  const pieces = { 'twisted-star': 1, 'expanding-star': 8, 'ornament-tree': 1, 'ornament-snowflake': 1, mug: 1, 'phone-stand': 1, 'spiral-vase': 1, 'plant-pot': 2 };
+  const pieces = { 'twisted-star': 1, 'expanding-star': 8, 'ornament-tree': 1, 'ornament-snowflake': 1, mug: 1, 'phone-stand': 1, gear: 1, organizer: 1, 'spiral-vase': 1, 'plant-pot': 2 };
   for (const id of all) {
     const res = await A(async (id) => {
       const a = window.__shaper;

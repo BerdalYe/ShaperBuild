@@ -67,7 +67,7 @@ export class Updates {
     }
     el.hidden = false;
     if (s.status === 'downloading') {
-      el.classList.add('busy');
+      el.classList.add('downloading');
       el.title = t('Downloading ShaperBuild {version}', { version: s.version });
       el.append(h('span.spinner'), h('span', { str: t('Updating to {version}', { version: s.version }) + (s.percent ? ` · ${s.percent}%` : '…') }));
     } else if (s.status === 'ready') {

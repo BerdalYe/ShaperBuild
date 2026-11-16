@@ -136,6 +136,7 @@ export class ToolsMenu {
 
   // Put the cursor in the search box (Ctrl+K).
   focusSearch() {
+    if (this.app.home && !this.app.home.el.hidden) this.app.home.hide();
     if (this.app.visual) this.app.setVisualization(false);
     this.input.focus();
     this.input.select();
