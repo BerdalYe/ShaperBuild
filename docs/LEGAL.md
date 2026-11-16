@@ -21,7 +21,7 @@ summary, not legal advice; for a business launch, have a lawyer check it.
     may want to change the licence later, ask contributors to agree to
     that, or keep track of who wrote what.
 - **Open-source licences of the libraries.** Every library the app ships is listed in
-  [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and inside the app
+  [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) and inside the app
   (*Help → Open-source licences*), and the licence texts are included in
   the installers. All are permissive (MIT, Apache-2.0, ISC, BSD-style,
   OFL for the font) except the geometry engine.
@@ -42,7 +42,7 @@ summary, not legal advice; for a business launch, have a lawyer check it.
   computer. The only network use is the update check, which asks GitHub
   for the newest release (GitHub sees the computer's IP address); it can
   be turned off in Settings. This is stated in the app (*Help → Privacy*)
-  and in [PRIVACY.md](PRIVACY.md).
+  and in [PRIVACY.md](../PRIVACY.md).
 
 ## Still to check before sharing widely
 

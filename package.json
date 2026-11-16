@@ -1,7 +1,7 @@
 {
   "name": "shaperbuild",
   "productName": "ShaperBuild",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "description": "A desktop 3D CAD app for sketching, solid modelling and STL work.",
   "author": "BerdalYe",
   "license": "GPL-3.0-or-later",
@@ -54,7 +54,15 @@
       "!node_modules/three/build/three.tsl*",
       "!node_modules/replicad-opencascadejs/dist/replicad_multi*",
       "!node_modules/replicad-opencascadejs/dist/*.d.ts",
-      "!**/*.map"
+      "!**/*.map",
+      "!node_modules/@anthropic-ai/sdk/src/**",
+      "!node_modules/@anthropic-ai/sdk/**/*.mjs",
+      "!node_modules/@anthropic-ai/sdk/**/*.ts",
+      "!node_modules/@anthropic-ai/sdk/**/*.mts",
+      "!node_modules/@anthropic-ai/sdk/CHANGELOG.md",
+      "!node_modules/json-schema-to-ts/**",
+      "!node_modules/@babel/runtime/**",
+      "!**/node_modules/**/*.d.ts"
     ],
     "asar": true,
     "asarUnpack": [

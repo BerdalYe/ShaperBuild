@@ -133,11 +133,3 @@ export function icon(name, cls = '') {
   const body = P[name] || P.more;
   return `<svg class="icon ${cls}" viewBox="0 0 24 24" aria-hidden="true">${body}</svg>`;
 }
-
-export function iconEl(name, cls) {
-  const t = document.createElement('template');
-  t.innerHTML = icon(name, cls);
-  return t.content.firstElementChild;
-}
-
-export const ICON_NAMES = Object.keys(P);

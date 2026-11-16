@@ -1,24 +1,55 @@
-# ShaperBuild
+<p align="center">
+  <img src="build/icon.png" width="96" alt="ShaperBuild icon">
+</p>
 
-A free, open-source desktop 3D CAD app for Windows, macOS and Linux: sketch on any flat surface, pull shapes into 3D, round and combine them, and export for 3D printing or other CAD tools. It opens and edits **STL** files too. In English and Norwegian (bokmål). Free software under the GNU GPL.
+<h1 align="center">ShaperBuild</h1>
 
-![ShaperBuild](docs/screenshot.png)
+<p align="center">
+  <b>Free, open-source 3D CAD for Windows, macOS and Linux.</b><br>
+  Sketch, model precise parts, and get them ready for 3D printing — with an AI assistant that builds alongside you.
+</p>
+
+<p align="center">
+  <a href="https://github.com/BerdalYe/ShaperBuild/releases/latest"><img alt="Latest version" src="https://img.shields.io/github/v/release/BerdalYe/ShaperBuild?label=download&color=3d8bff"></a>
+  <a href="https://github.com/BerdalYe/ShaperBuild/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/BerdalYe/ShaperBuild/total?color=3d8bff"></a>
+  <a href="https://github.com/BerdalYe/ShaperBuild/actions/workflows/build.yml"><img alt="Build" src="https://github.com/BerdalYe/ShaperBuild/actions/workflows/build.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="Licence: GPL-3.0" src="https://img.shields.io/github/license/BerdalYe/ShaperBuild?color=3d8bff"></a>
+</p>
+
+![ShaperBuild with a mug design: the History list on the left, the tools on the right](docs/screenshot.jpg)
+
+## Highlights
+
+- **Real CAD:** sketches with constraints and exact sizes, extrude (with taper and twist), revolve, sweep, loft, fillet, chamfer, shell, union and subtract, built on the OpenCascade kernel. Every step stays in **History**, so you can change it later.
+- **Made for 3D printing:** checks that parts are solid and fit your printer, then saves 3MF or STL or opens your slicer.
+- **AI assistant:** say what to build and watch it model with the same tools you use, with Claude, Gemini, ChatGPT or a local model. Claude Desktop and other AI apps can build in ShaperBuild too (MCP).
+- **Cloud designs:** sign in to keep designs in the cloud and open them on any computer. Optional: everything else works without an account.
+- **Quick to start:** ready-made examples, step-by-step tutorials, SVG import and picture tracing, in English and Norwegian.
+- **Works with other tools:** STEP, STL, 3MF, OBJ, GLB, USDZ, DXF and SVG; 2D drawings as PDF.
+
+<p align="center">
+  <img src="docs/screenshot-visualization.jpg" width="49%" alt="A twisted shape in visualization mode with materials">
+  <img src="docs/screenshot-examples.jpg" width="49%" alt="Ready-made examples on the home screen">
+</p>
 
 ## Download
 
-Installers are built automatically by GitHub Actions:
+Get the installer for your system from the **[latest release](https://github.com/BerdalYe/ShaperBuild/releases/latest)**:
 
-- Open the **Actions** tab → latest **Build** run → **Artifacts**, and download the one for your system:
-  - **Windows:** `ShaperBuild-Setup-x.y.z.exe`
-  - **macOS:** `ShaperBuild-x.y.z-arm64.dmg` (Apple Silicon) or `-x64.dmg` (Intel)
-  - **Linux:** `.AppImage` or `.deb`
-- Tagged versions (`v1.0.0` …) also appear on the **Releases** page.
+- **Windows:** `ShaperBuild-Setup-x.y.z.exe`
+- **macOS:** `ShaperBuild-x.y.z-arm64.dmg` (Apple Silicon) or `-x64.dmg` (Intel)
+- **Linux:** `.AppImage` or `.deb`
+
+Once installed, ShaperBuild keeps itself up to date.
 
 The installers are not signed with a paid certificate, so the first launch shows a warning:
 - **Windows:** "Windows protected your PC" → *More info* → *Run anyway*.
 - **macOS:** drag ShaperBuild to Applications and open it. When macOS says it "could not verify" the app, click *Done*, then open **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to ShaperBuild (on macOS 14 or older: right-click the app → *Open* → *Open*). You only do this once.
 
-If macOS says ShaperBuild **"is damaged and can't be opened"** (versions up to 1.3.0 on Apple Silicon), the app is fine: macOS refuses apps that are not signed at all. Newer versions are signed for free ("ad-hoc"); for an older one, open **Terminal** and run:
+<details>
+<summary>macOS says ShaperBuild "is damaged and can't be opened" (versions up to 1.3.0)</summary>
+
+The app is fine: macOS refuses apps that are not signed at all, and newer versions are signed for free ("ad-hoc"). For an older one, open **Terminal** and run:
 
 ```sh
 xattr -cr /Applications/ShaperBuild.app
@@ -26,6 +57,7 @@ codesign --force --deep --sign - /Applications/ShaperBuild.app
 ```
 
 Then open the app as usual.
+</details>
 
 ## 3D printing
 
@@ -153,17 +185,17 @@ The server only answers this computer, needs the secret token, and refuses web p
 
 | Constraints | Shift+A parallel · Shift+P perpendicular · Shift+V horizontal/vertical · Shift+E equal · Shift+T tangent · Shift+C concentric · Shift+N coincident · Shift+M midpoint · Shift+L lock |
 
-Press **?** or use *Help → Keyboard Shortcuts* in the app to see everything. **Settings → Keyboard shortcuts** switches to an alternative set of keys (V revolve, W sweep, I spline, G polygon, X search, Tab selection filter…) and lets you change any key, or edit them all as JSON. See [DECISIONS.md](DECISIONS.md) for how conflicts are handled. Laptop without a mouse? Use the Orbit and Pan buttons, or set *Settings → Scroll wheel / two-finger swipe* to orbit.
+Press **?** or use *Help → Keyboard Shortcuts* in the app to see everything. **Settings → Keyboard shortcuts** switches to an alternative set of keys (V revolve, W sweep, I spline, G polygon, X search, Tab selection filter…) and lets you change any key, or edit them all as JSON. See [DECISIONS.md](docs/DECISIONS.md) for how conflicts are handled. Laptop without a mouse? Use the Orbit and Pan buttons, or set *Settings → Scroll wheel / two-finger swipe* to orbit.
 
 ## Not there yet
 
-IGES, Parasolid and DWG files, AI rendering, tablet and AR apps, cloud sync and team sharing, and video tutorials. [DECISIONS.md](DECISIONS.md) lists what works differently from the specification and why.
+IGES, Parasolid and DWG files, AI rendering, tablet and AR apps, sharing designs with a team, and video tutorials. [DECISIONS.md](docs/DECISIONS.md) lists what works differently from the specification and why.
 
 ## Updates
 
 The installed app checks GitHub for new versions. On Windows and Linux it downloads them in the background and shows **Restart to update** in the top bar; on macOS it shows a **Download** button (self-updating on macOS needs an Apple Developer signature, which the free build does not have). Turn checks off in Settings, or use *Help → Check for Updates…*.
 
-To publish a new version, push a tag like `v1.2.0` (or create a release with that tag on GitHub). CI builds the installers, uses the tag as the version, and attaches the files the updater needs.
+To publish a new version, push a tag like `v2.1.0` (or create a release with that tag on GitHub). CI builds the installers, uses the tag as the version, and attaches the files the updater needs.
 
 ## Run from source
 
@@ -208,6 +240,6 @@ build/           app icon
 
 ShaperBuild is free and open-source software under the [GNU General Public License, version 3 or later](LICENSE). Anyone may use, copy, change and share it, also commercially, but copies and changed versions must stay open source under the same licence, with their source code available. It comes with no warranty. Contributions are welcome through pull requests and are shared under the same licence. Copyright © 2026 BerdalYe and contributors.
 
-ShaperBuild uses OpenCascade via replicad-opencascadejs (LGPL-2.1, kept as a separate, replaceable library), Manifold (Apache-2.0), three.js (MIT), opentype.js (MIT), the Inter font (OFL-1.1) and Electron (MIT). [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists everything with versions and where the licence texts are; the app shows them under *Help → Open-source licences*.
+ShaperBuild uses OpenCascade via replicad-opencascadejs (LGPL-2.1, kept as a separate, replaceable library), Manifold (Apache-2.0), three.js (MIT), opentype.js (MIT), the Inter font (OFL-1.1), the Anthropic SDK for the AI assistant (Apache-2.0) and Electron (MIT). [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists everything with versions and where the licence texts are; the app shows them under *Help → Open-source licences*.
 
-ShaperBuild collects no personal data; it only goes online for the update check and, if you set it up, the AI assistant ([PRIVACY.md](PRIVACY.md)). [LEGAL.md](LEGAL.md) is a checklist of what else to keep in mind when sharing or selling it (checking the name, tax and consumer rules).
+ShaperBuild collects no personal data unless you make an account. It only goes online for the update check, your cloud designs when you sign in, and the AI assistant if you set it up ([PRIVACY.md](PRIVACY.md)). [LEGAL.md](docs/LEGAL.md) is a checklist of what else to keep in mind when sharing or selling it (checking the name, tax and consumer rules).

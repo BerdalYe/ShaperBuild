@@ -59,23 +59,6 @@ export function arcFrom3Points(p1, p2, p3) {
   return { c, r, a0: normAngle(a3), a1: normAngle(a1) };
 }
 
-// Arc starting at p0 tangent to direction t, ending at p1.
-export function tangentArc(p0, t, p1) {
-  const tl = len(t);
-  if (tl < 1e-12) return null;
-  const n = [-t[1] / tl, t[0] / tl];
-  const chord = sub(p1, p0);
-  const denom = 2 * dot(chord, n);
-  if (Math.abs(denom) < 1e-12) return null;
-  const rSigned = dot(chord, chord) / denom;
-  const c = add(p0, mul(n, rSigned));
-  const r = Math.abs(rSigned);
-  const a0 = angleOf(sub(p0, c));
-  const a1 = angleOf(sub(p1, c));
-  // Left turn (rSigned > 0) means counter-clockwise from p0.
-  return rSigned > 0 ? { c, r, a0: normAngle(a0), a1: normAngle(a1) } : { c, r, a0: normAngle(a1), a1: normAngle(a0), reversed: true };
-}
-
 export function regularPolygon(c, r, sides, startAngle) {
   const pts = [];
   for (let i = 0; i < sides; i++) pts.push(polar(c, r, startAngle + (i * TAU) / sides));
@@ -438,23 +421,6 @@ export function keyPoints(ent) {
   return out;
 }
 
-export function entityLength(ent) {
-  switch (ent.type) {
-    case 'line':
-      return dist(ent.a, ent.b);
-    case 'circle':
-      return TAU * ent.r;
-    case 'arc':
-      return sweep(ent.a0, ent.a1) * ent.r;
-    default: {
-      const pts = sampleEntity(ent, 128);
-      let s = 0;
-      for (let i = 0; i + 1 < pts.length; i++) s += dist(pts[i], pts[i + 1]);
-      return s;
-    }
-  }
-}
-
 // Move every point of the sketch that coincides with `from` to `to`.
 // Returns new entities (input is not modified).
 export function moveSketchPoint(entities, from, to, eps = 1e-6) {
@@ -542,18 +508,6 @@ export function offsetEntity(ent, d) {
   if (ent.type === 'circle' || ent.type === 'arc') return ent.r + d > 1e-6 ? { ...ent, r: ent.r + d } : null;
   if (ent.type === 'ellipse') return ent.rx + d > 1e-6 && ent.ry + d > 1e-6 ? { ...ent, rx: ent.rx + d, ry: ent.ry + d } : null;
   return null;
-}
-
-export function bounds2(points) {
-  const lo = [Infinity, Infinity];
-  const hi = [-Infinity, -Infinity];
-  for (const p of points) {
-    lo[0] = Math.min(lo[0], p[0]);
-    lo[1] = Math.min(lo[1], p[1]);
-    hi[0] = Math.max(hi[0], p[0]);
-    hi[1] = Math.max(hi[1], p[1]);
-  }
-  return { lo, hi };
 }
 
 // If `lines` form one closed loop, return its vertices in order.

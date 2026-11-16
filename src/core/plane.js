@@ -27,11 +27,6 @@ export function to2D(f, P) {
   return [dot3(v, f.x), dot3(v, f.y)];
 }
 
-// Direction in the plane (2D) to world direction.
-export function dir3D(f, d) {
-  return [f.x[0] * d[0] + f.y[0] * d[1], f.x[1] * d[0] + f.y[1] * d[1], f.x[2] * d[0] + f.y[2] * d[1]];
-}
-
 export function defaultXDir(n) {
   n = norm3(n);
   if (Math.abs(n[2]) > 0.9) return [1, 0, 0];
@@ -58,13 +53,4 @@ export function rayPlane(origin, dir, plane) {
   const t = dot3([plane.origin[0] - origin[0], plane.origin[1] - origin[1], plane.origin[2] - origin[2]], n) / den;
   if (t < 0) return null;
   return [origin[0] + dir[0] * t, origin[1] + dir[1] * t, origin[2] + dir[2] * t];
-}
-
-export function offsetPlane(plane, d) {
-  const n = norm3(plane.normal);
-  return { ...plane, origin: [plane.origin[0] + n[0] * d, plane.origin[1] + n[1] * d, plane.origin[2] + n[2] * d] };
-}
-
-export function flipPlane(plane) {
-  return { ...plane, normal: plane.normal.map((v) => -v), xDir: [...plane.xDir] };
 }
