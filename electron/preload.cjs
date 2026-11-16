@@ -54,6 +54,22 @@ contextBridge.exposeInMainWorld('native', {
   mcpAddClaudeDesktop: () => ipcRenderer.invoke('mcp:add-claude-desktop'),
   onAiCall: (cb) => ipcRenderer.on('ai:call', (_e, id, name, input) => cb(id, name, input)),
   aiResult: (id, result) => ipcRenderer.send('ai:result', id, result),
+  // Accounts and cloud designs (the login stays in the main process).
+  cloud: {
+    state: () => ipcRenderer.invoke('cloud:state'),
+    signUp: (email, password) => ipcRenderer.invoke('cloud:sign-up', { email, password }),
+    signIn: (email, password) => ipcRenderer.invoke('cloud:sign-in', { email, password }),
+    google: () => ipcRenderer.invoke('cloud:google'),
+    resetPassword: (email) => ipcRenderer.invoke('cloud:reset', { email }),
+    confirmReset: (email, code, password) => ipcRenderer.invoke('cloud:confirm-reset', { email, code, password }),
+    signOut: () => ipcRenderer.invoke('cloud:sign-out'),
+    list: () => ipcRenderer.invoke('cloud:list'),
+    save: (opts) => ipcRenderer.invoke('cloud:save', opts),
+    open: (id) => ipcRenderer.invoke('cloud:open', { id }),
+    rename: (id, name) => ipcRenderer.invoke('cloud:rename', { id, name }),
+    remove: (id) => ipcRenderer.invoke('cloud:delete', { id }),
+    deleteAccount: () => ipcRenderer.invoke('cloud:delete-account'),
+  },
   pathSep: process.platform === 'win32' ? '\\' : '/',
   platform: process.platform,
 });

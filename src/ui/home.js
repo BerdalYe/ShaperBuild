@@ -2,7 +2,7 @@
 import { h, clear, escapeHtml } from './dom.js';
 import { icon } from './icons.js';
 import { loadThumbs, moveThumb } from '../fileops.js';
-import { showMenu, modal, toast } from './overlays.js';
+import { showMenu, modal, toast, confirmDialog } from './overlays.js';
 import { t, language } from '../core/i18n.js';
 import { LESSONS, LEVELS } from './lessons.js';
 import { EXAMPLES } from '../examples/examples.js';
@@ -21,6 +21,88 @@ export class Home {
   constructor(el, app) {
     this.el = el;
     this.app = app;
+  }
+
+  accountButton() {
+    if (!this.watchingAccount) {
+      this.watchingAccount = true;
+      this.app.account.on(() => this.refreshCloud());
+    }
+    return this.app.account.button();
+  }
+
+  // Fill the cloud section: signed in, the account's designs; else nothing.
+  async refreshCloud() {
+    const sec = this.cloudSection;
+    const acct = this.app.account;
+    if (!sec) return;
+    if (!acct.signedIn) {
+      clear(sec);
+      return;
+    }
+    const res = await acct.api.list();
+    if (sec !== this.cloudSection) return;
+    clear(sec);
+    sec.append(h('div.home-sec', h('h2', { text: 'Cloud designs' }), Array.isArray(res) ? h('span.count', { str: String(res.length) }) : null));
+    if (!Array.isArray(res)) {
+      sec.append(h('div.home-empty.small', h('div', { str: t('Could not load your cloud designs: {error}', { error: res?.error || '' }) })));
+      return;
+    }
+    if (!res.length) {
+      const up = h('button.btn', { html: `${icon('cloudUp')}<span>${escapeHtml(t('Save the open design to the cloud'))}</span>` });
+      up.addEventListener('click', () => this.app.files.saveToCloud());
+      sec.append(h('div.home-empty.small', h('div.he-icon', { html: icon('cloud') }), h('div', { text: 'Designs you save to the cloud show up here, on every computer you sign in on.' }), this.app.doc.isEmpty ? null : up));
+      return;
+    }
+    const grid = h('div.recent-grid.cloud-grid');
+    for (const p of res) {
+      const thumb = h('div.thumb');
+      if (p.thumb) thumb.style.backgroundImage = `url(${p.thumb})`;
+      else thumb.append(h('span.thumb-empty', { html: icon('cloud') }));
+      const more = h('span.rc-more', { html: icon('more'), title: 'More', role: 'button' });
+      const card = h('button.recent-card.cloud-card', thumb, h('div.meta', h('b', { str: p.name }), h('span.rc-when', { str: t('Changed {when}', { when: ago(Date.parse(p.updated_at)) }) }), h('span.rc-path', { html: `${icon('cloud')}<span>${escapeHtml(t('In your cloud'))}</span>` })), more);
+      card.dataset.cloud = p.id;
+      const menu = (e) => {
+        e.preventDefault();
+        showMenu(e.clientX, e.clientY, [
+          { label: 'Open', icon: 'folder', action: () => this.app.files.openFromCloud(p.id) },
+          { label: 'Rename…', icon: 'edit', action: () => this.renameCloud(p) },
+          '-',
+          { label: 'Delete from the cloud…', icon: 'trash', danger: true, action: () => this.deleteCloud(p) },
+        ]);
+      };
+      card.addEventListener('click', (e) => (more.contains(e.target) ? menu(e) : this.app.files.openFromCloud(p.id)));
+      card.addEventListener('contextmenu', menu);
+      grid.append(card);
+    }
+    sec.append(grid);
+  }
+
+  revealCloud() {
+    setTimeout(() => this.cloudSection?.scrollIntoView({ block: 'start' }), 80);
+    if (!this.app.account.signedIn) this.app.account.signInDialog();
+  }
+
+  async renameCloud(p) {
+    const inp = h('input.text-input', { type: 'text', value: p.name });
+    const ok = await modal({ title: 'Rename', body: inp, buttons: [{ label: 'Cancel', value: false }, { label: 'Rename', value: true, primary: true }] });
+    if (!ok || !inp.value.trim() || inp.value.trim() === p.name) return;
+    const res = await this.app.account.api.rename(p.id, inp.value.trim());
+    if (res?.error) toast(res.error, { type: 'error' });
+    if (this.app.files.cloud?.id === p.id && !res?.error) {
+      this.app.files.name = res.name;
+      this.app.updateTitle();
+    }
+    this.refreshCloud();
+  }
+
+  async deleteCloud(p) {
+    const ok = await confirmDialog('Delete from the cloud?', t('{name} will be deleted from your cloud on every computer. This cannot be undone.', { name: p.name }), { ok: 'Delete', danger: true });
+    if (!ok) return;
+    const res = await this.app.account.api.remove(p.id);
+    if (res?.error) toast(res.error, { type: 'error' });
+    if (this.app.files.cloud?.id === p.id) this.app.files.cloud = null;
+    this.refreshCloud();
   }
 
   async show() {
@@ -50,6 +132,7 @@ export class Home {
       side('learn', t('Tutorials'), () => app.tutorial.library()),
       native?.showDesignsFolder ? side('folder2', t('Designs folder'), () => native.showDesignsFolder()) : null,
       h('div.hs-grow'),
+      app.account.available ? this.accountButton() : null,
       side('settings', t('Settings'), () => app.dialogs.settings()),
       help,
       info?.version ? h('div.hs-version', { str: t('Version {v}', { v: info.version }) }) : null,
@@ -125,6 +208,11 @@ export class Home {
       create.addEventListener('click', () => app.files.newDesign());
       main.append(h('div.home-empty', h('div.he-icon', { html: icon('box') }), h('div', { text: 'Designs you save will show up here.' }), create));
     }
+
+    // Designs in the cloud (when signed in).
+    this.cloudSection = h('div.home-cloud');
+    main.append(this.cloudSection);
+    this.refreshCloud();
 
     // Ready-made examples to open and change.
     main.append(h('div.home-sec', h('h2', { text: 'Examples' }), h('span.count', { str: String(EXAMPLES.length) })));

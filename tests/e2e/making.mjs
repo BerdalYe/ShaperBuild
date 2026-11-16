@@ -84,6 +84,28 @@ try {
   assert.equal(body.steps.at(-1), 'Extrude');
   await shot(win, 'making-twisted-star');
 
+  step('the tools used last show on top of the tools list');
+  await win.keyboard.press('Escape');
+  const recent = await A(() => [...document.querySelectorAll('.tools-recent [data-recent]')].map((b) => b.dataset.recent));
+  assert.deepEqual(recent.slice(0, 2), ['extrude', 'polygon']);
+  assert.equal(await win.locator('.tool-btn[data-tool="extrude"]').count(), 1, 'the copies do not repeat data-tool');
+  await win.locator('.tools-recent [data-recent="polygon"]').click();
+  assert.equal(await A(() => window.__shaper.tools.activeId), 'polygon');
+  await win.keyboard.press('Escape');
+
+  step('right-click on empty space offers the view and quick drawing tools');
+  const box = await A(() => {
+    const r = window.__shaper.vp.canvas.getBoundingClientRect();
+    return [r.left + 40, r.top + 40];
+  });
+  await win.mouse.click(box[0], box[1], { button: 'right' });
+  await win.waitForSelector('.menu');
+  const menuText = await win.locator('.menu').innerText();
+  for (const word of ['Zoom to fit', 'Home view', 'Rectangle', 'Text', 'Grid']) assert.ok(menuText.includes(word), `${word} in: ${menuText}`);
+  await win.locator('.menu button', { hasText: 'Rectangle' }).click();
+  assert.equal(await A(() => window.__shaper.tools.activeId), 'rect');
+  await win.keyboard.press('Escape');
+
   step('an SVG drawing imports as a sketch at its real size, holes and all');
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="60mm" height="60mm" viewBox="0 0 60 60">
     <path d="M30 2 L50 40 H36 V52 H24 V40 H10 Z"/>

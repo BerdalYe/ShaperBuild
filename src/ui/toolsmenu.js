@@ -9,6 +9,8 @@ import { appCommands, matchScore } from './commandlist.js';
 import { t } from '../core/i18n.js';
 
 const COLLAPSED_KEY = 'shaperbuild.toolsCollapsed';
+const RECENT_KEY = 'shaperbuild.recentTools';
+const RECENT_MAX = 6;
 
 export class ToolsMenu {
   constructor(el, app) {
@@ -23,8 +25,59 @@ export class ToolsMenu {
     } catch {
       this.collapsed = new Set();
     }
+    try {
+      this.recent = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]').filter((id) => this.toolDef(id));
+    } catch {
+      this.recent = [];
+    }
+    this.recentButtons = new Map();
     this.render();
-    app.tools.on('change', () => this.updateActive());
+    app.tools.on('change', (id) => {
+      this.remember(id);
+      this.updateActive();
+    });
+  }
+
+  toolDef(id) {
+    for (const s of TOOL_SECTIONS) for (const tool of s.tools) if (tool.id === id) return tool;
+    return null;
+  }
+
+  // The last tools used, first in the list, for one-click access.
+  remember(id) {
+    if (!id || id === 'select' || !this.toolDef(id) || this.recent[0] === id) return;
+    this.recent = [id, ...this.recent.filter((x) => x !== id)].slice(0, RECENT_MAX);
+    try {
+      localStorage.setItem(RECENT_KEY, JSON.stringify(this.recent));
+    } catch {}
+    this.renderRecent();
+  }
+
+  renderRecent() {
+    if (!this.recentGrid) return;
+    clear(this.recentGrid);
+    this.recentButtons.clear();
+    for (const id of this.recent) {
+      const b = this.toolButton(this.toolDef(id));
+      // A copy: the tool's own button keeps data-tool (tutorials point at it).
+      delete b.dataset.tool;
+      b.dataset.recent = id;
+      this.recentGrid.append(b);
+      this.recentButtons.set(id, b);
+    }
+    this.recentEl.hidden = !this.recent.length;
+    this.updateActive();
+  }
+
+  toolButton(tool) {
+    const b = h('button.tool-btn', { 'aria-label': tool.label }, h('span.tb-ic', { html: icon(tool.icon) }), h('span.tb-label', { text: tool.short || tool.label }));
+    b.dataset.tool = tool.id;
+    attachTooltip(b, () => {
+      const key = this.app.keyFor(`tool:${tool.id}`);
+      return `<b>${t(tool.label)}</b>${key ? `<span class="kbd">${showCombo(key, isMac())}</span>` : ''}<span class="desc">${t(tool.desc || '')}</span>`;
+    });
+    b.addEventListener('click', () => this.app.tools.activate(tool.id));
+    return b;
   }
 
   render() {
@@ -38,16 +91,14 @@ export class ToolsMenu {
     this.input.addEventListener('focus', () => this.input.select());
     this.resultsEl = h('div.ts-results', { hidden: true });
     const sections = h('div.tools-sections');
+    // Recently used tools, on top.
+    this.recentGrid = h('div.tools-grid');
+    this.recentEl = h('div.tools-section.tools-recent', h('div.tools-title.static', h('span', { text: 'Recent' }), h('span.tt-sub', { text: 'Your last tools' })), this.recentGrid);
+    sections.append(this.recentEl);
     for (const section of TOOL_SECTIONS) {
       const grid = h('div.tools-grid');
       for (const tool of section.tools) {
-        const b = h('button.tool-btn', { 'aria-label': tool.label }, h('span.tb-ic', { html: icon(tool.icon) }), h('span.tb-label', { text: tool.short || tool.label }));
-        b.dataset.tool = tool.id;
-        attachTooltip(b, () => {
-          const key = this.app.keyFor(`tool:${tool.id}`);
-          return `<b>${t(tool.label)}</b>${key ? `<span class="kbd">${showCombo(key, isMac())}</span>` : ''}<span class="desc">${t(tool.desc || '')}</span>`;
-        });
-        b.addEventListener('click', () => this.app.tools.activate(tool.id));
+        const b = this.toolButton(tool);
         grid.append(b);
         this.buttons.set(tool.id, b);
       }
@@ -69,6 +120,7 @@ export class ToolsMenu {
     this.sectionsEl = sections;
     this.el.append(search, this.resultsEl, sections);
     this.setLabels(this.app.settings.toolLabels !== false);
+    this.renderRecent();
     this.updateActive();
   }
 
@@ -79,6 +131,7 @@ export class ToolsMenu {
   updateActive() {
     const id = this.app.tools.activeId;
     for (const [tid, b] of this.buttons) b.classList.toggle('active', tid === id);
+    for (const [tid, b] of this.recentButtons || []) b.classList.toggle('active', tid === id);
   }
 
   // Put the cursor in the search box (Ctrl+K).

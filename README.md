@@ -99,6 +99,10 @@ Finding your way around:
 
 The geometry engine is [OpenCascade](https://dev.opencascade.org/) (a real B-rep CAD kernel, through `replicad-opencascadejs`), with [Manifold](https://github.com/elalish/manifold) for mesh booleans.
 
+## Accounts and cloud designs
+
+Sign in from the home screen (email and password, or Google) to save designs to the cloud and open them on any computer: *File → Save to Cloud*, or the **Cloud designs** list on the home screen. A cloud design saves back to the cloud with Ctrl+S; if it was changed on another computer meanwhile, ShaperBuild asks before replacing it. Only you can see your cloud designs, and *Delete account* removes the account and all of them. Accounts are optional: everything else works without one. To connect your own Supabase project, see [docs/ACCOUNTS.md](docs/ACCOUNTS.md).
+
 ## Examples
 
 The home screen has ready-made example designs. Each one is built step by step when you open it, so its History is there to change: sizes, counts, twist, text and colours.

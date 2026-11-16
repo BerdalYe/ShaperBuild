@@ -15,7 +15,15 @@ async function screen(p) {
     return [r.left + s[0], r.top + s[1]];
   }, p);
 }
+// Lessons start by building their starting shape in the background: click
+// only once the app is idle and has drawn a frame since, or a slow machine
+// clicks into a view that does not show the shape yet.
+async function settled() {
+  await win.waitForFunction(() => window.__shaper.kernel.busy === 0, null, { timeout: 60000 });
+  await A(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
 async function clickAt(p, opts = {}) {
+  await settled();
   const [x, y] = await screen(p);
   await win.mouse.move(x, y, { steps: 3 });
   await win.waitForTimeout(60);
@@ -66,6 +74,19 @@ async function typeAndEnter(text) {
   await idle();
 }
 const ctx = (label) => win.locator('#context-bar .cb-btn', { hasText: label }).first().click();
+// Click something to select it. Right after a lesson sets up the view, a
+// slow machine may not have drawn the picking buffer yet and the click
+// selects nothing: wait for the selection, and click once more if needed.
+async function selectAt(p) {
+  for (let i = 0; i < 2; i++) {
+    await clickAt(p);
+    const ok = await win.waitForFunction(() => window.__shaper.selection.list.length > 0, null, { timeout: 2500 }).then(() => true, () => false);
+    if (ok) return;
+    console.log(`  (the click at ${p} selected nothing; clicking again)`);
+    await win.waitForTimeout(300);
+  }
+  throw new Error(`nothing to select at ${p}`);
+}
 async function view() {
   await A(() => {
     window.__shaper.vp.rig.fromJSON({ az: 0.5, el: 0.6, dist: 260, target: [0, 0, 0], ortho: false });
@@ -220,11 +241,11 @@ try {
   await start('edges');
   await next();
   await expectStep('Round an edge');
-  await clickAt([0, -20, 25]);
+  await selectAt([0, -20, 25]);
   await ctx('Fillet');
   await typeAndEnter('4');
   await expectStep('Bevel another edge');
-  await clickAt([25, 5, 25]);
+  await selectAt([25, 5, 25]);
   await ctx('Chamfer');
   await typeAndEnter('3');
   await expectStep('Hollow it out');
