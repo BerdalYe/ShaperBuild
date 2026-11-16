@@ -1,4 +1,4 @@
-// End-to-end: tools for decorations and fidgets: the star polygon, twisted
+// End-to-end: the star polygon, twisted
 // extrude, SVG import and tracing a picture.
 import assert from 'node:assert/strict';
 import { launch, shot } from './harness.mjs';

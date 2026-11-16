@@ -44,7 +44,7 @@ const frame = (r, wall = 2.6) => [
 export const EXAMPLES = [
   {
     id: 'twisted-star',
-    title: 'Twisted star fidget',
+    title: 'Twisted star',
     desc: 'A hollow six-point star that twists and narrows as it rises. Change the twist or the size at the end in History.',
     icon: 'sparkle',
     steps: [
@@ -56,7 +56,7 @@ export const EXAMPLES = [
   },
   {
     id: 'expanding-star',
-    title: 'Expanding star fidget',
+    title: 'Nested star shells',
     desc: 'Eight nested star shells with a 0.4 mm gap. Printed flat, they pull out into a cone and catch on each other.',
     icon: 'patternLinear',
     steps: [

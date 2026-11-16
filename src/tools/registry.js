@@ -43,7 +43,7 @@ export const TOOL_SECTIONS = [
     title: 'Model',
     subtitle: 'Make and change bodies',
     tools: [
-      def('extrude', 'Extrude', 'extrude', ExtrudeTool, { key: 'E', keywords: 'push pull pad height thicken 3d twist taper fidget', desc: 'Pull a sketch region or face into 3D. Also pushes and pulls faces of bodies.' }),
+      def('extrude', 'Extrude', 'extrude', ExtrudeTool, { key: 'E', keywords: 'push pull pad height thicken 3d twist taper', desc: 'Pull a sketch region or face into 3D. Also pushes and pulls faces of bodies.' }),
       def('revolve', 'Revolve', 'revolve', RevolveTool, { key: 'Q', keywords: 'spin lathe turn rotate profile', desc: 'Spin a profile around an axis.' }),
       def('sweep', 'Sweep', 'sweep', SweepTool, { keywords: 'path pipe tube twist spiral screw thread taper', desc: 'Move a profile along a path. It can twist and change size on the way.' }),
       def('loft', 'Loft', 'loft', LoftTool, { keywords: 'blend transition profiles', desc: 'Blend between two or more profiles.' }),
