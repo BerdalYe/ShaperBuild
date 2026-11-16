@@ -260,7 +260,7 @@ try {
     window.__shaper.dialogs.privacy();
   });
   await win.waitForSelector('.modal-head:has-text("Privacy")');
-  assert.match(await win.locator('.modal-body').innerText(), /does not collect personal data/);
+  assert.match(await win.locator('.modal-body').innerText(), /does not collect personal data unless you make an account/);
   await win.locator('.modal .btn.primary', { hasText: 'Close' }).click();
 
   assert.deepEqual(errors, []);

@@ -418,9 +418,12 @@ export class Dialogs {
 
   async privacy() {
     const paras = [
-      'ShaperBuild does not collect personal data. There are no accounts, no tracking, no analytics and no advertising.',
-      'Designs, settings, saved versions, thumbnails and crash-recovery copies stay on this computer.',
+      'ShaperBuild does not collect personal data unless you make an account. There is no tracking, no analytics and no advertising.',
+      'Designs, settings, saved versions, thumbnails and crash-recovery copies stay on this computer, unless you save a design to the cloud.',
+      'If you sign in, your email address and the designs you save to the cloud are stored with Supabase, and account emails are sent by Brevo. Only you can see your cloud designs. Delete account removes everything at once.',
+      'The AI assistant, if you set it up, sends what you type and a description of your design to the AI service you chose.',
       'The update check asks GitHub (github.com) whether a newer version exists, when the app starts and every few hours. Like any web request, GitHub sees your IP address; nothing about your designs is sent. You can turn it off in Settings.',
+      'Responsible: Mathias Verdal, berdalproductions@gmail.com. The full privacy notice (PRIVACY.md) is on the project\'s GitHub page.',
     ];
     const body = h('div', ...paras.map((p) => h('p', { text: p })));
     const v = await modal({ title: 'Privacy', body, width: 520, buttons: [{ label: 'Settings…', value: 'settings' }, { label: 'Close', primary: true }] });
