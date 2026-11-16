@@ -144,7 +144,7 @@ try {
   assert.deepEqual(dims, [960, 720]);
   await shot(win, 'ai-four-views');
 
-  step('decorations and fidgets: stars, walls, holes, copies; only filled regions are extruded');
+  step('stars, walls, holes, copies; only filled regions are extruded');
   const orn = await json('sketch', {
     plane: 'XY',
     shapes: [

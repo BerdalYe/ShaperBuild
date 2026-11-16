@@ -850,7 +850,7 @@ export class Kernel {
   // start: begin this far from the profile (along the extrude direction).
   // taper: side walls lean in (positive) or out by this many degrees.
   // `twist` (degrees) turns the profile on the way, and `endScale` changes
-  // its size, each shape around its own middle (twisted star fidgets, vases).
+  // its size, each shape around its own middle (twisted and tapering shapes).
   extrude({ profiles, distance, symmetric = false, mode = 'new', targets = [], start = 0, taper = 0, twist = 0, endScale = 1 }) {
     const oc = this.oc;
     if (!profiles.length) throw new Error('Select a sketch region or a flat face');
