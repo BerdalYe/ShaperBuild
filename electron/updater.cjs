@@ -1,9 +1,11 @@
 // Automatic updates from the GitHub releases of this app.
-// Windows and Linux (AppImage / deb) download the update in the background
-// and install it on restart. macOS builds are not code-signed, which macOS
-// requires for self-updating, so there the app points to the download page.
+// Windows (the .exe installer) and Linux (AppImage / deb) download the update
+// in the background and install it on restart. macOS builds are not
+// code-signed, which macOS requires for self-updating, and the Windows MSI is
+// meant for managed computers, so there the app points to the download page.
 const { app, net, shell } = require('electron');
 const { isNewer } = require('./version.cjs');
+const { installKind } = require('./installkind.cjs');
 
 const OWNER = 'BerdalYe';
 const REPO = 'ShaperBuild';
@@ -23,11 +25,12 @@ function enabled() {
   return app.isPackaged && process.env.SHAPER_NO_UPDATE !== '1';
 }
 
-// Can this install update itself? (Not on macOS without code signing, and
-// not for unpacked builds.)
+// Can this install update itself? (Not on macOS without code signing, not
+// for unpacked builds, and not for the Windows MSI: its updates come from
+// whoever manages the computer, or from the download page.)
 function canSelfUpdate() {
-  if (process.platform === 'win32') return true;
-  if (process.platform === 'linux') return !!process.env.APPIMAGE || require('node:fs').existsSync(require('node:path').join(process.resourcesPath, 'package-type'));
+  if (process.platform === 'win32') return installKind(process.resourcesPath) !== 'msi';
+  if (process.platform === 'linux') return !!process.env.APPIMAGE || installKind(process.resourcesPath) !== '';
   return false;
 }
 

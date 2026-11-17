@@ -4,3 +4,5 @@ out/
 *.log
 .DS_Store
 test-output/
+electron-builder.msi.json
+dist-msi/
