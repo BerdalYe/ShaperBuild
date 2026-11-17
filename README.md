@@ -36,11 +36,11 @@
 
 Get the installer for your system from the **[latest release](https://github.com/BerdalYe/ShaperBuild/releases/latest)**:
 
-- **Windows:** `ShaperBuild-Setup-x.y.z.exe`
+- **Windows:** `ShaperBuild-Setup-x.y.z.exe` (recommended: it updates itself), or `ShaperBuild-x.y.z-x64.msi` for computers managed by an IT department (Group Policy, Intune…). The MSI tells you when a new version is out but does not install it by itself; use one of the two, not both.
 - **macOS:** `ShaperBuild-x.y.z-arm64.dmg` (Apple Silicon) or `-x64.dmg` (Intel)
 - **Linux:** `.AppImage` or `.deb`
 
-Once installed, ShaperBuild keeps itself up to date.
+Once installed with the `.exe`, ShaperBuild keeps itself up to date.
 
 The installers are not signed with a paid certificate, so the first launch shows a warning:
 - **Windows:** "Windows protected your PC" → *More info* → *Run anyway*.
@@ -193,7 +193,7 @@ IGES, Parasolid and DWG files, AI rendering, tablet and AR apps, sharing designs
 
 ## Updates
 
-The installed app checks GitHub for new versions. On Windows and Linux it downloads them in the background and shows **Restart to update** in the top bar; on macOS it shows a **Download** button (self-updating on macOS needs an Apple Developer signature, which the free build does not have). Turn checks off in Settings, or use *Help → Check for Updates…*.
+The installed app checks GitHub for new versions. On Windows and Linux it downloads them in the background and shows **Restart to update** in the top bar; on macOS, and for the Windows MSI, it shows a **Download** button instead (self-updating on macOS needs an Apple Developer signature, which the free build does not have, and MSI installs are normally updated by whoever manages the computer). Turn checks off in Settings, or use *Help → Check for Updates…*.
 
 To publish a new version, push a tag like `v2.1.0` (or create a release with that tag on GitHub). CI builds the installers, uses the tag as the version, and attaches the files the updater needs.
 

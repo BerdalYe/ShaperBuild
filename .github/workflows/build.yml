@@ -67,6 +67,28 @@ jobs:
           # requests too.
           CSC_IDENTITY_AUTO_DISCOVERY: false
           CSC_FOR_PULL_REQUEST: true
+      - name: Build the Windows MSI (an extra download for managed computers)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          node tools/msi-config.mjs
+          npx electron-builder --win --config electron-builder.msi.json --publish never
+          cp dist-msi/*.msi dist/
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          CSC_FOR_PULL_REQUEST: true
+      - name: Check the installers and the update feed
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          ls -l dist/*.exe dist/*.msi
+          # Installed apps update from latest.yml: it must list the .exe only.
+          grep -q "\.exe" dist/latest.yml
+          if grep -qi "msi" dist/latest.yml; then
+            echo "latest.yml must not list the MSI"
+            cat dist/latest.yml
+            exit 1
+          fi
       - name: Check the Mac app is signed
         if: runner.os == 'macOS'
         run: |
@@ -80,6 +102,7 @@ jobs:
           # latest*.yml and .blockmap files let installed apps update themselves.
           path: |
             dist/*.exe
+            dist/*.msi
             dist/*.dmg
             dist/*.AppImage
             dist/*.deb
